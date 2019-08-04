@@ -7,3 +7,14 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+tokio = { git="https://github.com/tokio-rs/tokio" }
+futures-preview = "=0.3.0-alpha.17"
+bytes = "0.4"
+rand = "0.7"
+sodiumoxide = "0.2"
+
+tokio-process = { git="https://github.com/tokio-rs/tokio" }
+
+[dev-dependencies]
+tokio-test = { git="https://github.com/tokio-rs/tokio" }
+
