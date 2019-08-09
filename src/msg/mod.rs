@@ -1,20 +1,20 @@
 use std::convert::TryFrom;
 use std::string::FromUtf8Error;
 
-use bytes::{Bytes, BytesMut, Buf as _, IntoBuf as _};
+use bytes::{Buf as _, Bytes, BytesMut, IntoBuf as _};
 
 use crate::sshbuf::SshBufError;
 use crate::transport::codec::CodecError;
 pub use id::*;
-pub use kexinit::*;
 pub use kex_edch_init::*;
 pub use kex_edch_reply::*;
+pub use kexinit::*;
 pub use newkeys::*;
 
 mod id;
-mod kexinit;
 mod kex_edch_init;
 mod kex_edch_reply;
+mod kexinit;
 mod newkeys;
 
 #[derive(Debug)]
@@ -82,7 +82,7 @@ impl TryFrom<Bytes> for Message {
             MessageId::KexEcdhInit => KexEdchInit::from(buf)?.into(),
             MessageId::KexEcdhReply => KexEdchReply::from(buf)?.into(),
             MessageId::Newkeys => Newkeys::from(buf)?.into(),
-            message_id => return Err(MessageError::Unimplemented(message_id))
+            message_id => return Err(MessageError::Unimplemented(message_id)),
         })
     }
 }

@@ -1,6 +1,5 @@
-use std::string::FromUtf8Error;
 use bytes::{Buf, BufMut};
-
+use std::string::FromUtf8Error;
 
 #[derive(Debug)]
 pub enum SshBufError {
@@ -20,7 +19,7 @@ pub type SshBufResult<T> = Result<T, SshBufError>;
 pub trait SshBuf: Buf {
     fn get_boolean(&mut self) -> SshBufResult<bool> {
         if !self.has_remaining() {
-            return Err(SshBufError::Underflow)
+            return Err(SshBufError::Underflow);
         }
 
         let v = self.get_u8();
@@ -32,7 +31,7 @@ pub trait SshBuf: Buf {
 
     fn get_uint32(&mut self) -> SshBufResult<u32> {
         if self.remaining() < 4 {
-            return Err(SshBufError::Underflow)
+            return Err(SshBufError::Underflow);
         }
 
         Ok(self.get_u32_be())
@@ -40,7 +39,7 @@ pub trait SshBuf: Buf {
 
     fn get_uint64(&mut self) -> SshBufResult<u64> {
         if self.remaining() < 8 {
-            return Err(SshBufError::Underflow)
+            return Err(SshBufError::Underflow);
         }
 
         Ok(self.get_u64_be())
@@ -58,7 +57,7 @@ pub trait SshBuf: Buf {
         let len = self.get_uint32()? as usize;
 
         if self.remaining() < len {
-            return Err(SshBufError::Underflow)
+            return Err(SshBufError::Underflow);
         }
 
         let mut buf = vec![0; len];
@@ -81,7 +80,7 @@ pub trait SshBuf: Buf {
 pub trait SshBufMut: BufMut {
     fn put_boolean(&mut self, v: bool) -> SshBufResult<()> {
         if !self.has_remaining_mut() {
-            return Err(SshBufError::Overflow)
+            return Err(SshBufError::Overflow);
         };
 
         let v = match v {
@@ -94,7 +93,7 @@ pub trait SshBufMut: BufMut {
 
     fn put_uint32(&mut self, v: u32) -> SshBufResult<()> {
         if self.remaining_mut() < 4 {
-            return Err(SshBufError::Overflow)
+            return Err(SshBufError::Overflow);
         }
 
         self.put_u32_be(v);
@@ -103,7 +102,7 @@ pub trait SshBufMut: BufMut {
 
     fn put_uint64(&mut self, v: u64) -> SshBufResult<()> {
         if self.remaining_mut() < 8 {
-            return Err(SshBufError::Overflow)
+            return Err(SshBufError::Overflow);
         }
 
         self.put_u64_be(v);
@@ -118,7 +117,7 @@ pub trait SshBufMut: BufMut {
         self.put_uint32(v.len() as u32)?;
 
         if self.remaining_mut() < v.len() {
-            return Err(SshBufError::Overflow)
+            return Err(SshBufError::Overflow);
         }
         self.put_slice(v);
         Ok(())
@@ -139,8 +138,8 @@ impl<B: BufMut> SshBufMut for B {}
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::io;
     use bytes::BytesMut;
+    use std::io;
 
     #[test]
     fn test_boolean() {
@@ -168,7 +167,10 @@ mod tests {
     fn test_uint64() {
         let mut buf = BytesMut::default();
         buf.put_uint64(0xcafebabe).unwrap();
-        assert_eq!(buf, BytesMut::from(&[0x00, 0x00, 0x00, 0x00, 0xca, 0xfe, 0xba, 0xbe][..]));
+        assert_eq!(
+            buf,
+            BytesMut::from(&[0x00, 0x00, 0x00, 0x00, 0xca, 0xfe, 0xba, 0xbe][..])
+        );
 
         let mut buf = io::Cursor::new(buf);
         assert_eq!(buf.get_uint64().unwrap(), 0xcafebabe);
@@ -179,8 +181,15 @@ mod tests {
         let mut buf = BytesMut::default();
         buf.put_string("").unwrap();
         buf.put_string("testing").unwrap();
-        assert_eq!(buf, BytesMut::from(&[0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x07, b't', b'e', b's', b't', b'i', b'n', b'g'][..]));
+        assert_eq!(
+            buf,
+            BytesMut::from(
+                &[
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x07, b't', b'e', b's', b't', b'i',
+                    b'n', b'g'
+                ][..]
+            )
+        );
 
         let mut buf = io::Cursor::new(buf);
         assert_eq!(buf.get_string().unwrap(), "");
@@ -191,14 +200,24 @@ mod tests {
     fn test_mpint() {
         let mut buf = BytesMut::default();
         buf.put_mpint(&[][..]).unwrap();
-        buf.put_mpint(&[0x09, 0xa3, 0x78, 0xf9, 0xb2, 0xe3, 0x32, 0xa7][..]).unwrap();
-        assert_eq!(buf, BytesMut::from(&[
-                0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x08, 0x09, 0xa3, 0x78, 0xf9, 0xb2, 0xe3, 0x32, 0xa7][..]));
+        buf.put_mpint(&[0x09, 0xa3, 0x78, 0xf9, 0xb2, 0xe3, 0x32, 0xa7][..])
+            .unwrap();
+        assert_eq!(
+            buf,
+            BytesMut::from(
+                &[
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x08, 0x09, 0xa3, 0x78, 0xf9, 0xb2,
+                    0xe3, 0x32, 0xa7
+                ][..]
+            )
+        );
 
         let mut buf = io::Cursor::new(buf);
         assert_eq!(buf.get_mpint().unwrap(), vec![]);
-        assert_eq!(buf.get_mpint().unwrap(), vec![0x09, 0xa3, 0x78, 0xf9, 0xb2, 0xe3, 0x32, 0xa7]);
+        assert_eq!(
+            buf.get_mpint().unwrap(),
+            vec![0x09, 0xa3, 0x78, 0xf9, 0xb2, 0xe3, 0x32, 0xa7]
+        );
     }
 
     #[test]
@@ -206,16 +225,27 @@ mod tests {
         let mut buf = BytesMut::default();
         buf.put_name_list(&[][..]).unwrap();
         buf.put_name_list(&["zlib".into()][..]).unwrap();
-        buf.put_name_list(&["zlib".into(), "none".into()][..]).unwrap();
-        assert_eq!(buf, BytesMut::from(&[
-                0x00, 0x00, 0x00, 0x00,
-                0x00, 0x00, 0x00, 0x04, 0x7a, 0x6c, 0x69, 0x62,
-                0x00, 0x00, 0x00, 0x09, 0x7a, 0x6c, 0x69, 0x62, 0x2c, 0x6e, 0x6f, 0x6e, 0x65][..]));
+        buf.put_name_list(&["zlib".into(), "none".into()][..])
+            .unwrap();
+        assert_eq!(
+            buf,
+            BytesMut::from(
+                &[
+                    0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x04, 0x7a, 0x6c, 0x69, 0x62, 0x00,
+                    0x00, 0x00, 0x09, 0x7a, 0x6c, 0x69, 0x62, 0x2c, 0x6e, 0x6f, 0x6e, 0x65
+                ][..]
+            )
+        );
 
         let mut buf = io::Cursor::new(buf);
         assert_eq!(buf.get_name_list().unwrap(), vec![] as Vec<String>);
-        assert_eq!(buf.get_name_list().unwrap(), vec!["zlib".into()] as Vec<String>);
-        assert_eq!(buf.get_name_list().unwrap(), vec!["zlib".into(), "none".into()] as Vec<String>);
+        assert_eq!(
+            buf.get_name_list().unwrap(),
+            vec!["zlib".into()] as Vec<String>
+        );
+        assert_eq!(
+            buf.get_name_list().unwrap(),
+            vec!["zlib".into(), "none".into()] as Vec<String>
+        );
     }
-
 }

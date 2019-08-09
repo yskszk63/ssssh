@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 tokio = { git="https://github.com/tokio-rs/tokio" }
-futures-preview = "=0.3.0-alpha.17"
+futures-preview = "0.3.0-alpha.17"
 bytes = "0.4"
 rand = "0.7"
 sodiumoxide = "0.2"

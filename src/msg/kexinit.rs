@@ -1,10 +1,9 @@
 use std::io::Cursor;
 
-use bytes::{Bytes, BytesMut, Buf as _, BufMut as _};
+use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
 
-use super::{MessageId, Message, MessageResult};
+use super::{Message, MessageId, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
 
 #[derive(Debug, Default)]
 pub struct Builder {
@@ -22,43 +21,70 @@ pub struct Builder {
 }
 
 impl Builder {
-    pub fn kex_algorithms(&mut self, val: impl IntoIterator<Item=String>) -> &mut Self {
+    pub fn kex_algorithms(&mut self, val: impl IntoIterator<Item = String>) -> &mut Self {
         self.kex_algorithms.extend(val);
         self
     }
-    pub fn server_host_key_algorithms(&mut self, val: impl IntoIterator<Item=String>) -> &mut Self {
+    pub fn server_host_key_algorithms(
+        &mut self,
+        val: impl IntoIterator<Item = String>,
+    ) -> &mut Self {
         self.server_host_key_algorithms.extend(val);
         self
     }
-    pub fn encryption_algorithms_client_to_server(&mut self, val: impl IntoIterator<Item=String>) -> &mut Self {
+    pub fn encryption_algorithms_client_to_server(
+        &mut self,
+        val: impl IntoIterator<Item = String>,
+    ) -> &mut Self {
         self.encryption_algorithms_client_to_server.extend(val);
         self
     }
-    pub fn encryption_algorithms_server_to_client(&mut self, val: impl IntoIterator<Item=String>) -> &mut Self {
+    pub fn encryption_algorithms_server_to_client(
+        &mut self,
+        val: impl IntoIterator<Item = String>,
+    ) -> &mut Self {
         self.encryption_algorithms_server_to_client.extend(val);
         self
     }
-    pub fn mac_algorithms_client_to_server(&mut self, val: impl IntoIterator<Item=String>) -> &mut Self {
+    pub fn mac_algorithms_client_to_server(
+        &mut self,
+        val: impl IntoIterator<Item = String>,
+    ) -> &mut Self {
         self.mac_algorithms_client_to_server.extend(val);
         self
     }
-    pub fn mac_algorithms_server_to_client(&mut self, val: impl IntoIterator<Item=String>) -> &mut Self {
+    pub fn mac_algorithms_server_to_client(
+        &mut self,
+        val: impl IntoIterator<Item = String>,
+    ) -> &mut Self {
         self.mac_algorithms_server_to_client.extend(val);
         self
     }
-    pub fn compression_algorithms_client_to_server(&mut self, val: impl IntoIterator<Item=String>) -> &mut Self {
+    pub fn compression_algorithms_client_to_server(
+        &mut self,
+        val: impl IntoIterator<Item = String>,
+    ) -> &mut Self {
         self.compression_algorithms_client_to_server.extend(val);
         self
     }
-    pub fn compression_algorithms_server_to_client(&mut self, val: impl IntoIterator<Item=String>) -> &mut Self {
+    pub fn compression_algorithms_server_to_client(
+        &mut self,
+        val: impl IntoIterator<Item = String>,
+    ) -> &mut Self {
         self.compression_algorithms_server_to_client.extend(val);
         self
     }
-    pub fn languages_client_to_server(&mut self, val: impl IntoIterator<Item=String>) -> &mut Self {
+    pub fn languages_client_to_server(
+        &mut self,
+        val: impl IntoIterator<Item = String>,
+    ) -> &mut Self {
         self.languages_client_to_server.extend(val);
         self
     }
-    pub fn languages_server_to_client(&mut self, val: impl IntoIterator<Item=String>) -> &mut Self {
+    pub fn languages_server_to_client(
+        &mut self,
+        val: impl IntoIterator<Item = String>,
+    ) -> &mut Self {
         self.languages_server_to_client.extend(val);
         self
     }
@@ -71,12 +97,20 @@ impl Builder {
             cookie,
             kex_algorithms: self.kex_algorithms.clone(),
             server_host_key_algorithms: self.server_host_key_algorithms.clone(),
-            encryption_algorithms_client_to_server: self.encryption_algorithms_client_to_server.clone(),
-            encryption_algorithms_server_to_client: self.encryption_algorithms_server_to_client.clone(),
+            encryption_algorithms_client_to_server: self
+                .encryption_algorithms_client_to_server
+                .clone(),
+            encryption_algorithms_server_to_client: self
+                .encryption_algorithms_server_to_client
+                .clone(),
             mac_algorithms_client_to_server: self.mac_algorithms_client_to_server.clone(),
             mac_algorithms_server_to_client: self.mac_algorithms_server_to_client.clone(),
-            compression_algorithms_client_to_server: self.compression_algorithms_client_to_server.clone(),
-            compression_algorithms_server_to_client: self.compression_algorithms_server_to_client.clone(),
+            compression_algorithms_client_to_server: self
+                .compression_algorithms_client_to_server
+                .clone(),
+            compression_algorithms_server_to_client: self
+                .compression_algorithms_server_to_client
+                .clone(),
             languages_client_to_server: self.languages_client_to_server.clone(),
             languages_server_to_client: self.languages_server_to_client.clone(),
             first_kex_packet_follows: self.first_kex_packet_follows,

@@ -1,2 +1,2 @@
-pub(crate) mod version;
 pub(crate) mod codec;
+pub(crate) mod version;

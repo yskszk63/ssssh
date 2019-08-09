@@ -1,8 +1,8 @@
 use std::io::Cursor;
 
-use bytes::{Bytes, BytesMut, BufMut as _};
+use bytes::{BufMut as _, Bytes, BytesMut};
 
-use super::{MessageId, Message, MessageResult};
+use super::{Message, MessageId, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug)]
@@ -16,7 +16,9 @@ impl KexEdchInit {
     }
     pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
         let ephemeral_public_key = buf.get_binary_string()?;
-        Ok(Self { ephemeral_public_key })
+        Ok(Self {
+            ephemeral_public_key,
+        })
     }
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
         buf.put_u8(MessageId::KexEcdhInit as u8);

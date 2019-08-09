@@ -1,9 +1,9 @@
 use std::io;
 
+use bytes::{BufMut as _, Bytes, BytesMut};
+use futures::{SinkExt as _, TryStreamExt as _};
+use tokio::codec::{Decoder, Encoder, FramedParts};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::codec::{Encoder, Decoder, FramedParts};
-use bytes::{BytesMut, BufMut as _, Bytes};
-use futures::{TryStreamExt as _, SinkExt as _};
 
 #[derive(Debug)]
 pub enum VersionExchangeError {
@@ -46,8 +46,8 @@ impl Decoder for VersionCodec {
             Some(e) => e,
             None => return Ok(None),
         };
-        if src.get(cr_index +1) != Some(&LF) {
-            return Err(Self::Error::InvalidFormat)
+        if src.get(cr_index + 1) != Some(&LF) {
+            return Err(Self::Error::InvalidFormat);
         }
         let result = src.split_to(cr_index).freeze();
         src.advance(2);
@@ -55,13 +55,18 @@ impl Decoder for VersionCodec {
     }
 }
 
-pub async fn exchange_version<IO>(connection: &mut IO, server_version: Bytes)
--> VersionExchangeResult<(Bytes, BytesMut)> where IO: AsyncRead + AsyncWrite + Unpin {
+pub async fn exchange_version<IO>(
+    connection: &mut IO,
+    server_version: Bytes,
+) -> VersionExchangeResult<(Bytes, BytesMut)>
+where
+    IO: AsyncRead + AsyncWrite + Unpin,
+{
     let mut codec = VersionCodec.framed(connection);
 
     let client_version = loop {
         if let Some(e) = codec.try_next().await? {
-            break e
+            break e;
         }
     };
     codec.send(server_version).await?;
@@ -77,18 +82,28 @@ mod tests {
 
     #[tokio::test]
     async fn test() {
-        let mut mock = Builder::new().read(b"SSH-2.0-cli\r\n").write(b"SSH-2.0-srv\r\n").build();
+        let mut mock = Builder::new()
+            .read(b"SSH-2.0-cli\r\n")
+            .write(b"SSH-2.0-srv\r\n")
+            .build();
 
-        let (srv, rb) = exchange_version(&mut mock, Bytes::from("SSH-2.0-srv")).await.unwrap();
+        let (srv, rb) = exchange_version(&mut mock, Bytes::from("SSH-2.0-srv"))
+            .await
+            .unwrap();
         assert_eq!(srv, Bytes::from("SSH-2.0-cli"));
         assert_eq!(rb, Bytes::from(""));
     }
 
     #[tokio::test]
     async fn test2() {
-        let mut mock = Builder::new().read(b"SSH-2.0-cli\r\nabcdefg").write(b"SSH-2.0-srv\r\n").build();
+        let mut mock = Builder::new()
+            .read(b"SSH-2.0-cli\r\nabcdefg")
+            .write(b"SSH-2.0-srv\r\n")
+            .build();
 
-        let (srv, rb) = exchange_version(&mut mock, Bytes::from("SSH-2.0-srv")).await.unwrap();
+        let (srv, rb) = exchange_version(&mut mock, Bytes::from("SSH-2.0-srv"))
+            .await
+            .unwrap();
         assert_eq!(srv, Bytes::from("SSH-2.0-cli"));
         assert_eq!(rb, Bytes::from("abcdefg"));
     }

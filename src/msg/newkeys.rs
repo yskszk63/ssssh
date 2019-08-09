@@ -1,9 +1,9 @@
 use std::io::Cursor;
 
-use bytes::{Bytes, BytesMut, BufMut as _};
+use bytes::{BufMut as _, Bytes, BytesMut};
 
-use super::{Message, MessageResult};
 use super::super::MessageId;
+use super::{Message, MessageResult};
 
 #[derive(Debug)]
 pub struct Newkeys;

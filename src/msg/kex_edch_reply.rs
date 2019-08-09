@@ -1,8 +1,8 @@
 use std::io::Cursor;
 
-use bytes::{Bytes, BytesMut, BufMut as _};
+use bytes::{BufMut as _, Bytes, BytesMut};
 
-use super::{Message, MessageResult, MessageId};
+use super::{Message, MessageId, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug)]
@@ -17,13 +17,21 @@ impl KexEdchReply {
         let public_host_key = Vec::from(public_host_key);
         let ephemeral_public_key = Vec::from(ephemeral_public_key);
         let signature = Vec::from(signature);
-        Self { public_host_key, ephemeral_public_key, signature}
+        Self {
+            public_host_key,
+            ephemeral_public_key,
+            signature,
+        }
     }
     pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
         let public_host_key = buf.get_binary_string()?;
         let ephemeral_public_key = buf.get_binary_string()?;
         let signature = buf.get_binary_string()?;
-        Ok(Self { public_host_key, ephemeral_public_key, signature })
+        Ok(Self {
+            public_host_key,
+            ephemeral_public_key,
+            signature,
+        })
     }
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
         buf.put_u8(MessageId::KexEcdhReply as u8);
@@ -32,7 +40,6 @@ impl KexEdchReply {
             buf.put_string("ssh-ed25519")?; // xxxx
             buf.put_binary_string(&self.public_host_key)?;
             buf
-
         })?;
         buf.put_binary_string(&self.ephemeral_public_key)?;
         buf.put_binary_string(&{

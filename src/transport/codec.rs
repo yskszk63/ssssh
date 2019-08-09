@@ -1,9 +1,8 @@
 use std::io;
 
+use bytes::{BufMut, Bytes, BytesMut};
+use rand::{CryptoRng, RngCore};
 use tokio::codec::{Decoder, Encoder};
-use bytes::{BytesMut, Bytes, BufMut};
-use rand::{RngCore, CryptoRng};
-
 
 const BLOCK_SIZE: usize = 8;
 const MINIMUM_PAD_SIZE: usize = 4;
@@ -22,17 +21,26 @@ impl From<io::Error> for CodecError {
 pub type CodecResult<T> = Result<T, CodecError>;
 
 #[derive(Debug)]
-pub struct Codec<R> where R: RngCore + CryptoRng {
+pub struct Codec<R>
+where
+    R: RngCore + CryptoRng,
+{
     rng: R,
 }
 
-impl<R> Codec<R> where R: RngCore + CryptoRng {
+impl<R> Codec<R>
+where
+    R: RngCore + CryptoRng,
+{
     pub fn new(rng: R) -> Self {
-        Codec { rng, }
+        Codec { rng }
     }
 }
 
-impl<R> Encoder for Codec<R> where R: RngCore + CryptoRng {
+impl<R> Encoder for Codec<R>
+where
+    R: RngCore + CryptoRng,
+{
     type Item = Bytes;
     type Error = CodecError;
 
@@ -57,17 +65,23 @@ impl<R> Encoder for Codec<R> where R: RngCore + CryptoRng {
     }
 }
 
-impl<R> Decoder for Codec<R> where R: RngCore + CryptoRng {
+impl<R> Decoder for Codec<R>
+where
+    R: RngCore + CryptoRng,
+{
     type Item = Bytes;
     type Error = CodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> CodecResult<Option<Self::Item>> {
         fn len(src: &BytesMut) -> Option<u32> {
             if src.len() < 4 {
-                return None
+                return None;
             };
 
-            let len = (src[0] as u32) << 24 | (src[1] as u32) << 16 | (src[2] as u32) << 8 | (src[3] as u32) << 0;
+            let len = (src[0] as u32) << 24
+                | (src[1] as u32) << 16
+                | (src[2] as u32) << 8
+                | (src[3] as u32) << 0;
             Some(len)
         }
 
@@ -76,7 +90,7 @@ impl<R> Decoder for Codec<R> where R: RngCore + CryptoRng {
             None => return Ok(None),
         };
         if src.len() < len + 4 {
-            return Ok(None)
+            return Ok(None);
         }
         src.advance(4);
         let mut src = src.split_to(len);
@@ -93,10 +107,10 @@ impl<R> Decoder for Codec<R> where R: RngCore + CryptoRng {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use tokio_test::io::Builder;
-    use futures::{TryStreamExt as _, SinkExt as _};
+    use futures::{SinkExt as _, TryStreamExt as _};
     use rand::rngs::StdRng;
     use rand::SeedableRng;
+    use tokio_test::io::Builder;
 
     #[tokio::test]
     async fn test() {
@@ -104,8 +118,7 @@ mod tests {
             0x00, 0x00, 0x00, 0x0c, // len
             0x0a, // pad len
             0x15, // payload (SSH_MSG_NEWKEYS)
-            0xb2, 0xf7,
-            0xf5, 0x81, 0xd6, 0xde, 0x3c, 0x06, 0xa8, 0x22,
+            0xb2, 0xf7, 0xf5, 0x81, 0xd6, 0xde, 0x3c, 0x06, 0xa8, 0x22,
         ];
 
         let mut mock = Builder::new().read(&pkt).write(&pkt).build();

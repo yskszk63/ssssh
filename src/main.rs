@@ -1,33 +1,32 @@
 #![feature(async_await)]
 
+use std::convert::TryFrom;
+use std::future::Future;
 use std::io;
-use std::string::FromUtf8Error;
 use std::net::SocketAddr;
 use std::net::ToSocketAddrs;
-use std::future::Future;
 use std::pin::Pin;
-use std::convert::TryFrom;
+use std::string::FromUtf8Error;
 
-use tokio::net::{TcpListener, TcpStream};
-use tokio::codec::{Decoder, Framed};
-use bytes::{BytesMut, Bytes};
-use futures::{StreamExt as _, TryStreamExt, SinkExt as _, TryStream, Sink};
+use bytes::{Bytes, BytesMut};
+use futures::{Sink, SinkExt as _, StreamExt as _, TryStream, TryStreamExt};
 use rand::SeedableRng as _;
+use tokio::codec::{Decoder, Framed};
+use tokio::net::{TcpListener, TcpStream};
 
-use transport::version::{exchange_version, VersionExchangeError};
+use msg::{Kexinit, Message, MessageError, MessageId, MessageResult};
 use transport::codec::{Codec as TransportCodec, CodecError};
-use msg::{MessageId, Message, MessageResult, MessageError, Kexinit};
+use transport::version::{exchange_version, VersionExchangeError};
 
-mod transport;
 mod msg;
 mod sshbuf;
+mod transport;
 
-
-fn decode(src: Bytes) -> Pin<Box<dyn Future<Output=MessageResult<Message>> + Send>> {
+fn decode(src: Bytes) -> Pin<Box<dyn Future<Output = MessageResult<Message>> + Send>> {
     Box::pin(async move { Message::try_from(src) })
 }
 
-fn encode(src: Message) -> Pin<Box<dyn Future<Output=MessageResult<Bytes>> + Send>> {
+fn encode(src: Message) -> Pin<Box<dyn Future<Output = MessageResult<Bytes>> + Send>> {
     Box::pin(async move {
         let mut buf = BytesMut::with_capacity(1024 * 8);
         src.put(&mut buf)?;
@@ -69,7 +68,7 @@ impl From<MessageError> for ConnectionError {
             MessageError::Overflow => Self::Overflow,
             MessageError::Underflow => Self::Underflow,
             MessageError::UnknownMessageId(id) => Self::UnknownMessageId(id),
-            MessageError::Codec(CodecError::Io(e)) =>  Self::Io(e),
+            MessageError::Codec(CodecError::Io(e)) => Self::Io(e),
         }
     }
 }
@@ -81,9 +80,7 @@ pub struct Connection {
 
 impl Connection {
     fn new(socket: TcpStream) -> Self {
-        Connection {
-            socket,
-        }
+        Connection { socket }
     }
 
     pub async fn run(self) {
@@ -94,14 +91,17 @@ impl Connection {
 
     async fn run0(mut self) -> Result<(), ConnectionError> {
         let server_version = "SSH-2.0-ssh";
-        let (cli_version, read_buf) = exchange_version(&mut self.socket, Bytes::from(server_version)).await?;
+        let (cli_version, read_buf) =
+            exchange_version(&mut self.socket, Bytes::from(server_version)).await?;
         match &cli_version.get(..8) {
             Some(b"SSH-2.0-") => (),
-            _ => return Err(VersionExchangeError::InvalidFormat.into())
+            _ => return Err(VersionExchangeError::InvalidFormat.into()),
         }
 
         let rng = rand::rngs::StdRng::from_entropy();
-        let mut parts = TransportCodec::new(rng).framed(&mut self.socket).into_parts();
+        let mut parts = TransportCodec::new(rng)
+            .framed(&mut self.socket)
+            .into_parts();
         parts.read_buf = read_buf;
         let (tx, rx) = Framed::from_parts(parts).split();
         let mut tx = tx.with(encode);
@@ -120,11 +120,16 @@ impl Connection {
         Ok(())
     }
 
-    async fn kex<T, R>(tx: &mut T, rx: &mut R, server_version: &[u8], client_version: &[u8])
-        -> Result<(), ConnectionError>
-    where R: TryStream<Ok=Message, Error=MessageError> + Unpin,
-          T: Sink<Message, Error=MessageError> + Unpin {
-
+    async fn kex<T, R>(
+        tx: &mut T,
+        rx: &mut R,
+        server_version: &[u8],
+        client_version: &[u8],
+    ) -> Result<(), ConnectionError>
+    where
+        R: TryStream<Ok = Message, Error = MessageError> + Unpin,
+        T: Sink<Message, Error = MessageError> + Unpin,
+    {
         let client_kexinit = if let Some(Message::Kexinit(e)) = rx.try_next().await? {
             e
         } else {
@@ -149,15 +154,19 @@ impl Connection {
             panic!()
         };
 
-        use sodiumoxide::crypto::scalarmult::curve25519::{Scalar, GroupElement, scalarmult, scalarmult_base};
         use sodiumoxide::crypto::scalarmult::curve25519::SCALARBYTES;
+        use sodiumoxide::crypto::scalarmult::curve25519::{
+            scalarmult, scalarmult_base, GroupElement, Scalar,
+        };
 
-        let client_pubkey = GroupElement::from_slice(&kex_edch_init.ephemeral_public_key()).unwrap();
-        let server_secret = Scalar::from_slice(&sodiumoxide::randombytes::randombytes(SCALARBYTES)).unwrap();
+        let client_pubkey =
+            GroupElement::from_slice(&kex_edch_init.ephemeral_public_key()).unwrap();
+        let server_secret =
+            Scalar::from_slice(&sodiumoxide::randombytes::randombytes(SCALARBYTES)).unwrap();
         let server_pubkey = scalarmult_base(&server_secret);
         let shared_key = scalarmult(&server_secret, &client_pubkey).unwrap();
 
-        use  sodiumoxide::crypto::sign::ed25519::gen_keypair;
+        use sodiumoxide::crypto::sign::ed25519::gen_keypair;
         let (pubkey, secretkey) = gen_keypair();
 
         use sshbuf::SshBufMut as _;
@@ -177,7 +186,8 @@ impl Connection {
             buf.put_string("ssh-ed25519").unwrap(); // xxxx
             buf.put_binary_string(&pubkey.0).unwrap();
             buf
-        }).unwrap();
+        })
+        .unwrap();
         buf.put_binary_string(&client_pubkey.0).unwrap();
         buf.put_binary_string(&server_pubkey.0).unwrap();
         buf.put_mpint(&shared_key.0).unwrap();
@@ -185,7 +195,8 @@ impl Connection {
         let digest = sodiumoxide::crypto::hash::sha256::hash(&buf);
         let signature = sodiumoxide::crypto::sign::ed25519::sign_detached(&digest.0, &secretkey);
 
-        tx.send(msg::KexEdchReply::new(&pubkey.0, &server_pubkey.0, &signature.0).into()).await?;
+        tx.send(msg::KexEdchReply::new(&pubkey.0, &server_pubkey.0, &signature.0).into())
+            .await?;
 
         if let Some(Message::Newkeys(..)) = rx.try_next().await? {
         } else {
@@ -195,7 +206,6 @@ impl Connection {
 
         Ok(())
     }
-
 }
 
 #[derive(Debug)]
@@ -207,10 +217,7 @@ impl ServerConfig {
     pub fn with_addrs(self, addrs: impl ToSocketAddrs) -> io::Result<Self> {
         let addrs = addrs.to_socket_addrs()?;
         let addrs = addrs.collect();
-        Ok(ServerConfig {
-            addrs,
-            ..self
-        })
+        Ok(ServerConfig { addrs, ..self })
     }
 }
 
@@ -234,11 +241,13 @@ impl Server {
 
     pub async fn serve(&mut self) -> io::Result<()> {
         let mut listener = TcpListener::bind(self.config.addrs.iter().next().unwrap())?;
-        loop {
-            let (socket, _) = listener.accept().await?;
-            let connection = Connection::new(socket);
-            tokio::executor::spawn(connection.run());
-        }
+        //        loop {
+        let (socket, _) = listener.accept().await?;
+        let connection = Connection::new(socket);
+        //            tokio::executor::spawn(connection.run());
+        connection.run().await;
+        //        }
+        Ok(())
     }
 }
 
@@ -253,7 +262,10 @@ async fn main() {
             .arg("-p2222")
             .arg("-vvv")
             .arg("::1")
-            .spawn_async().unwrap().await.unwrap();
+            .spawn_async()
+            .unwrap()
+            .await
+            .unwrap();
     });
 
     let mut server = Server::with_config(ServerConfig::default().with_addrs("[::1]:2222").unwrap());
