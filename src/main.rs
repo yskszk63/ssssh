@@ -107,13 +107,20 @@ impl Connection {
         let mut tx = tx.with(encode);
         let mut rx = rx.err_into().and_then(decode);
 
-        Connection::kex(&mut tx, &mut rx, server_version.as_bytes(), &cli_version).await?;
+        let (h, k) = Connection::kex(&mut tx, &mut rx, server_version.as_bytes(), &cli_version).await?;
+
+        let mut io = tx.into_inner().reunite(rx.into_inner().into_inner()).unwrap();
+        io.codec_mut().change_key(h, k);
+        let (tx, rx) = io.split();
+        let mut tx = tx.with(encode);
+        let mut rx = rx.err_into().and_then(decode);
 
         loop {
             let pkt = match rx.try_next().await? {
                 Some(e) => e,
                 None => break,
             };
+            dbg!(&pkt);
             tx.send(pkt).await?;
         }
 
@@ -125,7 +132,7 @@ impl Connection {
         rx: &mut R,
         server_version: &[u8],
         client_version: &[u8],
-    ) -> Result<(), ConnectionError>
+    ) -> Result<(Bytes, Bytes), ConnectionError>
     where
         R: TryStream<Ok = Message, Error = MessageError> + Unpin,
         T: Sink<Message, Error = MessageError> + Unpin,
@@ -204,7 +211,7 @@ impl Connection {
         };
         tx.send(msg::Newkeys.into()).await?;
 
-        Ok(())
+        Ok((Bytes::from(&digest.0[..]), Bytes::from(&shared_key.0[..])))
     }
 }
 
@@ -262,6 +269,8 @@ async fn main() {
             .arg("-p2222")
             .arg("-vvv")
             .arg("::1")
+            //.stdout(std::process::Stdio::null())
+            //.stderr(std::process::Stdio::null())
             .spawn_async()
             .unwrap()
             .await

@@ -10,12 +10,16 @@ pub use kex_edch_init::*;
 pub use kex_edch_reply::*;
 pub use kexinit::*;
 pub use newkeys::*;
+pub use service_request::*;
+pub use service_accept::*;
 
 mod id;
 mod kex_edch_init;
 mod kex_edch_reply;
 mod kexinit;
 mod newkeys;
+mod service_request;
+mod service_accept;
 
 #[derive(Debug)]
 pub enum MessageError {
@@ -57,6 +61,7 @@ pub enum Message {
     KexEdchInit(kex_edch_init::KexEdchInit),
     KexEdchReply(kex_edch_reply::KexEdchReply),
     Newkeys(newkeys::Newkeys),
+    ServiceRequest(service_request::ServiceRequest),
 }
 
 impl Message {
@@ -66,6 +71,7 @@ impl Message {
             Message::KexEdchInit(v) => v.put(buf)?,
             Message::KexEdchReply(v) => v.put(buf)?,
             Message::Newkeys(v) => v.put(buf)?,
+            Message::ServiceRequest(v) => v.put(buf)?,
         };
         Ok(())
     }
@@ -82,6 +88,7 @@ impl TryFrom<Bytes> for Message {
             MessageId::KexEcdhInit => KexEdchInit::from(buf)?.into(),
             MessageId::KexEcdhReply => KexEdchReply::from(buf)?.into(),
             MessageId::Newkeys => Newkeys::from(buf)?.into(),
+            MessageId::ServiceRequest => ServiceRequest::from(buf)?.into(),
             message_id => return Err(MessageError::Unimplemented(message_id)),
         })
     }

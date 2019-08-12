@@ -46,7 +46,14 @@ pub trait SshBuf: Buf {
     }
 
     fn get_string(&mut self) -> SshBufResult<String> {
-        let buf = self.get_mpint()?;
+        let len = self.get_uint32()? as usize;
+
+        if self.remaining() < len {
+            return Err(SshBufError::Underflow);
+        }
+
+        let mut buf = vec![0; len];
+        self.copy_to_slice(&mut buf);
         match String::from_utf8(buf) {
             Ok(e) => Ok(e),
             Err(e) => Err(e.into()),
@@ -73,7 +80,15 @@ pub trait SshBuf: Buf {
     }
 
     fn get_binary_string(&mut self) -> SshBufResult<Vec<u8>> {
-        self.get_mpint()
+        let len = self.get_uint32()? as usize;
+
+        if self.remaining() < len {
+            return Err(SshBufError::Underflow);
+        }
+
+        let mut buf = vec![0; len];
+        self.copy_to_slice(&mut buf);
+        Ok(buf)
     }
 }
 
@@ -110,10 +125,7 @@ pub trait SshBufMut: BufMut {
     }
 
     fn put_string(&mut self, v: &str) -> SshBufResult<()> {
-        self.put_mpint(v.as_bytes())
-    }
-
-    fn put_mpint(&mut self, v: &[u8]) -> SshBufResult<()> {
+        let v = v.as_bytes();
         self.put_uint32(v.len() as u32)?;
 
         if self.remaining_mut() < v.len() {
@@ -123,12 +135,35 @@ pub trait SshBufMut: BufMut {
         Ok(())
     }
 
+    fn put_mpint(&mut self, v: &[u8]) -> SshBufResult<()> {
+        let (head, len) = if v.len() > 0 && v[0] & 0x80 != 0 {
+            (&b"\x00"[..], v.len() + 1)
+        } else {
+            (&b""[..], v.len())
+        };
+        //self.put_uint32(v.len() as u32)?;
+        self.put_uint32(len as u32)?;
+
+        if self.remaining_mut() < len {
+            return Err(SshBufError::Overflow);
+        }
+        self.put_slice(head);
+        self.put_slice(v);
+        Ok(())
+    }
+
     fn put_name_list(&mut self, v: &[String]) -> SshBufResult<()> {
         self.put_string(&v.join(","))
     }
 
     fn put_binary_string(&mut self, v: &[u8]) -> SshBufResult<()> {
-        self.put_mpint(v)
+        self.put_uint32(v.len() as u32)?;
+
+        if self.remaining_mut() < v.len() {
+            return Err(SshBufError::Overflow);
+        }
+        self.put_slice(v);
+        Ok(())
     }
 }
 
