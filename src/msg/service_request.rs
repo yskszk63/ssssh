@@ -1,8 +1,8 @@
 use std::io::Cursor;
 
-use bytes::{BufMut as _, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
 
-use super::{Message, MessageId, MessageResult};
+use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug, Clone)]
@@ -17,7 +17,6 @@ impl ServiceRequest {
     }
 
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_u8(MessageId::ServiceRequest as u8);
         buf.put_string(&self.name)?;
 
         Ok(())

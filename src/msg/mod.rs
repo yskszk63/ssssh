@@ -1,21 +1,21 @@
 use std::convert::TryFrom;
 use std::string::FromUtf8Error;
 
-use bytes::{Buf as _, Bytes, BytesMut, IntoBuf as _};
+use bytes::{Buf as _, BufMut as _, Bytes, BytesMut, IntoBuf as _};
 
 use crate::sshbuf::SshBufError;
 use crate::transport::codec::CodecError;
 pub use id::*;
-pub use kex_edch_init::*;
-pub use kex_edch_reply::*;
+pub use kex_ecdh_init::*;
+pub use kex_ecdh_reply::*;
 pub use kexinit::*;
 pub use newkeys::*;
 pub use service_accept::*;
 pub use service_request::*;
 
 mod id;
-mod kex_edch_init;
-mod kex_edch_reply;
+mod kex_ecdh_init;
+mod kex_ecdh_reply;
 mod kexinit;
 mod newkeys;
 mod service_accept;
@@ -57,19 +57,30 @@ pub type MessageResult<T> = Result<T, MessageError>;
 
 #[derive(Debug)]
 pub enum Message {
-    Kexinit(kexinit::Kexinit),
-    KexEdchInit(kex_edch_init::KexEdchInit),
-    KexEdchReply(kex_edch_reply::KexEdchReply),
-    Newkeys(newkeys::Newkeys),
-    ServiceRequest(service_request::ServiceRequest),
+    Kexinit(Kexinit),
+    KexEcdhInit(KexEcdhInit),
+    KexEcdhReply(KexEcdhReply),
+    Newkeys(Newkeys),
+    ServiceRequest(ServiceRequest),
 }
 
 impl Message {
+    fn id(&self) -> MessageId {
+        match self {
+            Message::Kexinit(..) => MessageId::Kexinit,
+            Message::KexEcdhInit(..) => MessageId::KexEcdhInit,
+            Message::KexEcdhReply(..) => MessageId::KexEcdhReply,
+            Message::Newkeys(..) => MessageId::Newkeys,
+            Message::ServiceRequest(..) => MessageId::ServiceRequest,
+        }
+    }
+
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
+        buf.put_u8(self.id() as u8);
         match self {
             Message::Kexinit(v) => v.put(buf)?,
-            Message::KexEdchInit(v) => v.put(buf)?,
-            Message::KexEdchReply(v) => v.put(buf)?,
+            Message::KexEcdhInit(v) => v.put(buf)?,
+            Message::KexEcdhReply(v) => v.put(buf)?,
             Message::Newkeys(v) => v.put(buf)?,
             Message::ServiceRequest(v) => v.put(buf)?,
         };
@@ -85,8 +96,8 @@ impl TryFrom<Bytes> for Message {
         let message_id = MessageId::try_from(buf.get_u8())?;
         Ok(match message_id {
             MessageId::Kexinit => Kexinit::from(buf)?.into(),
-            MessageId::KexEcdhInit => KexEdchInit::from(buf)?.into(),
-            MessageId::KexEcdhReply => KexEdchReply::from(buf)?.into(),
+            MessageId::KexEcdhInit => KexEcdhInit::from(buf)?.into(),
+            MessageId::KexEcdhReply => KexEcdhReply::from(buf)?.into(),
             MessageId::Newkeys => Newkeys::from(buf)?.into(),
             MessageId::ServiceRequest => ServiceRequest::from(buf)?.into(),
             message_id => return Err(MessageError::Unimplemented(message_id)),

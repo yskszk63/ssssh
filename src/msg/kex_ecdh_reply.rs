@@ -1,18 +1,18 @@
 use std::io::Cursor;
 
-use bytes::{BufMut as _, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
 
-use super::{Message, MessageId, MessageResult};
+use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug)]
-pub struct KexEdchReply {
+pub struct KexEcdhReply {
     public_host_key: Vec<u8>,
     ephemeral_public_key: Vec<u8>,
     signature: Vec<u8>,
 }
 
-impl KexEdchReply {
+impl KexEcdhReply {
     pub fn new(public_host_key: &[u8], ephemeral_public_key: &[u8], signature: &[u8]) -> Self {
         let public_host_key = Vec::from(public_host_key);
         let ephemeral_public_key = Vec::from(ephemeral_public_key);
@@ -34,7 +34,6 @@ impl KexEdchReply {
         })
     }
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_u8(MessageId::KexEcdhReply as u8);
         buf.put_binary_string(&{
             let mut buf = BytesMut::with_capacity(1024 * 8);
             buf.put_string("ssh-ed25519")?; // xxxx
@@ -52,8 +51,8 @@ impl KexEdchReply {
     }
 }
 
-impl From<KexEdchReply> for Message {
-    fn from(v: KexEdchReply) -> Message {
-        Message::KexEdchReply(v)
+impl From<KexEcdhReply> for Message {
+    fn from(v: KexEcdhReply) -> Message {
+        Message::KexEcdhReply(v)
     }
 }
