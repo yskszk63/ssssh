@@ -10,16 +10,16 @@ pub use kex_edch_init::*;
 pub use kex_edch_reply::*;
 pub use kexinit::*;
 pub use newkeys::*;
-pub use service_request::*;
 pub use service_accept::*;
+pub use service_request::*;
 
 mod id;
 mod kex_edch_init;
 mod kex_edch_reply;
 mod kexinit;
 mod newkeys;
-mod service_request;
 mod service_accept;
+mod service_request;
 
 #[derive(Debug)]
 pub enum MessageError {

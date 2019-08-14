@@ -34,7 +34,7 @@ impl std::fmt::Debug for CodecState {
     fn fmt(&self, fmt: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             CodecState::Plain => write!(fmt, "Plain"),
-            CodecState::Encrypt{..} => write!(fmt, "Encrypt"),
+            CodecState::Encrypt { .. } => write!(fmt, "Encrypt"),
         }
     }
 }
@@ -55,7 +55,12 @@ where
     R: RngCore + CryptoRng,
 {
     pub fn new(rng: R) -> Self {
-        Codec { state: CodecState::Plain, rng, seq_ctos: 0, seq_stoc: 0, }
+        Codec {
+            state: CodecState::Plain,
+            rng,
+            seq_ctos: 0,
+            seq_stoc: 0,
+        }
     }
 
     pub fn change_key(&mut self, hash: Bytes, secret: Bytes) {
@@ -80,7 +85,8 @@ where
             openssl::symm::Mode::Decrypt,
             &key_ctos.0,
             Some(&iv_ctos.0[..16]),
-            ).unwrap();
+        )
+        .unwrap();
 
         let mut iv_stoc = BytesMut::with_capacity(1024 * 8);
         iv_stoc.put_mpint(&secret).unwrap();
@@ -101,7 +107,8 @@ where
             openssl::symm::Mode::Encrypt,
             &key_stoc.0,
             Some(&iv_stoc.0[..16]),
-            ).unwrap();
+        )
+        .unwrap();
 
         let mut intk_ctos = BytesMut::with_capacity(1024 * 8);
         intk_ctos.put_mpint(&secret).unwrap();
@@ -134,7 +141,10 @@ where
     type Error = CodecError;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> CodecResult<()> {
-        fn encode<R>(item: Bytes, dst: &mut BytesMut, rng: &mut R) -> CodecResult<()> where R: RngCore + CryptoRng {
+        fn encode<R>(item: Bytes, dst: &mut BytesMut, rng: &mut R) -> CodecResult<()>
+        where
+            R: RngCore + CryptoRng,
+        {
             let len = item.len();
             let pad = (1 + len + MINIMUM_PAD_SIZE) % BLOCK_SIZE;
             let pad = if pad > (BLOCK_SIZE - MINIMUM_PAD_SIZE) {
@@ -157,8 +167,12 @@ where
         match self.state {
             CodecState::Plain => {
                 encode(item, dst, &mut self.rng)?;
-            },
-            CodecState::Encrypt {ref mut stoc_enc, ref mut stoc_int, ..} => {
+            }
+            CodecState::Encrypt {
+                ref mut stoc_enc,
+                ref mut stoc_int,
+                ..
+            } => {
                 let mut b = BytesMut::with_capacity(1024 * 8);
                 encode(item, &mut b, &mut self.rng)?;
                 let mut b2 = [0; 128];
@@ -166,14 +180,18 @@ where
                 dst.put_slice(&b2[..c]);
 
                 let key = openssl::pkey::PKey::hmac(&stoc_int).unwrap();
-                let mut signer = openssl::sign::Signer::new(openssl::hash::MessageDigest::sha256(), &key).unwrap();
+                let mut signer =
+                    openssl::sign::Signer::new(openssl::hash::MessageDigest::sha256(), &key)
+                        .unwrap();
                 let seq = self.seq_stoc;
-                signer.update(&[
-                    (seq>> 24) as u8,
-                    (seq >> 16) as u8,
-                    (seq >> 8) as u8,
-                    (seq >> 0) as u8,
-                ]).unwrap();
+                signer
+                    .update(&[
+                        (seq >> 24) as u8,
+                        (seq >> 16) as u8,
+                        (seq >> 8) as u8,
+                        (seq >> 0) as u8,
+                    ])
+                    .unwrap();
                 signer.update(&b).unwrap();
                 dst.put_slice(&signer.sign_to_vec().unwrap());
             }
@@ -224,27 +242,38 @@ where
 
         let result = match &mut self.state {
             CodecState::Plain => decode(src)?,
-            CodecState::Encrypt {ref mut ctos_enc, ref mut ctos_int, .. } => {
+            CodecState::Encrypt {
+                ref mut ctos_enc,
+                ref mut ctos_int,
+                ..
+            } => {
                 if src.len() == 0 {
-                    return Ok(None)
+                    return Ok(None);
                 }
                 let mut buf = [0; 128];
                 let c = ctos_enc.update(&src.split_to(32), &mut buf).unwrap();
 
                 let key = openssl::pkey::PKey::hmac(&ctos_int).unwrap();
                 let mut signer =
-                    openssl::sign::Signer::new(openssl::hash::MessageDigest::sha256(), &key).unwrap();
+                    openssl::sign::Signer::new(openssl::hash::MessageDigest::sha256(), &key)
+                        .unwrap();
                 let seq = self.seq_ctos;
-                signer.update(&[
-                    (seq >> 24) as u8,
-                    (seq >> 16) as u8,
-                    (seq >> 8) as u8,
-                    (seq >> 0) as u8,
-                ]).unwrap();
+                signer
+                    .update(&[
+                        (seq >> 24) as u8,
+                        (seq >> 16) as u8,
+                        (seq >> 8) as u8,
+                        (seq >> 0) as u8,
+                    ])
+                    .unwrap();
                 signer.update(&buf[..c]).unwrap();
                 let expect = src.split_to(signer.len().unwrap());
                 if !openssl::memcmp::eq(&Bytes::from(&signer.sign_to_vec().unwrap()[..]), &expect) {
-                    panic!("ERR\n  {:?}\n  {:?}", &Bytes::from(&signer.sign_to_vec().unwrap()[..]), &expect);
+                    panic!(
+                        "ERR\n  {:?}\n  {:?}",
+                        &Bytes::from(&signer.sign_to_vec().unwrap()[..]),
+                        &expect
+                    );
                 }
 
                 let mut src = BytesMut::from(&buf[..c]);
@@ -256,7 +285,7 @@ where
             Some(e) => {
                 self.seq_ctos += 1;
                 Ok(Some(e))
-            },
+            }
             None => Ok(None),
         }
     }

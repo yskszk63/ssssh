@@ -107,9 +107,13 @@ impl Connection {
         let mut tx = tx.with(encode);
         let mut rx = rx.err_into().and_then(decode);
 
-        let (h, k) = Connection::kex(&mut tx, &mut rx, server_version.as_bytes(), &cli_version).await?;
+        let (h, k) =
+            Connection::kex(&mut tx, &mut rx, server_version.as_bytes(), &cli_version).await?;
 
-        let mut io = tx.into_inner().reunite(rx.into_inner().into_inner()).unwrap();
+        let mut io = tx
+            .into_inner()
+            .reunite(rx.into_inner().into_inner())
+            .unwrap();
         io.codec_mut().change_key(h, k);
         let (tx, rx) = io.split();
         let mut tx = tx.with(encode);

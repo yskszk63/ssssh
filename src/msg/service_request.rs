@@ -5,7 +5,6 @@ use bytes::{BufMut as _, Bytes, BytesMut};
 use super::{Message, MessageId, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
-
 #[derive(Debug, Clone)]
 pub struct ServiceRequest {
     name: String,
