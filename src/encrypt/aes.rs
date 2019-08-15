@@ -28,7 +28,7 @@ impl Encrypt for Aes256CtrEncrypt {
     }
     fn block_size(&self) -> usize {
         //openssl::symm::Cipher::aes_256_ctr().block_size()
-        8
+        16
     }
     fn encrypt(&mut self, pkt: &Bytes) -> EncryptResult<Bytes> {
         let bs = self.block_size();

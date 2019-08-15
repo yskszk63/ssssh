@@ -148,13 +148,62 @@ impl<'a> Connection<'a> {
         let mut tx = tx.with(encode);
         let mut rx = rx.err_into().and_then(decode);
 
+        let mut n = 0;
+
         loop {
             let pkt = match rx.try_next().await? {
                 Some(e) => e,
                 None => break,
             };
             dbg!(&pkt);
-            tx.send(pkt).await?;
+
+            match pkt {
+                msg::Message::ServiceRequest(ref v) if v.name() == "ssh-userauth" => {
+                    tx.send(msg::ServiceAccept::new(v.name()).into()).await?;
+                },
+                msg::Message::UserauthRequest(ref v) => {
+                    match v.method_name() {
+                        "password" => {
+                            if n < 2 {
+                                n += 1;
+                                tx.send(msg::UserauthFailure::new(vec!["password"], false).into()).await?;
+                            } else {
+                                tx.send(msg::UserauthBanner::new("Hello, World!!", "").into()).await?;
+                                tx.send(msg::UserauthSuccess.into()).await?;
+                            }
+                        },
+                        "publickey" | "none" => {
+                            tx.send(msg::UserauthFailure::new(vec!["publickey", "password"], false).into()).await?;
+                        },
+                        _ => {}
+                    }
+                },
+                msg::Message::ChannelOpen(ref v) => {
+                    tx.send(msg::ChannelOpenConfirmation::new(
+                            v.sender_channel(),
+                            v.sender_channel(),
+                            v.initial_window_size(),
+                            v.maximum_packet_size()).into()).await?;
+                },
+                msg::Message::ChannelRequest(ref v) => {
+                    tx.send(msg::ChannelSuccess::new(v.recipient_channel()).into()).await?;
+                    if v.request_type() == "shell" {
+                        tx.send(msg::Debug::new(true, "HELLO WORLD!", "").into()).await?;
+                        tx.send(msg::ChannelData::new(v.recipient_channel(), Bytes::from("HELLO WORLD!\n")).into()).await?;
+                        tx.send(msg::ChannelData::new(v.recipient_channel(), Bytes::from("HELLO WORLD!\n")).into()).await?;
+                        tx.send(msg::ChannelData::new(v.recipient_channel(), Bytes::from("HELLO WORLD!\n")).into()).await?;
+                        tx.send(msg::ChannelExtendedData::new(v.recipient_channel(), Bytes::from("HELLO WORLD!\n")).into()).await?;
+                        tx.send(msg::ChannelEof::new(v.recipient_channel()).into()).await?;
+                        tx.send(msg::ChannelClose::new(v.recipient_channel()).into()).await?;
+                    }
+                },
+                msg::Message::Ignore(..) => {
+                },
+                msg::Message::Disconnect(..) => {
+                    break
+                },
+                pkt => tx.send(pkt).await?,
+            }
         }
 
         Ok(())

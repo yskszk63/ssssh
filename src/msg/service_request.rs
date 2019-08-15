@@ -11,6 +11,10 @@ pub struct ServiceRequest {
 }
 
 impl ServiceRequest {
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
     pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<ServiceRequest> {
         let name = buf.get_string()?;
         Ok(ServiceRequest { name })

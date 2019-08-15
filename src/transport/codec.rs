@@ -171,6 +171,7 @@ where
 
         let len = item.len();
         let bs = enc.block_size();
+
         let pad = (1 + len + MINIMUM_PAD_SIZE) % bs;
         let pad = if pad > (bs - MINIMUM_PAD_SIZE) {
             bs * 2 - pad
@@ -233,7 +234,7 @@ where
                     first,
                     len,
                 } => {
-                    if *len - bs > src.len() - 4 {
+                    if src.len() < 4 || *len + 4 - bs > src.len() {
                         return Ok(None);
                     }
                     let encrypted_remaining = src.split_to(len + 4 - bs).freeze();
