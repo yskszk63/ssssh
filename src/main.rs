@@ -83,19 +83,19 @@ impl From<MessageError> for ConnectionError {
 }
 
 #[derive(Debug)]
-pub struct Connection<'a> {
+pub struct Connection {
     version: String,
     socket: TcpStream,
-    hostkeys: &'a HostKeys,
-    preference: &'a Preference,
+    hostkeys: HostKeys,
+    preference: Preference,
 }
 
-impl<'a> Connection<'a> {
+impl Connection {
     fn new(
         version: String,
         socket: TcpStream,
-        hostkeys: &'a HostKeys,
-        preference: &'a Preference,
+        hostkeys: HostKeys,
+        preference: Preference,
     ) -> Self {
         Connection {
             version,
@@ -295,19 +295,20 @@ impl Server {
         Server { config }
     }
 
-    pub async fn serve(&mut self) -> io::Result<()> {
+    pub async fn serve(self) -> io::Result<()> {
         let mut listener = TcpListener::bind(self.config.addrs.iter().next().unwrap())?;
-        //        loop {
+                //loop {
         let (socket, _) = listener.accept().await?;
         let connection = Connection::new(
             self.config.version.clone(),
             socket,
-            &self.config.hostkeys,
-            &self.config.preference,
+            self.config.hostkeys.clone(),
+            self.config.preference.clone(),
         );
-        //            tokio::executor::spawn(connection.run());
+        //tokio::runtime::current_thread::spawn(connection.run());
+                    //tokio::executor::spawn(connection.run());
         connection.run().await;
-        //        }
+                //}
         Ok(())
     }
 }
@@ -335,6 +336,6 @@ async fn main() {
     let hostkeys = HostKeys::new(vec![hostkey]);
     let conf =
         ServerConfig::new("SSH-2.0-ssh", "[::1]:2222", hostkeys, Preference::default()).unwrap();
-    let mut server = Server::with_config(conf);
+    let server = Server::with_config(conf);
     server.serve().await.unwrap();
 }

@@ -4,7 +4,7 @@ use sodiumoxide::crypto::sign::ed25519::{gen_keypair, sign_detached};
 use crate::algorithm::HostKeyAlgorithm;
 use crate::sshbuf::{SshBufMut, SshBufResult};
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub struct HostKeys {
     keys: Vec<HostKey>,
 }
@@ -28,7 +28,7 @@ pub enum SignError {}
 
 pub type SignResult<T> = Result<T, SignError>;
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum HostKey {
     SshEd25519 { secret: Bytes, public: Bytes },
 }

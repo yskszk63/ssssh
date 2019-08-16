@@ -72,12 +72,12 @@ where
     seq_ctos: u32,
     seq_stoc: u32,
     session_id: Option<Bytes>,
-    encrypt_ctos: Box<dyn Encrypt>,
-    encrypt_stoc: Box<dyn Encrypt>,
-    mac_ctos: Box<dyn Mac>,
-    mac_stoc: Box<dyn Mac>,
-    comp_ctos: Box<dyn Compression>,
-    comp_stoc: Box<dyn Compression>,
+    encrypt_ctos: Box<dyn Encrypt + Send>,
+    encrypt_stoc: Box<dyn Encrypt + Send>,
+    mac_ctos: Box<dyn Mac + Send>,
+    mac_stoc: Box<dyn Mac + Send>,
+    comp_ctos: Box<dyn Compression + Send>,
+    comp_stoc: Box<dyn Compression + Send>,
     encrypt_state: EncryptState,
 }
 
