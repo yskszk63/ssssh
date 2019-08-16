@@ -13,11 +13,29 @@ pub struct Disconnect {
 }
 
 impl Disconnect {
+    pub fn new(
+        reason_code: u32,
+        description: impl Into<String>,
+        language_tag: impl Into<String>,
+    ) -> Self {
+        let description = description.into();
+        let language_tag = language_tag.into();
+        Disconnect {
+            reason_code,
+            description,
+            language_tag,
+        }
+    }
+
     pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
         let reason_code = buf.get_uint32()?;
         let description = buf.get_string()?;
         let language_tag = buf.get_string()?;
-        Ok(Self { reason_code, description, language_tag })
+        Ok(Self {
+            reason_code,
+            description,
+            language_tag,
+        })
     }
 
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {

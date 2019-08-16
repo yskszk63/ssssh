@@ -21,7 +21,7 @@ impl ChannelEof {
 
     pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
         let recipient_channel = buf.get_uint32()?;
-        Ok(Self { recipient_channel, })
+        Ok(Self { recipient_channel })
     }
 
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {

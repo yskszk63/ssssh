@@ -13,17 +13,26 @@ pub struct UserauthFailure {
 
 impl UserauthFailure {
     pub fn new(
-        authentications_that_can_continue: impl IntoIterator<Item=impl Into<String>>,
-        parital_success: bool) -> Self {
-        let authentications_that_can_continue =
-            authentications_that_can_continue.into_iter().map(Into::into).collect();
-        Self { authentications_that_can_continue, parital_success }
+        authentications_that_can_continue: impl IntoIterator<Item = impl Into<String>>,
+        parital_success: bool,
+    ) -> Self {
+        let authentications_that_can_continue = authentications_that_can_continue
+            .into_iter()
+            .map(Into::into)
+            .collect();
+        Self {
+            authentications_that_can_continue,
+            parital_success,
+        }
     }
 
     pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
         let authentications_that_can_continue = buf.get_name_list()?;
         let parital_success = buf.get_boolean()?;
-        Ok(Self { authentications_that_can_continue, parital_success, })
+        Ok(Self {
+            authentications_that_can_continue,
+            parital_success,
+        })
     }
 
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {

@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use bytes::{Bytes, BytesMut, Buf as _, BufMut as _};
+use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
 
 use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
@@ -31,7 +31,12 @@ impl ChannelRequest {
         let request_type = buf.get_string()?;
         let want_reply = buf.get_boolean()?;
         let data = buf.take(usize::max_value()).collect();
-        Ok(Self { recipient_channel, request_type, want_reply, data })
+        Ok(Self {
+            recipient_channel,
+            request_type,
+            want_reply,
+            data,
+        })
     }
 
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {

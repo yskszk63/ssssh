@@ -68,8 +68,8 @@ where
     Tx: Sink<Message, Error = MessageError> + Unpin,
     Rx: TryStream<Ok = Message, Error = MessageError> + Unpin,
 {
-    let client_version = env.client_version;
-    let server_version = env.server_version;
+    let client_version = env.version.client();
+    let server_version = env.version.server();
     let client_kexinit = env.client_kexinit.to_bytes();
     let server_kexinit = env.server_kexinit.to_bytes();
     let hostkey = env.hostkey;

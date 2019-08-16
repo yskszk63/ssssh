@@ -5,65 +5,65 @@ use bytes::{Buf as _, BufMut as _, Bytes, BytesMut, IntoBuf as _};
 
 use crate::sshbuf::SshBufError;
 use crate::transport::codec::CodecError;
+pub use channel_close::*;
+pub use channel_data::*;
+pub use channel_eof::*;
+pub use channel_extended_data::*;
+pub use channel_failure::*;
+pub use channel_open::*;
+pub use channel_open_confirmation::*;
+pub use channel_open_failure::*;
+pub use channel_request::*;
+pub use channel_success::*;
+pub use channel_window_adjust::*;
+pub use debug::*;
+pub use disconnect::*;
+pub use global_request::*;
 pub use id::*;
+pub use ignore::*;
 pub use kex_ecdh_init::*;
 pub use kex_ecdh_reply::*;
 pub use kexinit::*;
 pub use newkeys::*;
+pub use request_failure::*;
+pub use request_success::*;
 pub use service_accept::*;
 pub use service_request::*;
-pub use userauth_request::*;
-pub use userauth_failure::*;
-pub use userauth_success::*;
-pub use channel_open::*;
-pub use channel_open_confirmation::*;
-pub use channel_request::*;
-pub use channel_failure::*;
-pub use channel_success::*;
-pub use channel_data::*;
-pub use channel_eof::*;
-pub use channel_close::*;
-pub use disconnect::*;
-pub use ignore::*;
-pub use debug::*;
 pub use unimplemented::*;
 pub use userauth_banner::*;
-pub use global_request::*;
-pub use request_success::*;
-pub use request_failure::*;
-pub use channel_open_failure::*;
-pub use channel_window_adjust::*;
-pub use channel_extended_data::*;
+pub use userauth_failure::*;
+pub use userauth_request::*;
+pub use userauth_success::*;
 
+mod channel_close;
+mod channel_data;
+mod channel_eof;
+mod channel_extended_data;
+mod channel_failure;
+mod channel_open;
+mod channel_open_confirmation;
+mod channel_open_failure;
+mod channel_request;
+mod channel_success;
+mod channel_window_adjust;
+mod debug;
+mod disconnect;
+mod global_request;
 mod id;
+mod ignore;
 mod kex_ecdh_init;
 mod kex_ecdh_reply;
 mod kexinit;
 mod newkeys;
+mod request_failure;
+mod request_success;
 mod service_accept;
 mod service_request;
-mod userauth_request;
-mod userauth_failure;
-mod userauth_success;
-mod channel_open;
-mod channel_open_confirmation;
-mod channel_request;
-mod channel_failure;
-mod channel_success;
-mod channel_data;
-mod channel_eof;
-mod channel_close;
-mod disconnect;
-mod ignore;
-mod debug;
 mod unimplemented;
 mod userauth_banner;
-mod global_request;
-mod request_success;
-mod request_failure;
-mod channel_open_failure;
-mod channel_window_adjust;
-mod channel_extended_data;
+mod userauth_failure;
+mod userauth_request;
+mod userauth_success;
 
 #[derive(Debug)]
 pub enum MessageError {
@@ -233,9 +233,9 @@ impl TryFrom<Bytes> for Message {
             MessageId::GlobalRequest => GlobalRequest::from(buf)?.into(),
             MessageId::RequestSuccess => RequestSuccess::from(buf)?.into(),
             MessageId::RequestFailure => RequestFailure::from(buf)?.into(),
-            MessageId::ChannelOpenFailure=> ChannelOpenFailure::from(buf)?.into(),
-            MessageId::ChannelWindowAdjust=>ChannelWindowAdjust::from(buf)?.into(),
-            MessageId::ChannelExtendedData =>ChannelExtendedData ::from(buf)?.into(),
+            MessageId::ChannelOpenFailure => ChannelOpenFailure::from(buf)?.into(),
+            MessageId::ChannelWindowAdjust => ChannelWindowAdjust::from(buf)?.into(),
+            MessageId::ChannelExtendedData => ChannelExtendedData::from(buf)?.into(),
         })
     }
 }

@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use bytes::{Bytes, BytesMut, Buf as _};
+use bytes::{Buf as _, Bytes, BytesMut};
 
 use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
@@ -31,7 +31,12 @@ impl UserauthRequest {
         let service_name = buf.get_string()?;
         let method_name = buf.get_string()?;
         let data = buf.take(usize::max_value()).collect();
-        Ok(Self { user_name, service_name, method_name, data, })
+        Ok(Self {
+            user_name,
+            service_name,
+            method_name,
+            data,
+        })
     }
 
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {

@@ -15,7 +15,10 @@ impl ChannelWindowAdjust {
     pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
         let recipient_channel = buf.get_uint32()?;
         let bytes_to_add = buf.get_uint32()?;
-        Ok(Self { recipient_channel, bytes_to_add })
+        Ok(Self {
+            recipient_channel,
+            bytes_to_add,
+        })
     }
 
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {

@@ -6,6 +6,51 @@ use tokio::codec::{Decoder, Encoder, FramedParts};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 #[derive(Debug)]
+pub struct Version {
+    client: Bytes,
+    server: Bytes,
+}
+
+impl Version {
+    pub async fn exchange<IO>(
+        connection: &mut IO,
+        server_version: impl Into<Bytes>,
+    ) -> VersionExchangeResult<(Self, BytesMut)>
+    where
+        IO: AsyncRead + AsyncWrite + Unpin,
+    {
+        let mut codec = VersionCodec.framed(connection);
+
+        let client_version = if let Some(e) = codec.try_next().await? {
+            match &e.get(..8) {
+                Some(b"SSH-2.0-") => e,
+                _ => return Err(VersionExchangeError::InvalidFormat), // TODO
+            }
+        } else {
+            return Err(VersionExchangeError::InvalidFormat);
+        };
+
+        let server_version = server_version.into();
+        codec.send(server_version.clone()).await?;
+
+        let FramedParts { read_buf, .. } = codec.into_parts();
+        let result = Self {
+            server: server_version,
+            client: client_version,
+        };
+        Ok((result, read_buf))
+    }
+
+    pub fn client(&self) -> &Bytes {
+        &self.client
+    }
+
+    pub fn server(&self) -> &Bytes {
+        &self.server
+    }
+}
+
+#[derive(Debug)]
 pub enum VersionExchangeError {
     InvalidFormat,
     Io(io::Error),
@@ -24,7 +69,7 @@ const LF: u8 = b'\n';
 const CRLF: &[u8] = &[CR, LF];
 
 #[derive(Debug)]
-pub struct VersionCodec;
+struct VersionCodec;
 
 impl Encoder for VersionCodec {
     type Item = Bytes;
@@ -55,26 +100,6 @@ impl Decoder for VersionCodec {
     }
 }
 
-pub async fn exchange_version<IO>(
-    connection: &mut IO,
-    server_version: Bytes,
-) -> VersionExchangeResult<(Bytes, BytesMut)>
-where
-    IO: AsyncRead + AsyncWrite + Unpin,
-{
-    let mut codec = VersionCodec.framed(connection);
-
-    let client_version = loop {
-        if let Some(e) = codec.try_next().await? {
-            break e;
-        }
-    };
-    codec.send(server_version).await?;
-
-    let FramedParts { read_buf, .. } = codec.into_parts();
-    Ok((client_version, read_buf))
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -87,11 +112,12 @@ mod tests {
             .write(b"SSH-2.0-srv\r\n")
             .build();
 
-        let (srv, rb) = exchange_version(&mut mock, Bytes::from("SSH-2.0-srv"))
+        let (version, rb) = Version::exchange(&mut mock, Bytes::from("SSH-2.0-srv"))
             .await
             .unwrap();
-        assert_eq!(srv, Bytes::from("SSH-2.0-cli"));
-        assert_eq!(rb, Bytes::from(""));
+        assert_eq!(version.client(), &Bytes::from("SSH-2.0-cli"));
+        assert_eq!(version.server(), &Bytes::from("SSH-2.0-srv"));
+        assert_eq!(rb, Bytes::new());
     }
 
     #[tokio::test]
@@ -101,10 +127,11 @@ mod tests {
             .write(b"SSH-2.0-srv\r\n")
             .build();
 
-        let (srv, rb) = exchange_version(&mut mock, Bytes::from("SSH-2.0-srv"))
+        let (version, rb) = Version::exchange(&mut mock, Bytes::from("SSH-2.0-srv"))
             .await
             .unwrap();
-        assert_eq!(srv, Bytes::from("SSH-2.0-cli"));
+        assert_eq!(version.client(), &Bytes::from("SSH-2.0-cli"));
+        assert_eq!(version.server(), &Bytes::from("SSH-2.0-srv"));
         assert_eq!(rb, Bytes::from("abcdefg"));
     }
 }

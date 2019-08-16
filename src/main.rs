@@ -10,6 +10,7 @@ use std::string::FromUtf8Error;
 
 use bytes::{Bytes, BytesMut};
 use futures::{Sink, SinkExt as _, StreamExt as _, TryStream, TryStreamExt};
+use futures::future::{BoxFuture, FutureExt as _};
 use rand::SeedableRng as _;
 use tokio::codec::{Decoder, Framed};
 use tokio::net::{TcpListener, TcpStream};
@@ -18,11 +19,13 @@ use algorithm::{Algorithm, Preference};
 use hostkey::{HostKey, HostKeys};
 use msg::{Message, MessageError, MessageId, MessageResult};
 use transport::codec::{Codec as TransportCodec, CodecError};
-use transport::version::{exchange_version, VersionExchangeError};
+use transport::version::{Version, VersionExchangeError};
 
 mod algorithm;
 mod compression;
+mod connection;
 mod encrypt;
+mod handler;
 mod hostkey;
 mod kex;
 mod mac;
@@ -30,6 +33,7 @@ mod msg;
 mod named;
 mod sshbuf;
 mod transport;
+mod handle;
 
 fn decode(src: Bytes) -> Pin<Box<dyn Future<Output = MessageResult<Message>> + Send>> {
     Box::pin(async move { Message::try_from(src) })
@@ -91,12 +95,7 @@ pub struct Connection {
 }
 
 impl Connection {
-    fn new(
-        version: String,
-        socket: TcpStream,
-        hostkeys: HostKeys,
-        preference: Preference,
-    ) -> Self {
+    fn new(version: String, socket: TcpStream, hostkeys: HostKeys, preference: Preference) -> Self {
         Connection {
             version,
             socket,
@@ -113,12 +112,8 @@ impl Connection {
 
     async fn run0(mut self) -> Result<(), ConnectionError> {
         let server_version = self.version;
-        let (cli_version, read_buf) =
-            exchange_version(&mut self.socket, Bytes::from(server_version.clone())).await?;
-        match &cli_version.get(..8) {
-            Some(b"SSH-2.0-") => (),
-            _ => return Err(VersionExchangeError::InvalidFormat.into()),
-        }
+        let (version, read_buf) =
+            Version::exchange(&mut self.socket, Bytes::from(server_version.clone())).await?;
 
         let rng = rand::rngs::StdRng::from_entropy();
         let mut parts = TransportCodec::new(rng)
@@ -129,15 +124,8 @@ impl Connection {
         let mut tx = tx.with(encode);
         let mut rx = rx.err_into().and_then(decode);
 
-        let (h, k, algorithm) = Self::kex(
-            &mut tx,
-            &mut rx,
-            server_version.as_bytes(),
-            &cli_version,
-            &self.hostkeys,
-            &self.preference,
-        )
-        .await?;
+        let (h, k, algorithm) =
+            Self::kex(&mut tx, &mut rx, &version, &self.hostkeys, &self.preference).await?;
 
         let mut io = tx
             .into_inner()
@@ -160,48 +148,85 @@ impl Connection {
             match pkt {
                 msg::Message::ServiceRequest(ref v) if v.name() == "ssh-userauth" => {
                     tx.send(msg::ServiceAccept::new(v.name()).into()).await?;
-                },
-                msg::Message::UserauthRequest(ref v) => {
-                    match v.method_name() {
-                        "password" => {
-                            if n < 2 {
-                                n += 1;
-                                tx.send(msg::UserauthFailure::new(vec!["password"], false).into()).await?;
-                            } else {
-                                tx.send(msg::UserauthBanner::new("Hello, World!!", "").into()).await?;
-                                tx.send(msg::UserauthSuccess.into()).await?;
-                            }
-                        },
-                        "publickey" | "none" => {
-                            tx.send(msg::UserauthFailure::new(vec!["publickey", "password"], false).into()).await?;
-                        },
-                        _ => {}
+                }
+                msg::Message::UserauthRequest(ref v) => match v.method_name() {
+                    "password" => {
+                        if n < 2 {
+                            n += 1;
+                            tx.send(msg::UserauthFailure::new(vec!["password"], false).into())
+                                .await?;
+                        } else {
+                            tx.send(msg::UserauthBanner::new("Hello, World!!", "").into())
+                                .await?;
+                            tx.send(msg::UserauthSuccess.into()).await?;
+                        }
                     }
+                    "publickey" | "none" => {
+                        tx.send(
+                            msg::UserauthFailure::new(vec!["publickey", "password"], false).into(),
+                        )
+                        .await?;
+                    }
+                    _ => {}
                 },
                 msg::Message::ChannelOpen(ref v) => {
-                    tx.send(msg::ChannelOpenConfirmation::new(
+                    tx.send(
+                        msg::ChannelOpenConfirmation::new(
                             v.sender_channel(),
                             v.sender_channel(),
                             v.initial_window_size(),
-                            v.maximum_packet_size()).into()).await?;
-                },
+                            v.maximum_packet_size(),
+                        )
+                        .into(),
+                    )
+                    .await?;
+                }
                 msg::Message::ChannelRequest(ref v) => {
-                    tx.send(msg::ChannelSuccess::new(v.recipient_channel()).into()).await?;
+                    tx.send(msg::ChannelSuccess::new(v.recipient_channel()).into())
+                        .await?;
                     if v.request_type() == "shell" {
-                        tx.send(msg::Debug::new(true, "HELLO WORLD!", "").into()).await?;
-                        tx.send(msg::ChannelData::new(v.recipient_channel(), Bytes::from("HELLO WORLD!\n")).into()).await?;
-                        tx.send(msg::ChannelData::new(v.recipient_channel(), Bytes::from("HELLO WORLD!\n")).into()).await?;
-                        tx.send(msg::ChannelData::new(v.recipient_channel(), Bytes::from("HELLO WORLD!\n")).into()).await?;
-                        tx.send(msg::ChannelExtendedData::new(v.recipient_channel(), Bytes::from("HELLO WORLD!\n")).into()).await?;
-                        tx.send(msg::ChannelEof::new(v.recipient_channel()).into()).await?;
-                        tx.send(msg::ChannelClose::new(v.recipient_channel()).into()).await?;
+                        tx.send(msg::Debug::new(true, "HELLO WORLD!", "").into())
+                            .await?;
+                        tx.send(
+                            msg::ChannelData::new(
+                                v.recipient_channel(),
+                                Bytes::from("HELLO WORLD!\n"),
+                            )
+                            .into(),
+                        )
+                        .await?;
+                        tx.send(
+                            msg::ChannelData::new(
+                                v.recipient_channel(),
+                                Bytes::from("HELLO WORLD!\n"),
+                            )
+                            .into(),
+                        )
+                        .await?;
+                        tx.send(
+                            msg::ChannelData::new(
+                                v.recipient_channel(),
+                                Bytes::from("HELLO WORLD!\n"),
+                            )
+                            .into(),
+                        )
+                        .await?;
+                        tx.send(
+                            msg::ChannelExtendedData::new(
+                                v.recipient_channel(),
+                                Bytes::from("HELLO WORLD!\n"),
+                            )
+                            .into(),
+                        )
+                        .await?;
+                        tx.send(msg::ChannelEof::new(v.recipient_channel()).into())
+                            .await?;
+                        tx.send(msg::ChannelClose::new(v.recipient_channel()).into())
+                            .await?;
                     }
-                },
-                msg::Message::Ignore(..) => {
-                },
-                msg::Message::Disconnect(..) => {
-                    break
-                },
+                }
+                msg::Message::Ignore(..) => {}
+                msg::Message::Disconnect(..) => break,
                 pkt => tx.send(pkt).await?,
             }
         }
@@ -212,8 +237,7 @@ impl Connection {
     async fn kex<T, R>(
         tx: &mut T,
         rx: &mut R,
-        server_version: &[u8],
-        client_version: &[u8],
+        version: &Version,
         hostkeys: &HostKeys,
         preference: &Preference,
     ) -> Result<(Bytes, Bytes, Algorithm), ConnectionError>
@@ -234,15 +258,7 @@ impl Connection {
             .lookup(&algorithm.server_host_key_algorithm())
             .unwrap();
 
-        let mut env = kex::KexEnv::new(
-            tx,
-            rx,
-            client_version,
-            server_version,
-            &client_kexinit,
-            &server_kexinit,
-            hostkey,
-        );
+        let mut env = kex::KexEnv::new(tx, rx, version, &client_kexinit, &server_kexinit, hostkey);
         let (h, k) = kex::kex(algorithm.kex_algorithm(), &mut env)
             .await
             .unwrap()
@@ -290,6 +306,46 @@ pub struct Server {
     config: ServerConfig,
 }
 
+struct AuthHandler;
+
+impl handler::AuthHandler for AuthHandler {
+    type Error = handler::AuthError;
+    fn handle_password(
+        &mut self,
+        _username: &str,
+        _password: &[u8],
+        _handle: handle::GlobalHandle,
+    ) -> BoxFuture<Result<handler::Auth, Self::Error>> {
+        async { Ok(handler::Auth::Accept) }.boxed()
+    }
+}
+
+struct ChannelHandler;
+
+impl handler::ChannelHandler for ChannelHandler {
+    type Error = handler::ChannelError;
+
+    fn handle_shell_request(
+        &mut self,
+        _session_id: u32,
+        mut handle: handle::ChannelHandle) -> BoxFuture<Result<(), Self::Error>> {
+
+        async {
+            tokio::spawn(async move {
+                handle.send_data("Hello World!").await;
+                handle.send_data("Hello World!").await;
+                handle.send_data("Hello World!").await;
+                handle.send_data("Hello World!").await;
+                handle.send_data("Hello World!").await;
+                handle.send_data("Hello World!").await;
+                handle.send_eof().await;
+                handle.send_close().await;
+            });
+            Ok(())
+        }.boxed()
+    }
+}
+
 impl Server {
     pub fn with_config(config: ServerConfig) -> Self {
         Server { config }
@@ -297,18 +353,33 @@ impl Server {
 
     pub async fn serve(self) -> io::Result<()> {
         let mut listener = TcpListener::bind(self.config.addrs.iter().next().unwrap())?;
-                //loop {
-        let (socket, _) = listener.accept().await?;
+        //loop {
+        let (socket, remote) = listener.accept().await?;
+        let connection = connection::Connection::establish(
+            socket,
+            self.config.version,
+            remote,
+            self.config.hostkeys.clone(),
+            self.config.preference.clone(),
+            AuthHandler,
+            ChannelHandler,
+        )
+        .await
+        .unwrap();
+        //tokio::runtime::current_thread::spawn(connection.run());
+        connection.run().await;
+
+        /*
         let connection = Connection::new(
             self.config.version.clone(),
             socket,
             self.config.hostkeys.clone(),
             self.config.preference.clone(),
         );
+        */
         //tokio::runtime::current_thread::spawn(connection.run());
-                    //tokio::executor::spawn(connection.run());
-        connection.run().await;
-                //}
+        //tokio::executor::spawn(connection.run());
+        //}
         Ok(())
     }
 }

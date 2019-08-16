@@ -13,17 +13,29 @@ pub struct Debug {
 }
 
 impl Debug {
-    pub fn new(always_display: bool, message: impl Into<String>, language_tag: impl Into<String>) -> Self {
+    pub fn new(
+        always_display: bool,
+        message: impl Into<String>,
+        language_tag: impl Into<String>,
+    ) -> Self {
         let message = message.into();
         let language_tag = language_tag.into();
-        Self { always_display, message, language_tag }
+        Self {
+            always_display,
+            message,
+            language_tag,
+        }
     }
 
     pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
         let always_display = buf.get_boolean()?;
         let message = buf.get_string()?;
         let language_tag = buf.get_string()?;
-        Ok(Self { always_display, message, language_tag })
+        Ok(Self {
+            always_display,
+            message,
+            language_tag,
+        })
     }
 
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {

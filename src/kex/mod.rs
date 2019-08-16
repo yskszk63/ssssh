@@ -4,6 +4,7 @@ use futures::{Sink, TryStream};
 use crate::algorithm::KexAlgorithm;
 use crate::hostkey::HostKey;
 use crate::msg::{Kexinit, Message, MessageError};
+use crate::transport::version::Version;
 
 mod ecdh;
 
@@ -15,8 +16,7 @@ where
 {
     tx: &'a mut Tx,
     rx: &'a mut Rx,
-    client_version: &'a [u8],
-    server_version: &'a [u8],
+    version: &'a Version,
     client_kexinit: &'a Kexinit,
     server_kexinit: &'a Kexinit,
     hostkey: &'a HostKey,
@@ -30,8 +30,7 @@ where
     pub fn new(
         tx: &'a mut Tx,
         rx: &'a mut Rx,
-        client_version: &'a [u8],
-        server_version: &'a [u8],
+        version: &'a Version,
         client_kexinit: &'a Kexinit,
         server_kexinit: &'a Kexinit,
         hostkey: &'a HostKey,
@@ -39,10 +38,9 @@ where
         Self {
             tx,
             rx,
+            version,
             client_kexinit,
             server_kexinit,
-            client_version,
-            server_version,
             hostkey,
         }
     }

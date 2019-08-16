@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use bytes::{Bytes, BytesMut, Buf as _, BufMut as _};
+use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
 
 use super::{Message, MessageResult};
 
@@ -17,7 +17,7 @@ impl RequestSuccess {
 
     pub fn from(buf: Cursor<Bytes>) -> MessageResult<Self> {
         let data = buf.take(usize::max_value()).collect();
-        Ok(Self { data, })
+        Ok(Self { data })
     }
 
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {

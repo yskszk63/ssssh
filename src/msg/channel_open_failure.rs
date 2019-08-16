@@ -19,7 +19,12 @@ impl ChannelOpenFailure {
         let reason_code = buf.get_uint32()?;
         let description = buf.get_string()?;
         let language_tag = buf.get_string()?;
-        Ok(Self { recipient_channel, reason_code, description, language_tag })
+        Ok(Self {
+            recipient_channel,
+            reason_code,
+            description,
+            language_tag,
+        })
     }
 
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {

@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use bytes::{Bytes, BytesMut, Buf as _, BufMut as _};
+use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
 
 use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
@@ -19,9 +19,16 @@ impl ChannelOpenConfirmation {
         recipient_channel: u32,
         sender_channel: u32,
         initial_window_size: u32,
-        maximum_packet_size: u32) -> Self {
+        maximum_packet_size: u32,
+    ) -> Self {
         let data = Bytes::from("");
-        Self { recipient_channel, sender_channel, initial_window_size, maximum_packet_size, data }
+        Self {
+            recipient_channel,
+            sender_channel,
+            initial_window_size,
+            maximum_packet_size,
+            data,
+        }
     }
 
     pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
@@ -30,7 +37,13 @@ impl ChannelOpenConfirmation {
         let initial_window_size = buf.get_uint32()?;
         let maximum_packet_size = buf.get_uint32()?;
         let data = buf.take(usize::max_value()).collect();
-        Ok(Self { recipient_channel, sender_channel, initial_window_size, maximum_packet_size, data, })
+        Ok(Self {
+            recipient_channel,
+            sender_channel,
+            initial_window_size,
+            maximum_packet_size,
+            data,
+        })
     }
 
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {

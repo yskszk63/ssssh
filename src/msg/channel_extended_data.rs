@@ -15,7 +15,11 @@ pub struct ChannelExtendedData {
 impl ChannelExtendedData {
     pub fn new(recipient_channel: u32, data: Bytes) -> Self {
         let data_type_code = 1;
-        Self { recipient_channel, data_type_code, data }
+        Self {
+            recipient_channel,
+            data_type_code,
+            data,
+        }
     }
 
     pub fn recipient_channel(&self) -> u32 {
@@ -30,7 +34,11 @@ impl ChannelExtendedData {
         let recipient_channel = buf.get_uint32()?;
         let data_type_code = buf.get_uint32()?;
         let data = buf.get_binary_string()?.into();
-        Ok(Self { recipient_channel, data_type_code, data, })
+        Ok(Self {
+            recipient_channel,
+            data_type_code,
+            data,
+        })
     }
 
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
@@ -42,7 +50,7 @@ impl ChannelExtendedData {
 }
 
 impl From<ChannelExtendedData> for Message {
-    fn from(v:ChannelExtendedData) -> Message {
+    fn from(v: ChannelExtendedData) -> Message {
         Message::ChannelExtendedData(v)
     }
 }

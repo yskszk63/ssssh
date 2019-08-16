@@ -13,7 +13,10 @@ pub struct ChannelData {
 
 impl ChannelData {
     pub fn new(recipient_channel: u32, data: Bytes) -> Self {
-        Self { recipient_channel, data }
+        Self {
+            recipient_channel,
+            data,
+        }
     }
 
     pub fn recipient_channel(&self) -> u32 {
@@ -27,7 +30,10 @@ impl ChannelData {
     pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
         let recipient_channel = buf.get_uint32()?;
         let data = buf.get_binary_string()?.into();
-        Ok(Self { recipient_channel, data, })
+        Ok(Self {
+            recipient_channel,
+            data,
+        })
     }
 
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
