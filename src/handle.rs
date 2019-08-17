@@ -1,5 +1,5 @@
-use tokio::sync::mpsc;
 use bytes::Bytes;
+use tokio::sync::mpsc;
 
 use crate::msg::{self, Message};
 
@@ -14,12 +14,24 @@ impl GlobalHandle {
     }
 
     pub(crate) fn new_channel_handle(&self, channel: u32) -> ChannelHandle {
-        ChannelHandle { global: self.clone(), channel }
+        ChannelHandle {
+            global: self.clone(),
+            channel,
+        }
     }
 
     pub async fn send_debug(
-        &mut self, always_display: bool, msg: impl Into<String>, language_tag: impl Into<String>) {
-        self.send(msg::Debug::new(always_display, msg.into(), language_tag.into())).await;
+        &mut self,
+        always_display: bool,
+        msg: impl Into<String>,
+        language_tag: impl Into<String>,
+    ) {
+        self.send(msg::Debug::new(
+            always_display,
+            msg.into(),
+            language_tag.into(),
+        ))
+        .await;
     }
 
     async fn send(&mut self, msg: impl Into<Message>) {
@@ -35,11 +47,15 @@ pub struct ChannelHandle {
 
 impl ChannelHandle {
     pub async fn send_data(&mut self, msg: impl Into<Bytes>) {
-        self.global.send(msg::ChannelData::new(self.channel, msg.into())).await
+        self.global
+            .send(msg::ChannelData::new(self.channel, msg.into()))
+            .await
     }
 
     pub async fn send_extended_data(&mut self, msg: impl Into<Bytes>) {
-        self.global.send(msg::ChannelExtendedData::new(self.channel, msg.into())).await
+        self.global
+            .send(msg::ChannelExtendedData::new(self.channel, msg.into()))
+            .await
     }
 
     pub async fn send_eof(&mut self) {

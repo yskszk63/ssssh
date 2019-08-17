@@ -1,315 +1,27 @@
 #![feature(async_await)]
 
-use std::convert::TryFrom;
-use std::future::Future;
-use std::io;
-use std::net::SocketAddr;
-use std::net::ToSocketAddrs;
-use std::pin::Pin;
-use std::string::FromUtf8Error;
-
-use bytes::{Bytes, BytesMut};
-use futures::{Sink, SinkExt as _, StreamExt as _, TryStream, TryStreamExt};
 use futures::future::{BoxFuture, FutureExt as _};
-use rand::SeedableRng as _;
-use tokio::codec::{Decoder, Framed};
-use tokio::net::{TcpListener, TcpStream};
-
-use algorithm::{Algorithm, Preference};
-use hostkey::{HostKey, HostKeys};
-use msg::{Message, MessageError, MessageId, MessageResult};
-use transport::codec::{Codec as TransportCodec, CodecError};
-use transport::version::{Version, VersionExchangeError};
 
 mod algorithm;
 mod compression;
 mod connection;
 mod encrypt;
+mod handle;
 mod handler;
 mod hostkey;
 mod kex;
 mod mac;
 mod msg;
 mod named;
+mod server;
 mod sshbuf;
 mod transport;
-mod handle;
 
-fn decode(src: Bytes) -> Pin<Box<dyn Future<Output = MessageResult<Message>> + Send>> {
-    Box::pin(async move { Message::try_from(src) })
-}
+struct Handler;
 
-fn encode(src: Message) -> Pin<Box<dyn Future<Output = MessageResult<Bytes>> + Send>> {
-    Box::pin(async move {
-        let mut buf = BytesMut::with_capacity(1024 * 8);
-        src.put(&mut buf)?;
-        Ok(buf.freeze())
-    })
-}
-
-#[derive(Debug)]
-pub enum ConnectionError {
-    UnknownMessageId(u8),
-    Unimplemented(MessageId),
-    Underflow,
-    Overflow,
-    FromUtf8Error(FromUtf8Error),
-    InvalidFormat,
-    Io(io::Error),
-}
-
-impl From<io::Error> for ConnectionError {
-    fn from(v: io::Error) -> Self {
-        Self::Io(v)
-    }
-}
-
-impl From<VersionExchangeError> for ConnectionError {
-    fn from(v: VersionExchangeError) -> Self {
-        match v {
-            VersionExchangeError::Io(e) => Self::Io(e),
-            VersionExchangeError::InvalidFormat => Self::InvalidFormat,
-        }
-    }
-}
-
-impl From<MessageError> for ConnectionError {
-    fn from(v: MessageError) -> Self {
-        match v {
-            MessageError::FromUtf8Error(e) => Self::FromUtf8Error(e),
-            MessageError::Unimplemented(e) => Self::Unimplemented(e),
-            MessageError::Overflow => Self::Overflow,
-            MessageError::Underflow => Self::Underflow,
-            MessageError::UnknownMessageId(id) => Self::UnknownMessageId(id),
-            MessageError::Codec(CodecError::Io(e)) => Self::Io(e),
-        }
-    }
-}
-
-#[derive(Debug)]
-pub struct Connection {
-    version: String,
-    socket: TcpStream,
-    hostkeys: HostKeys,
-    preference: Preference,
-}
-
-impl Connection {
-    fn new(version: String, socket: TcpStream, hostkeys: HostKeys, preference: Preference) -> Self {
-        Connection {
-            version,
-            socket,
-            hostkeys,
-            preference,
-        }
-    }
-
-    pub async fn run(self) {
-        if let Err(e) = self.run0().await {
-            eprintln!("ERR {:?}", e);
-        }
-    }
-
-    async fn run0(mut self) -> Result<(), ConnectionError> {
-        let server_version = self.version;
-        let (version, read_buf) =
-            Version::exchange(&mut self.socket, Bytes::from(server_version.clone())).await?;
-
-        let rng = rand::rngs::StdRng::from_entropy();
-        let mut parts = TransportCodec::new(rng)
-            .framed(&mut self.socket)
-            .into_parts();
-        parts.read_buf = read_buf;
-        let (tx, rx) = Framed::from_parts(parts).split();
-        let mut tx = tx.with(encode);
-        let mut rx = rx.err_into().and_then(decode);
-
-        let (h, k, algorithm) =
-            Self::kex(&mut tx, &mut rx, &version, &self.hostkeys, &self.preference).await?;
-
-        let mut io = tx
-            .into_inner()
-            .reunite(rx.into_inner().into_inner())
-            .unwrap();
-        io.codec_mut().change_key(h, k, algorithm);
-        let (tx, rx) = io.split();
-        let mut tx = tx.with(encode);
-        let mut rx = rx.err_into().and_then(decode);
-
-        let mut n = 0;
-
-        loop {
-            let pkt = match rx.try_next().await? {
-                Some(e) => e,
-                None => break,
-            };
-            dbg!(&pkt);
-
-            match pkt {
-                msg::Message::ServiceRequest(ref v) if v.name() == "ssh-userauth" => {
-                    tx.send(msg::ServiceAccept::new(v.name()).into()).await?;
-                }
-                msg::Message::UserauthRequest(ref v) => match v.method_name() {
-                    "password" => {
-                        if n < 2 {
-                            n += 1;
-                            tx.send(msg::UserauthFailure::new(vec!["password"], false).into())
-                                .await?;
-                        } else {
-                            tx.send(msg::UserauthBanner::new("Hello, World!!", "").into())
-                                .await?;
-                            tx.send(msg::UserauthSuccess.into()).await?;
-                        }
-                    }
-                    "publickey" | "none" => {
-                        tx.send(
-                            msg::UserauthFailure::new(vec!["publickey", "password"], false).into(),
-                        )
-                        .await?;
-                    }
-                    _ => {}
-                },
-                msg::Message::ChannelOpen(ref v) => {
-                    tx.send(
-                        msg::ChannelOpenConfirmation::new(
-                            v.sender_channel(),
-                            v.sender_channel(),
-                            v.initial_window_size(),
-                            v.maximum_packet_size(),
-                        )
-                        .into(),
-                    )
-                    .await?;
-                }
-                msg::Message::ChannelRequest(ref v) => {
-                    tx.send(msg::ChannelSuccess::new(v.recipient_channel()).into())
-                        .await?;
-                    if v.request_type() == "shell" {
-                        tx.send(msg::Debug::new(true, "HELLO WORLD!", "").into())
-                            .await?;
-                        tx.send(
-                            msg::ChannelData::new(
-                                v.recipient_channel(),
-                                Bytes::from("HELLO WORLD!\n"),
-                            )
-                            .into(),
-                        )
-                        .await?;
-                        tx.send(
-                            msg::ChannelData::new(
-                                v.recipient_channel(),
-                                Bytes::from("HELLO WORLD!\n"),
-                            )
-                            .into(),
-                        )
-                        .await?;
-                        tx.send(
-                            msg::ChannelData::new(
-                                v.recipient_channel(),
-                                Bytes::from("HELLO WORLD!\n"),
-                            )
-                            .into(),
-                        )
-                        .await?;
-                        tx.send(
-                            msg::ChannelExtendedData::new(
-                                v.recipient_channel(),
-                                Bytes::from("HELLO WORLD!\n"),
-                            )
-                            .into(),
-                        )
-                        .await?;
-                        tx.send(msg::ChannelEof::new(v.recipient_channel()).into())
-                            .await?;
-                        tx.send(msg::ChannelClose::new(v.recipient_channel()).into())
-                            .await?;
-                    }
-                }
-                msg::Message::Ignore(..) => {}
-                msg::Message::Disconnect(..) => break,
-                pkt => tx.send(pkt).await?,
-            }
-        }
-
-        Ok(())
-    }
-
-    async fn kex<T, R>(
-        tx: &mut T,
-        rx: &mut R,
-        version: &Version,
-        hostkeys: &HostKeys,
-        preference: &Preference,
-    ) -> Result<(Bytes, Bytes, Algorithm), ConnectionError>
-    where
-        R: TryStream<Ok = Message, Error = MessageError> + Unpin,
-        T: Sink<Message, Error = MessageError> + Unpin,
-    {
-        let client_kexinit = if let Some(Message::Kexinit(e)) = rx.try_next().await? {
-            e
-        } else {
-            panic!()
-        };
-
-        let server_kexinit = preference.to_kexinit();
-        tx.send(server_kexinit.clone().into()).await?;
-        let algorithm = Algorithm::negotiate(&client_kexinit, preference).unwrap();
-        let hostkey = hostkeys
-            .lookup(&algorithm.server_host_key_algorithm())
-            .unwrap();
-
-        let mut env = kex::KexEnv::new(tx, rx, version, &client_kexinit, &server_kexinit, hostkey);
-        let (h, k) = kex::kex(algorithm.kex_algorithm(), &mut env)
-            .await
-            .unwrap()
-            .split();
-
-        if let Some(Message::Newkeys(..)) = rx.try_next().await? {
-            tx.send(msg::Newkeys.into()).await?;
-        } else {
-            panic!()
-        };
-
-        Ok((h, k, algorithm))
-    }
-}
-
-#[derive(Debug)]
-pub struct ServerConfig {
-    version: String,
-    addrs: Vec<SocketAddr>,
-    hostkeys: HostKeys,
-    preference: Preference,
-}
-
-impl ServerConfig {
-    pub fn new(
-        version: impl Into<String>,
-        addrs: impl ToSocketAddrs,
-        hostkeys: HostKeys,
-        preference: Preference,
-    ) -> io::Result<Self> {
-        let version = version.into();
-        let addrs = addrs.to_socket_addrs()?;
-        let addrs = addrs.collect();
-        Ok(ServerConfig {
-            version,
-            addrs,
-            hostkeys,
-            preference,
-        })
-    }
-}
-
-#[derive(Debug)]
-pub struct Server {
-    config: ServerConfig,
-}
-
-struct AuthHandler;
-
-impl handler::AuthHandler for AuthHandler {
+impl handler::AuthHandler for Handler {
     type Error = handler::AuthError;
+
     fn handle_password(
         &mut self,
         _username: &str,
@@ -320,16 +32,14 @@ impl handler::AuthHandler for AuthHandler {
     }
 }
 
-struct ChannelHandler;
-
-impl handler::ChannelHandler for ChannelHandler {
+impl handler::ChannelHandler for Handler {
     type Error = handler::ChannelError;
 
     fn handle_shell_request(
         &mut self,
         _session_id: u32,
-        mut handle: handle::ChannelHandle) -> BoxFuture<Result<(), Self::Error>> {
-
+        mut handle: handle::ChannelHandle,
+    ) -> BoxFuture<Result<(), Self::Error>> {
         async {
             tokio::spawn(async move {
                 handle.send_data("Hello World!").await;
@@ -342,45 +52,8 @@ impl handler::ChannelHandler for ChannelHandler {
                 handle.send_close().await;
             });
             Ok(())
-        }.boxed()
-    }
-}
-
-impl Server {
-    pub fn with_config(config: ServerConfig) -> Self {
-        Server { config }
-    }
-
-    pub async fn serve(self) -> io::Result<()> {
-        let mut listener = TcpListener::bind(self.config.addrs.iter().next().unwrap())?;
-        //loop {
-        let (socket, remote) = listener.accept().await?;
-        let connection = connection::Connection::establish(
-            socket,
-            self.config.version,
-            remote,
-            self.config.hostkeys.clone(),
-            self.config.preference.clone(),
-            AuthHandler,
-            ChannelHandler,
-        )
-        .await
-        .unwrap();
-        //tokio::runtime::current_thread::spawn(connection.run());
-        connection.run().await;
-
-        /*
-        let connection = Connection::new(
-            self.config.version.clone(),
-            socket,
-            self.config.hostkeys.clone(),
-            self.config.preference.clone(),
-        );
-        */
-        //tokio::runtime::current_thread::spawn(connection.run());
-        //tokio::executor::spawn(connection.run());
-        //}
-        Ok(())
+        }
+            .boxed()
     }
 }
 
@@ -403,10 +76,11 @@ async fn main() {
             .unwrap();
     });
 
-    let hostkey = HostKey::gen_ssh_ed25519();
-    let hostkeys = HostKeys::new(vec![hostkey]);
-    let conf =
-        ServerConfig::new("SSH-2.0-ssh", "[::1]:2222", hostkeys, Preference::default()).unwrap();
-    let server = Server::with_config(conf);
-    server.serve().await.unwrap();
+    let builder = server::ServerBuilder::default();
+    let mut server = builder.build("[::1]:2222".parse().unwrap(), || Handler, || Handler);
+    loop {
+        let connection = server.accept().await;
+        //connection.run().await;
+        tokio::spawn(connection.run());
+    }
 }

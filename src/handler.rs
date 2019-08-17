@@ -3,7 +3,7 @@ use std::fmt::{self, Display};
 
 use futures::future::{BoxFuture, FutureExt as _};
 
-use crate::handle::{GlobalHandle, ChannelHandle};
+use crate::handle::{ChannelHandle, GlobalHandle};
 
 #[derive(Debug)]
 pub struct AuthError(String);
@@ -35,7 +35,11 @@ pub enum Auth {
 pub trait AuthHandler {
     type Error: Into<Box<dyn StdError + Send + Sync>>;
 
-    fn handle_none(&mut self, _username: &str, _handle: GlobalHandle) -> BoxFuture<Result<Auth, Self::Error>> {
+    fn handle_none(
+        &mut self,
+        _username: &str,
+        _handle: GlobalHandle,
+    ) -> BoxFuture<Result<Auth, Self::Error>> {
         async { Ok(Auth::Reject) }.boxed()
     }
 
@@ -61,24 +65,44 @@ pub trait AuthHandler {
 pub trait ChannelHandler {
     type Error: Into<Box<dyn StdError + Send + Sync>>;
 
-    fn handle_open_session(&mut self, _session_id: u32, _handle: ChannelHandle) -> BoxFuture<Result<(), Self::Error>> {
+    fn handle_open_session(
+        &mut self,
+        _session_id: u32,
+        _handle: ChannelHandle,
+    ) -> BoxFuture<Result<(), Self::Error>> {
         async { Ok(()) }.boxed()
     }
 
-    fn handle_pty_request(&mut self, _session_id: u32, _handle: ChannelHandle) -> BoxFuture<Result<(), Self::Error>> {
+    fn handle_pty_request(
+        &mut self,
+        _session_id: u32,
+        _handle: ChannelHandle,
+    ) -> BoxFuture<Result<(), Self::Error>> {
         async { Ok(()) }.boxed()
     }
 
-    fn handle_shell_request(&mut self, _session_id: u32, _handle: ChannelHandle) -> BoxFuture<Result<(), Self::Error>> {
+    fn handle_shell_request(
+        &mut self,
+        _session_id: u32,
+        _handle: ChannelHandle,
+    ) -> BoxFuture<Result<(), Self::Error>> {
         async { Ok(()) }.boxed()
     }
 
-    fn handle_data(&mut self, _session_id: u32, _data: &[u8], _handle: ChannelHandle) -> BoxFuture<Result<(), Self::Error>> {
+    fn handle_data(
+        &mut self,
+        _session_id: u32,
+        _data: &[u8],
+        _handle: ChannelHandle,
+    ) -> BoxFuture<Result<(), Self::Error>> {
         async { Ok(()) }.boxed()
     }
 
-    fn handle_close(&mut self, _session_id: u32, _handle: ChannelHandle) -> BoxFuture<Result<(), Self::Error>> {
+    fn handle_close(
+        &mut self,
+        _session_id: u32,
+        _handle: ChannelHandle,
+    ) -> BoxFuture<Result<(), Self::Error>> {
         async { Ok(()) }.boxed()
     }
-
 }
