@@ -14,8 +14,7 @@ rand = "0.7"
 sodiumoxide = "0.2"
 openssl = "0.10"
 
-tokio-process = { git="https://github.com/tokio-rs/tokio" }
-
 [dev-dependencies]
 tokio-test = { git="https://github.com/tokio-rs/tokio" }
+tokio-process = { git="https://github.com/tokio-rs/tokio" }
 
