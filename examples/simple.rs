@@ -2,43 +2,32 @@
 
 use futures::future::{BoxFuture, FutureExt as _};
 
-mod algorithm;
-mod compression;
-mod connection;
-mod encrypt;
-mod handle;
-mod handler;
-mod hostkey;
-mod kex;
-mod mac;
-mod msg;
-mod named;
-mod server;
-mod sshbuf;
-mod transport;
+use ssssh::ServerBuilder;
+use ssssh::{Auth, AuthError, AuthHandler, ChannelError, ChannelHandler};
+use ssssh::{ChannelHandle, GlobalHandle};
 
 struct Handler;
 
-impl handler::AuthHandler for Handler {
-    type Error = handler::AuthError;
+impl AuthHandler for Handler {
+    type Error = AuthError;
 
     fn handle_password(
         &mut self,
         _username: &str,
         _password: &[u8],
-        _handle: handle::GlobalHandle,
-    ) -> BoxFuture<Result<handler::Auth, Self::Error>> {
-        async { Ok(handler::Auth::Accept) }.boxed()
+        _handle: GlobalHandle,
+    ) -> BoxFuture<Result<Auth, Self::Error>> {
+        async { Ok(Auth::Accept) }.boxed()
     }
 }
 
-impl handler::ChannelHandler for Handler {
-    type Error = handler::ChannelError;
+impl ChannelHandler for Handler {
+    type Error = ChannelError;
 
     fn handle_shell_request(
         &mut self,
         _session_id: u32,
-        mut handle: handle::ChannelHandle,
+        mut handle: ChannelHandle,
     ) -> BoxFuture<Result<(), Self::Error>> {
         async {
             tokio::spawn(async move {
@@ -76,11 +65,11 @@ async fn main() {
             .unwrap();
     });
 
-    let builder = server::ServerBuilder::default();
+    let builder = ServerBuilder::default();
     let mut server = builder.build("[::1]:2222".parse().unwrap(), || Handler, || Handler);
-    loop {
-        let connection = server.accept().await;
-        //connection.run().await;
-        tokio::spawn(connection.run());
-    }
+    //loop {
+    let connection = server.accept().await;
+    connection.run().await;
+    //tokio::spawn(connection.run());
+    //}
 }
