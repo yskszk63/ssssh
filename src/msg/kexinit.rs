@@ -261,7 +261,6 @@ mod tests {
 
         let mut buf = BytesMut::with_capacity(1024 * 8);
         m.put(&mut buf).unwrap();
-        buf.advance(1);
         Kexinit::from(buf.freeze().into_buf()).unwrap();
     }
 }
