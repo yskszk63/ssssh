@@ -196,11 +196,11 @@ impl Kexinit {
         self.compression_algorithms_server_to_client.iter()
     }
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Kexinit> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let mut cookie = [0; 16];
         buf.copy_to_slice(&mut cookie);
 
-        let v = Kexinit::builder()
+        let v = Self::builder()
             .cookie(cookie)
             .kex_algorithms(buf.get_name_list()?)
             .server_host_key_algorithms(buf.get_name_list()?)
@@ -245,8 +245,8 @@ impl Kexinit {
 }
 
 impl From<Kexinit> for Message {
-    fn from(v: Kexinit) -> Message {
-        Message::Kexinit(v)
+    fn from(v: Kexinit) -> Self {
+        Self::Kexinit(Box::new(v))
     }
 }
 
@@ -261,6 +261,6 @@ mod tests {
 
         let mut buf = BytesMut::with_capacity(1024 * 8);
         m.put(&mut buf).unwrap();
-        Kexinit::from(buf.freeze().into_buf()).unwrap();
+        Kexinit::from(&mut buf.freeze().into_buf()).unwrap();
     }
 }

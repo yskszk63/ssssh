@@ -15,9 +15,9 @@ impl ServiceRequest {
         &self.name
     }
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<ServiceRequest> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let name = buf.get_string()?;
-        Ok(ServiceRequest { name })
+        Ok(Self { name })
     }
 
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
@@ -28,7 +28,7 @@ impl ServiceRequest {
 }
 
 impl From<ServiceRequest> for Message {
-    fn from(v: ServiceRequest) -> Message {
-        Message::ServiceRequest(v)
+    fn from(v: ServiceRequest) -> Self {
+        Self::ServiceRequest(v)
     }
 }

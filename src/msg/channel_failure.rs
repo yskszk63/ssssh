@@ -11,6 +11,7 @@ pub struct ChannelFailure {
 }
 
 impl ChannelFailure {
+    /*
     pub fn new(recipient_channel: u32) -> Self {
         Self { recipient_channel }
     }
@@ -18,8 +19,9 @@ impl ChannelFailure {
     pub fn recipient_channel(&self) -> u32 {
         self.recipient_channel
     }
+    */
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let recipient_channel = buf.get_uint32()?;
         Ok(Self { recipient_channel })
     }
@@ -31,7 +33,7 @@ impl ChannelFailure {
 }
 
 impl From<ChannelFailure> for Message {
-    fn from(v: ChannelFailure) -> Message {
-        Message::ChannelFailure(v)
+    fn from(v: ChannelFailure) -> Self {
+        Self::ChannelFailure(v)
     }
 }

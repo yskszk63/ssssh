@@ -4,6 +4,7 @@ use tokio::sync::mpsc;
 use crate::msg::{self, Message};
 
 #[derive(Debug, Clone)]
+#[allow(clippy::module_name_repetitions)]
 pub struct GlobalHandle {
     tx: mpsc::Sender<Message>,
 }
@@ -17,6 +18,12 @@ impl GlobalHandle {
         ChannelHandle {
             global: self.clone(),
             channel,
+        }
+    }
+
+    pub(crate) fn new_auth_handle(&self) -> AuthHandle {
+        AuthHandle {
+            global: self.clone(),
         }
     }
 
@@ -40,12 +47,49 @@ impl GlobalHandle {
 }
 
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
+pub struct AuthHandle {
+    global: GlobalHandle,
+}
+
+impl AuthHandle {
+    pub async fn send_debug(
+        &mut self,
+        always_display: bool,
+        msg: impl Into<String>,
+        language_tag: impl Into<String>,
+    ) {
+        self.global
+            .send_debug(always_display, msg.into(), language_tag.into())
+            .await
+    }
+
+    pub async fn send_banner(&mut self, msg: impl Into<String>, language_tag: impl Into<String>) {
+        self.global
+            .send(msg::UserauthBanner::new(msg.into(), language_tag.into()))
+            .await
+    }
+}
+
+#[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub struct ChannelHandle {
     global: GlobalHandle,
     channel: u32,
 }
 
 impl ChannelHandle {
+    pub async fn send_debug(
+        &mut self,
+        always_display: bool,
+        msg: impl Into<String>,
+        language_tag: impl Into<String>,
+    ) {
+        self.global
+            .send_debug(always_display, msg.into(), language_tag.into())
+            .await
+    }
+
     pub async fn send_data(&mut self, msg: impl Into<Bytes>) {
         self.global
             .send(msg::ChannelData::new(self.channel, msg.into()))

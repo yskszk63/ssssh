@@ -22,15 +22,7 @@ impl ChannelExtendedData {
         }
     }
 
-    pub fn recipient_channel(&self) -> u32 {
-        self.recipient_channel
-    }
-
-    pub fn data(&self) -> &Bytes {
-        &self.data
-    }
-
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let recipient_channel = buf.get_uint32()?;
         let data_type_code = buf.get_uint32()?;
         let data = buf.get_binary_string()?.into();
@@ -50,7 +42,7 @@ impl ChannelExtendedData {
 }
 
 impl From<ChannelExtendedData> for Message {
-    fn from(v: ChannelExtendedData) -> Message {
-        Message::ChannelExtendedData(v)
+    fn from(v: ChannelExtendedData) -> Self {
+        Self::ChannelExtendedData(v)
     }
 }

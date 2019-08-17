@@ -14,7 +14,7 @@ pub struct ChannelOpenFailure {
 }
 
 impl ChannelOpenFailure {
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let recipient_channel = buf.get_uint32()?;
         let reason_code = buf.get_uint32()?;
         let description = buf.get_string()?;
@@ -37,7 +37,7 @@ impl ChannelOpenFailure {
 }
 
 impl From<ChannelOpenFailure> for Message {
-    fn from(v: ChannelOpenFailure) -> Message {
-        Message::ChannelOpenFailure(v)
+    fn from(v: ChannelOpenFailure) -> Self {
+        Self::ChannelOpenFailure(v)
     }
 }

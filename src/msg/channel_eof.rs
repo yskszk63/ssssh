@@ -15,11 +15,7 @@ impl ChannelEof {
         Self { recipient_channel }
     }
 
-    pub fn recipient_channel(&self) -> u32 {
-        self.recipient_channel
-    }
-
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let recipient_channel = buf.get_uint32()?;
         Ok(Self { recipient_channel })
     }
@@ -31,7 +27,7 @@ impl ChannelEof {
 }
 
 impl From<ChannelEof> for Message {
-    fn from(v: ChannelEof) -> Message {
-        Message::ChannelEof(v)
+    fn from(v: ChannelEof) -> Self {
+        Self::ChannelEof(v)
     }
 }

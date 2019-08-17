@@ -27,7 +27,7 @@ impl ChannelData {
         &self.data
     }
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let recipient_channel = buf.get_uint32()?;
         let data = buf.get_binary_string()?.into();
         Ok(Self {
@@ -44,7 +44,7 @@ impl ChannelData {
 }
 
 impl From<ChannelData> for Message {
-    fn from(v: ChannelData) -> Message {
-        Message::ChannelData(v)
+    fn from(v: ChannelData) -> Self {
+        Self::ChannelData(v)
     }
 }

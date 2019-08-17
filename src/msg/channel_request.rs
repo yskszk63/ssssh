@@ -22,11 +22,13 @@ impl ChannelRequest {
         &self.request_type
     }
 
+    /*
     pub fn want_reply(&self) -> bool {
         self.want_reply
     }
+    */
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let recipient_channel = buf.get_uint32()?;
         let request_type = buf.get_string()?;
         let want_reply = buf.get_boolean()?;
@@ -49,7 +51,7 @@ impl ChannelRequest {
 }
 
 impl From<ChannelRequest> for Message {
-    fn from(v: ChannelRequest) -> Message {
-        Message::ChannelRequest(v)
+    fn from(v: ChannelRequest) -> Self {
+        Self::ChannelRequest(v)
     }
 }

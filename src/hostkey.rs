@@ -16,10 +16,7 @@ impl HostKeys {
     }
 
     pub fn lookup(&self, algorithm: &HostKeyAlgorithm) -> Option<&HostKey> {
-        self.keys
-            .iter()
-            .filter(|k| &k.algorithm() == algorithm)
-            .next()
+        self.keys.iter().find(|k| &k.algorithm() == algorithm)
     }
 }
 
@@ -40,31 +37,31 @@ impl HostKey {
         let public = Bytes::from(&public.0[..]);
         let secret = Bytes::from(&secret.0[..]);
 
-        HostKey::SshEd25519 { public, secret }
+        Self::SshEd25519 { public, secret }
     }
 
     pub fn secretkey(&self) -> &Bytes {
         match self {
-            HostKey::SshEd25519 { ref secret, .. } => secret,
+            Self::SshEd25519 { ref secret, .. } => secret,
         }
     }
 
     pub fn publickey(&self) -> &Bytes {
         match self {
-            HostKey::SshEd25519 { public, .. } => public,
+            Self::SshEd25519 { public, .. } => public,
         }
     }
 
     pub fn algorithm(&self) -> HostKeyAlgorithm {
         match self {
-            HostKey::SshEd25519 { .. } => HostKeyAlgorithm::SshEd25519,
+            Self::SshEd25519 { .. } => HostKeyAlgorithm::SshEd25519,
         }
     }
 
     pub fn put_to(&self, buf: &mut impl SshBufMut) -> SshBufResult<()> {
         buf.put_binary_string(&{
             match self {
-                HostKey::SshEd25519 { public, .. } => {
+                Self::SshEd25519 { public, .. } => {
                     let name = "ssh-ed25519";
                     let mut buf = BytesMut::with_capacity(name.len() + 4 + 32 + 4);
                     buf.put_string(name)?;
@@ -77,7 +74,7 @@ impl HostKey {
 
     pub fn sign(&self, target: &[u8]) -> SignResult<Bytes> {
         match self {
-            HostKey::SshEd25519 { secret, .. } => {
+            Self::SshEd25519 { secret, .. } => {
                 let secret =
                     sodiumoxide::crypto::sign::ed25519::SecretKey::from_slice(secret).unwrap();
                 let sign = sign_detached(target, &secret);

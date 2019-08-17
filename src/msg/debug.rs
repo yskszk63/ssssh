@@ -27,7 +27,7 @@ impl Debug {
         }
     }
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let always_display = buf.get_boolean()?;
         let message = buf.get_string()?;
         let language_tag = buf.get_string()?;
@@ -47,7 +47,7 @@ impl Debug {
 }
 
 impl From<Debug> for Message {
-    fn from(v: Debug) -> Message {
-        Message::Debug(v)
+    fn from(v: Debug) -> Self {
+        Self::Debug(v)
     }
 }

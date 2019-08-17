@@ -30,7 +30,7 @@ impl Mac for HmacSha2_256 {
                 (seq >> 24) as u8,
                 (seq >> 16) as u8,
                 (seq >> 8) as u8,
-                (seq >> 0) as u8,
+                (seq) as u8,
             ])
             .unwrap();
         signer.update(&plain).unwrap();

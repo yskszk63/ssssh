@@ -11,6 +11,7 @@ pub struct Unimplemented {
 }
 
 impl Unimplemented {
+    /*
     pub fn new(packet_sequence_number: u32) -> Self {
         Self {
             packet_sequence_number,
@@ -20,8 +21,9 @@ impl Unimplemented {
     pub fn packet_sequence_number(&self) -> u32 {
         self.packet_sequence_number
     }
+    */
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let packet_sequence_number = buf.get_uint32()?;
         Ok(Self {
             packet_sequence_number,
@@ -35,7 +37,7 @@ impl Unimplemented {
 }
 
 impl From<Unimplemented> for Message {
-    fn from(v: Unimplemented) -> Message {
-        Message::Unimplemented(v)
+    fn from(v: Unimplemented) -> Self {
+        Self::Unimplemented(v)
     }
 }

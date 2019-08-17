@@ -11,7 +11,7 @@ pub struct Ignore {
 }
 
 impl Ignore {
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let data = buf.get_binary_string()?.into();
         Ok(Self { data })
     }
@@ -23,7 +23,7 @@ impl Ignore {
 }
 
 impl From<Ignore> for Message {
-    fn from(v: Ignore) -> Message {
-        Message::Ignore(v)
+    fn from(v: Ignore) -> Self {
+        Self::Ignore(v)
     }
 }

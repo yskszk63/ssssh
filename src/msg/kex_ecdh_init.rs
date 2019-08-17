@@ -14,12 +14,14 @@ impl KexEcdhInit {
     pub fn ephemeral_public_key(&self) -> &[u8] {
         &self.ephemeral_public_key
     }
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let ephemeral_public_key = buf.get_binary_string()?;
         Ok(Self {
             ephemeral_public_key,
         })
     }
+
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
         buf.put_binary_string(&self.ephemeral_public_key)?;
         Ok(())
@@ -27,7 +29,7 @@ impl KexEcdhInit {
 }
 
 impl From<KexEcdhInit> for Message {
-    fn from(v: KexEcdhInit) -> Message {
-        Message::KexEcdhInit(v)
+    fn from(v: KexEcdhInit) -> Self {
+        Self::KexEcdhInit(v)
     }
 }

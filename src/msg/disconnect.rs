@@ -20,14 +20,14 @@ impl Disconnect {
     ) -> Self {
         let description = description.into();
         let language_tag = language_tag.into();
-        Disconnect {
+        Self {
             reason_code,
             description,
             language_tag,
         }
     }
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let reason_code = buf.get_uint32()?;
         let description = buf.get_string()?;
         let language_tag = buf.get_string()?;
@@ -47,7 +47,7 @@ impl Disconnect {
 }
 
 impl From<Disconnect> for Message {
-    fn from(v: Disconnect) -> Message {
-        Message::Disconnect(v)
+    fn from(v: Disconnect) -> Self {
+        Self::Disconnect(v)
     }
 }

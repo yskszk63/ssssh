@@ -31,7 +31,7 @@ impl ChannelOpen {
         self.maximum_packet_size
     }
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let channel_type = buf.get_string()?;
         let sender_channel = buf.get_uint32()?;
         let initial_window_size = buf.get_uint32()?;
@@ -57,7 +57,7 @@ impl ChannelOpen {
 }
 
 impl From<ChannelOpen> for Message {
-    fn from(v: ChannelOpen) -> Message {
-        Message::ChannelOpen(v)
+    fn from(v: ChannelOpen) -> Self {
+        Self::ChannelOpen(v)
     }
 }

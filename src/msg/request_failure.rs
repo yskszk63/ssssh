@@ -8,7 +8,7 @@ use super::{Message, MessageResult};
 pub struct RequestFailure;
 
 impl RequestFailure {
-    pub fn from(_buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(_buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         Ok(Self)
     }
 
@@ -18,7 +18,7 @@ impl RequestFailure {
 }
 
 impl From<RequestFailure> for Message {
-    fn from(v: RequestFailure) -> Message {
-        Message::RequestFailure(v)
+    fn from(v: RequestFailure) -> Self {
+        Self::RequestFailure(v)
     }
 }

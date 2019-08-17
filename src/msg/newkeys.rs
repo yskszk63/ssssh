@@ -8,7 +8,7 @@ use super::{Message, MessageResult};
 pub struct Newkeys;
 
 impl Newkeys {
-    pub fn from(_buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(_buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         Ok(Newkeys)
     }
     pub fn put(&self, _buf: &mut BytesMut) -> MessageResult<()> {
@@ -17,7 +17,7 @@ impl Newkeys {
 }
 
 impl From<Newkeys> for Message {
-    fn from(v: Newkeys) -> Message {
-        Message::Newkeys(v)
+    fn from(v: Newkeys) -> Self {
+        Self::Newkeys(v)
     }
 }

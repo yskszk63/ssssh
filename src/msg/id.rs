@@ -1,6 +1,7 @@
 use std::convert::TryFrom;
 
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub struct UnknownMessageId(u8);
 
 impl UnknownMessageId {
@@ -10,6 +11,7 @@ impl UnknownMessageId {
 }
 
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub enum MessageId {
     Disconnect = 1,
     Ignore = 2,
@@ -46,34 +48,34 @@ impl TryFrom<u8> for MessageId {
 
     fn try_from(v: u8) -> Result<Self, UnknownMessageId> {
         Ok(match v {
-            1 => MessageId::Disconnect,
-            2 => MessageId::Ignore,
-            3 => MessageId::Unimplemented,
-            4 => MessageId::Debug,
-            5 => MessageId::ServiceRequest,
-            6 => MessageId::ServiceAccept,
-            20 => MessageId::Kexinit,
-            21 => MessageId::Newkeys,
-            30 => MessageId::KexEcdhInit,
-            31 => MessageId::KexEcdhReply,
-            50 => MessageId::UserauthRequest,
-            51 => MessageId::UserauthFailure,
-            52 => MessageId::UserauthSuccess,
-            53 => MessageId::UserauthBanner,
-            80 => MessageId::GlobalRequest,
-            81 => MessageId::RequestSuccess,
-            82 => MessageId::RequestFailure,
-            90 => MessageId::ChannelOpen,
-            91 => MessageId::ChannelOpenConfirmation,
-            92 => MessageId::ChannelOpenFailure,
-            93 => MessageId::ChannelWindowAdjust,
-            94 => MessageId::ChannelData,
-            95 => MessageId::ChannelExtendedData,
-            96 => MessageId::ChannelEof,
-            97 => MessageId::ChannelClose,
-            98 => MessageId::ChannelRequest,
-            99 => MessageId::ChannelSuccess,
-            100 => MessageId::ChannelFailure,
+            1 => Self::Disconnect,
+            2 => Self::Ignore,
+            3 => Self::Unimplemented,
+            4 => Self::Debug,
+            5 => Self::ServiceRequest,
+            6 => Self::ServiceAccept,
+            20 => Self::Kexinit,
+            21 => Self::Newkeys,
+            30 => Self::KexEcdhInit,
+            31 => Self::KexEcdhReply,
+            50 => Self::UserauthRequest,
+            51 => Self::UserauthFailure,
+            52 => Self::UserauthSuccess,
+            53 => Self::UserauthBanner,
+            80 => Self::GlobalRequest,
+            81 => Self::RequestSuccess,
+            82 => Self::RequestFailure,
+            90 => Self::ChannelOpen,
+            91 => Self::ChannelOpenConfirmation,
+            92 => Self::ChannelOpenFailure,
+            93 => Self::ChannelWindowAdjust,
+            94 => Self::ChannelData,
+            95 => Self::ChannelExtendedData,
+            96 => Self::ChannelEof,
+            97 => Self::ChannelClose,
+            98 => Self::ChannelRequest,
+            99 => Self::ChannelSuccess,
+            100 => Self::ChannelFailure,
             e => return Err(UnknownMessageId(e)),
         })
     }

@@ -8,7 +8,7 @@ use super::{Message, MessageResult};
 pub struct UserauthSuccess;
 
 impl UserauthSuccess {
-    pub fn from(_buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(_buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         Ok(Self)
     }
 
@@ -18,7 +18,7 @@ impl UserauthSuccess {
 }
 
 impl From<UserauthSuccess> for Message {
-    fn from(v: UserauthSuccess) -> Message {
-        Message::UserauthSuccess(v)
+    fn from(v: UserauthSuccess) -> Self {
+        Self::UserauthSuccess(v)
     }
 }

@@ -19,7 +19,7 @@ impl ChannelClose {
         self.recipient_channel
     }
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let recipient_channel = buf.get_uint32()?;
         Ok(Self { recipient_channel })
     }
@@ -31,7 +31,7 @@ impl ChannelClose {
 }
 
 impl From<ChannelClose> for Message {
-    fn from(v: ChannelClose) -> Message {
-        Message::ChannelClose(v)
+    fn from(v: ChannelClose) -> Self {
+        Self::ChannelClose(v)
     }
 }

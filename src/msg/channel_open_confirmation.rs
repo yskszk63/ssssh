@@ -31,7 +31,7 @@ impl ChannelOpenConfirmation {
         }
     }
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let recipient_channel = buf.get_uint32()?;
         let sender_channel = buf.get_uint32()?;
         let initial_window_size = buf.get_uint32()?;
@@ -57,7 +57,7 @@ impl ChannelOpenConfirmation {
 }
 
 impl From<ChannelOpenConfirmation> for Message {
-    fn from(v: ChannelOpenConfirmation) -> Message {
-        Message::ChannelOpenConfirmation(v)
+    fn from(v: ChannelOpenConfirmation) -> Self {
+        Self::ChannelOpenConfirmation(v)
     }
 }

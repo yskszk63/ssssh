@@ -13,6 +13,7 @@ pub struct GlobalRequest {
 }
 
 impl GlobalRequest {
+    /*
     pub fn request_type(&self) -> &str {
         &self.request_type
     }
@@ -20,8 +21,9 @@ impl GlobalRequest {
     pub fn want_reply(&self) -> bool {
         self.want_reply
     }
+    */
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let request_type = buf.get_string()?;
         let want_reply = buf.get_boolean()?;
         let data = buf.take(usize::max_value()).collect();
@@ -41,7 +43,7 @@ impl GlobalRequest {
 }
 
 impl From<GlobalRequest> for Message {
-    fn from(v: GlobalRequest) -> Message {
-        Message::GlobalRequest(v)
+    fn from(v: GlobalRequest) -> Self {
+        Self::GlobalRequest(v)
     }
 }

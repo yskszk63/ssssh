@@ -34,8 +34,8 @@ enum MapEither<L, R> {
 impl<L, R> MapEither<L, R> {
     fn get_left_mut(&mut self) -> Option<&mut L> {
         match self {
-            MapEither::Left(ref mut e) => Some(e),
-            MapEither::Right(..) => None,
+            Self::Left(ref mut e) => Some(e),
+            Self::Right(..) => None,
         }
     }
     /*
@@ -57,12 +57,12 @@ where
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
         match self.get_mut() {
-            MapEither::Left(ref mut item) => Pin::new(item)
+            Self::Left(ref mut item) => Pin::new(item)
                 .poll_next(cx)
-                .map(|opt| opt.map(|v| Either::Left(v))),
-            MapEither::Right(ref mut item) => Pin::new(item)
+                .map(|opt| opt.map(Either::Left)),
+            Self::Right(ref mut item) => Pin::new(item)
                 .poll_next(cx)
-                .map(|opt| opt.map(|v| Either::Right(v))),
+                .map(|opt| opt.map(Either::Right)),
         }
     }
 }
@@ -85,6 +85,14 @@ impl<IO> Transport<IO> {
         let (tx, rx) = mpsc::channel(1);
         (Self { rx, io }, tx)
     }
+
+    fn poll_change_key_if_needed(&mut self, cx: &mut Context) {
+        if let Poll::Ready(Some(req)) = Pin::new(&mut self.rx).poll_next(cx) {
+            self.io
+                .codec_mut()
+                .change_key(&req.hash, &req.key, &req.algorithm);
+        };
+    }
 }
 
 impl<IO> Stream for Transport<IO>
@@ -94,11 +102,7 @@ where
     type Item = MessageResult<Message>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        if let Poll::Ready(Some(req)) = Pin::new(&mut self.rx).poll_next(cx) {
-            self.io
-                .codec_mut()
-                .change_key(req.hash, req.key, req.algorithm);
-        };
+        self.poll_change_key_if_needed(cx);
 
         Pin::new(&mut self.io)
             .poll_next(cx)
@@ -113,11 +117,7 @@ where
     type Error = MessageError;
 
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<MessageResult<()>> {
-        if let Poll::Ready(Some(req)) = Pin::new(&mut self.rx).poll_next(cx) {
-            self.io
-                .codec_mut()
-                .change_key(req.hash, req.key, req.algorithm);
-        };
+        self.poll_change_key_if_needed(cx);
 
         Poll::Ready(Ok(ready!(Pin::new(&mut self.io).poll_ready(cx))?))
     }
@@ -129,27 +129,20 @@ where
     }
 
     fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<MessageResult<()>> {
-        if let Poll::Ready(Some(req)) = Pin::new(&mut self.rx).poll_next(cx) {
-            self.io
-                .codec_mut()
-                .change_key(req.hash, req.key, req.algorithm);
-        };
+        self.poll_change_key_if_needed(cx);
 
         Poll::Ready(Ok(ready!(Pin::new(&mut self.io).poll_flush(cx))?))
     }
 
     fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<MessageResult<()>> {
-        if let Poll::Ready(Some(req)) = Pin::new(&mut self.rx).poll_next(cx) {
-            self.io
-                .codec_mut()
-                .change_key(req.hash, req.key, req.algorithm);
-        };
+        self.poll_change_key_if_needed(cx);
 
         Poll::Ready(Ok(ready!(Pin::new(&mut self.io).poll_close(cx))?))
     }
 }
 
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub enum ConnectionError {
     UnknownMessageId(u8),
     Unimplemented(MessageId),
@@ -174,7 +167,10 @@ impl From<MessageError> for ConnectionError {
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub type ConnectionResult<T> = Result<T, ConnectionError>;
+
+type IncommingOrOutgoing<IO> = MapEither<SplitStream<Transport<IO>>, mpsc::Receiver<Message>>;
 
 #[derive(Debug)]
 pub struct Connection<IO, R, AH, CH>
@@ -182,10 +178,7 @@ where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
     version: Version,
-    rx: Select<
-        MapEither<SplitStream<Transport<IO>>, mpsc::Receiver<Message>>,
-        MapEither<SplitStream<Transport<IO>>, mpsc::Receiver<Message>>,
-    >,
+    rx: Select<IncommingOrOutgoing<IO>, IncommingOrOutgoing<IO>>,
     tx: SplitSink<Transport<IO>, Message>,
     remote: Option<R>,
     hostkeys: HostKeys,
@@ -211,7 +204,7 @@ where
         preference: Preference,
         auth_handler: AH,
         channel_handler: CH,
-    ) -> VersionExchangeResult<Connection<IO, R, AH, CH>> {
+    ) -> VersionExchangeResult<Self> {
         let (version, rbuf) = Version::exchange(&mut socket, server_version).await?;
 
         let rng = StdRng::from_entropy();
@@ -240,7 +233,8 @@ where
     }
 
     async fn send(&mut self, item: impl Into<Message>) -> MessageResult<()> {
-        Ok(self.message_send.send(item.into()).await.unwrap())
+        self.message_send.send(item.into()).await.unwrap();
+        Ok(())
     }
 
     pub async fn run(mut self) {
@@ -259,7 +253,7 @@ where
         while let Some(m) = self.rx.next().await {
             match m {
                 Either::Left(m) => match m? {
-                    Kexinit(item) => self.on_kexinit(item).await?,
+                    Kexinit(item) => self.on_kexinit(*item).await?,
                     ServiceRequest(item) => self.on_service_request(item).await?,
                     UserauthRequest(item) => self.on_userauth_request(item).await?,
                     ChannelOpen(item) => self.on_channel_open(item).await?,
@@ -274,7 +268,7 @@ where
                     x => panic!("{:?}", x),
                 },
                 Either::Right(m) => {
-                    self.tx.send(m.into()).await?;
+                    self.tx.send(m).await?;
                 }
             }
         }
@@ -336,7 +330,7 @@ where
             return Err(ConnectionError::Overflow); // TODO
         };
 
-        let mut handle = GlobalHandle::new(self.message_send.clone());
+        let handle = GlobalHandle::new(self.message_send.clone()).new_auth_handle();
         let result = match msg.method_name() {
             "none" => self.auth_handler.handle_none(msg.user_name(), handle).await,
             "publickey" => {
@@ -392,14 +386,14 @@ where
     async fn on_channel_request(&mut self, msg: msg::ChannelRequest) -> ConnectionResult<()> {
         match msg.request_type() {
             "pty-req" => {
-                let mut handle = GlobalHandle::new(self.message_send.clone())
+                let handle = GlobalHandle::new(self.message_send.clone())
                     .new_channel_handle(msg.recipient_channel());
                 self.channel_handler
                     .handle_pty_request(msg.recipient_channel(), handle)
                     .await
             }
             "shell" => {
-                let mut handle = GlobalHandle::new(self.message_send.clone())
+                let handle = GlobalHandle::new(self.message_send.clone())
                     .new_channel_handle(msg.recipient_channel());
                 self.channel_handler
                     .handle_shell_request(msg.recipient_channel(), handle)
@@ -418,7 +412,7 @@ where
     }
 
     async fn on_channel_data(&mut self, msg: msg::ChannelData) -> ConnectionResult<()> {
-        let mut handle = GlobalHandle::new(self.message_send.clone())
+        let handle = GlobalHandle::new(self.message_send.clone())
             .new_channel_handle(msg.recipient_channel());
         let r = self
             .channel_handler
@@ -429,7 +423,7 @@ where
     }
 
     async fn on_channel_close(&mut self, msg: msg::ChannelClose) -> ConnectionResult<()> {
-        let mut handle = GlobalHandle::new(self.message_send.clone())
+        let handle = GlobalHandle::new(self.message_send.clone())
             .new_channel_handle(msg.recipient_channel());
         let r = self
             .channel_handler

@@ -15,11 +15,13 @@ impl ChannelSuccess {
         Self { recipient_channel }
     }
 
+    /*
     pub fn recipient_channel(&self) -> u32 {
         self.recipient_channel
     }
+    */
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let recipient_channel = buf.get_uint32()?;
         Ok(Self { recipient_channel })
     }
@@ -31,7 +33,7 @@ impl ChannelSuccess {
 }
 
 impl From<ChannelSuccess> for Message {
-    fn from(v: ChannelSuccess) -> Message {
-        Message::ChannelSuccess(v)
+    fn from(v: ChannelSuccess) -> Self {
+        Self::ChannelSuccess(v)
     }
 }

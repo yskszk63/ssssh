@@ -16,16 +16,18 @@ use crate::sshbuf::SshBufMut as _;
 const MINIMUM_PAD_SIZE: usize = 4;
 
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub enum CodecError {
     Io(io::Error),
 }
 
 impl From<io::Error> for CodecError {
     fn from(v: io::Error) -> Self {
-        CodecError::Io(v)
+        Self::Io(v)
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub type CodecResult<T> = Result<T, CodecError>;
 
 fn calculate_hash(
@@ -92,7 +94,7 @@ where
     R: RngCore + CryptoRng,
 {
     pub fn new(rng: R) -> Self {
-        Codec {
+        Self {
             rng,
             seq_ctos: 0,
             seq_stoc: 0,
@@ -107,10 +109,10 @@ where
         }
     }
 
-    pub fn change_key(&mut self, hash: Bytes, secret: Bytes, algorithm: Algorithm) {
+    pub fn change_key(&mut self, hash: &Bytes, secret: &Bytes, algorithm: &Algorithm) {
         match &self.encrypt_state {
             EncryptState::Initial => {}
-            e @ _ => panic!("{:?}", e),
+            e => panic!("{:?}", e),
         }
 
         let session_id = self.session_id.as_ref().unwrap_or_else(|| &hash);
@@ -152,7 +154,7 @@ where
             CompressionAlgorithm::None => Box::new(NoneCompression),
         };
 
-        self.session_id = Some(hash);
+        self.session_id = Some(hash.clone());
     }
 }
 

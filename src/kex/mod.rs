@@ -9,6 +9,7 @@ use crate::transport::version::Version;
 mod ecdh;
 
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub struct KexEnv<'a, Tx, Rx>
 where
     Tx: Sink<Message, Error = MessageError> + Unpin,
@@ -46,9 +47,11 @@ where
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub type KexResult = Result<KexReturn, KexError>;
 
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub enum KexError {
     ProtocolError,
     MessageError(MessageError),
@@ -61,6 +64,7 @@ impl From<MessageError> for KexError {
 }
 
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub struct KexReturn {
     hash: Bytes,
     key: Bytes,

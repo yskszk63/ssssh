@@ -2,6 +2,7 @@ use bytes::Bytes;
 
 use super::{Mac, MacResult};
 
+#[allow(clippy::module_name_repetitions)]
 pub struct NoneMac;
 
 impl Mac for NoneMac {

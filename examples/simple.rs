@@ -4,7 +4,7 @@ use futures::future::{BoxFuture, FutureExt as _};
 
 use ssssh::ServerBuilder;
 use ssssh::{Auth, AuthError, AuthHandler, ChannelError, ChannelHandler};
-use ssssh::{ChannelHandle, GlobalHandle};
+use ssssh::{AuthHandle, ChannelHandle};
 
 struct Handler;
 
@@ -15,7 +15,7 @@ impl AuthHandler for Handler {
         &mut self,
         _username: &str,
         _password: &[u8],
-        _handle: GlobalHandle,
+        _handle: AuthHandle,
     ) -> BoxFuture<Result<Auth, Self::Error>> {
         async { Ok(Auth::Accept) }.boxed()
     }

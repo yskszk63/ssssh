@@ -3,7 +3,7 @@ use std::fmt::{self, Display};
 
 use futures::future::{BoxFuture, FutureExt as _};
 
-use crate::handle::{ChannelHandle, GlobalHandle};
+use crate::handle::{AuthHandle, ChannelHandle};
 
 #[derive(Debug)]
 pub struct AuthError(String);
@@ -32,13 +32,14 @@ pub enum Auth {
     Reject,
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub trait AuthHandler {
     type Error: Into<Box<dyn StdError + Send + Sync>>;
 
     fn handle_none(
         &mut self,
         _username: &str,
-        _handle: GlobalHandle,
+        _handle: AuthHandle,
     ) -> BoxFuture<Result<Auth, Self::Error>> {
         async { Ok(Auth::Reject) }.boxed()
     }
@@ -47,7 +48,7 @@ pub trait AuthHandler {
         &mut self,
         _username: &str,
         _publickey: &[u8],
-        _handle: GlobalHandle,
+        _handle: AuthHandle,
     ) -> BoxFuture<Result<Auth, Self::Error>> {
         async { Ok(Auth::Reject) }.boxed()
     }
@@ -56,12 +57,13 @@ pub trait AuthHandler {
         &mut self,
         _username: &str,
         _password: &[u8],
-        _handle: GlobalHandle,
+        _handle: AuthHandle,
     ) -> BoxFuture<Result<Auth, Self::Error>> {
         async { Ok(Auth::Reject) }.boxed()
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub trait ChannelHandler {
     type Error: Into<Box<dyn StdError + Send + Sync>>;
 

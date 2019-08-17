@@ -2,6 +2,7 @@ use crate::msg::Kexinit;
 use crate::named::Named;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::module_name_repetitions)]
 pub enum KexAlgorithm {
     Curve25519Sha256,
 }
@@ -9,12 +10,13 @@ pub enum KexAlgorithm {
 impl Named for KexAlgorithm {
     fn name(&self) -> &'static str {
         match self {
-            KexAlgorithm::Curve25519Sha256 => "curve25519-sha256",
+            Self::Curve25519Sha256 => "curve25519-sha256",
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::module_name_repetitions)]
 pub enum HostKeyAlgorithm {
     SshEd25519,
 }
@@ -22,12 +24,13 @@ pub enum HostKeyAlgorithm {
 impl Named for HostKeyAlgorithm {
     fn name(&self) -> &'static str {
         match self {
-            HostKeyAlgorithm::SshEd25519 => "ssh-ed25519",
+            Self::SshEd25519 => "ssh-ed25519",
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::module_name_repetitions)]
 pub enum EncryptionAlgorithm {
     Aes256Ctr,
 }
@@ -35,12 +38,13 @@ pub enum EncryptionAlgorithm {
 impl Named for EncryptionAlgorithm {
     fn name(&self) -> &'static str {
         match self {
-            EncryptionAlgorithm::Aes256Ctr => "aes256-ctr",
+            Self::Aes256Ctr => "aes256-ctr",
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::module_name_repetitions)]
 pub enum MacAlgorithm {
     HmacSha2_256,
 }
@@ -48,12 +52,13 @@ pub enum MacAlgorithm {
 impl Named for MacAlgorithm {
     fn name(&self) -> &'static str {
         match self {
-            MacAlgorithm::HmacSha2_256 => "hmac-sha2-256",
+            Self::HmacSha2_256 => "hmac-sha2-256",
         }
     }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[allow(clippy::module_name_repetitions)]
 pub enum CompressionAlgorithm {
     None,
 }
@@ -61,7 +66,7 @@ pub enum CompressionAlgorithm {
 impl Named for CompressionAlgorithm {
     fn name(&self) -> &'static str {
         match self {
-            CompressionAlgorithm::None => "none",
+            Self::None => "none",
         }
     }
 }

@@ -21,7 +21,7 @@ impl UserauthBanner {
         }
     }
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let message = buf.get_string()?;
         let language_tag = buf.get_string()?;
         Ok(Self {
@@ -38,7 +38,7 @@ impl UserauthBanner {
 }
 
 impl From<UserauthBanner> for Message {
-    fn from(v: UserauthBanner) -> Message {
-        Message::UserauthBanner(v)
+    fn from(v: UserauthBanner) -> Self {
+        Self::UserauthBanner(v)
     }
 }

@@ -8,6 +8,7 @@ use crate::handler::{AuthHandler, ChannelHandler};
 use crate::hostkey::{HostKey, HostKeys};
 
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub struct ServerBuilder {
     version: Option<String>,
     preference: Option<Preference>,
@@ -40,7 +41,7 @@ impl ServerBuilder {
         channel_handler_factory: CHF,
     ) -> Server<AHF, CHF> {
         Server {
-            version: self.version.unwrap_or("SSH-2.0-sssh".into()),
+            version: self.version.unwrap_or_else(|| "SSH-2.0-sssh".into()),
             addr,
             preference: self.preference.unwrap_or_default(),
             hostkeys: self

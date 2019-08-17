@@ -23,7 +23,8 @@ impl KexEcdhReply {
             signature,
         }
     }
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let public_host_key = buf.get_binary_string()?;
         let ephemeral_public_key = buf.get_binary_string()?;
         let signature = buf.get_binary_string()?;
@@ -33,17 +34,18 @@ impl KexEcdhReply {
             signature,
         })
     }
+
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
         buf.put_binary_string(&{
             let mut buf = BytesMut::with_capacity(1024 * 8);
-            buf.put_string("ssh-ed25519")?; // xxxx
+            buf.put_string("ssh-ed25519")?; // TODO xxxx
             buf.put_binary_string(&self.public_host_key)?;
             buf
         })?;
         buf.put_binary_string(&self.ephemeral_public_key)?;
         buf.put_binary_string(&{
             let mut b = BytesMut::with_capacity(1024 * 8);
-            b.put_string("ssh-ed25519")?; // xxx
+            b.put_string("ssh-ed25519")?; // TODO xxx
             b.put_binary_string(&self.signature)?;
             b
         })?;
@@ -52,7 +54,7 @@ impl KexEcdhReply {
 }
 
 impl From<KexEcdhReply> for Message {
-    fn from(v: KexEcdhReply) -> Message {
-        Message::KexEcdhReply(v)
+    fn from(v: KexEcdhReply) -> Self {
+        Self::KexEcdhReply(v)
     }
 }

@@ -7,8 +7,10 @@ mod aes;
 mod plain;
 
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub enum EncryptError {}
 
+#[allow(clippy::module_name_repetitions)]
 pub type EncryptResult<T> = Result<T, EncryptError>;
 
 pub trait Encrypt {

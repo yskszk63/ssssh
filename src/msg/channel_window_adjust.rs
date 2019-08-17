@@ -12,7 +12,7 @@ pub struct ChannelWindowAdjust {
 }
 
 impl ChannelWindowAdjust {
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let recipient_channel = buf.get_uint32()?;
         let bytes_to_add = buf.get_uint32()?;
         Ok(Self {
@@ -29,7 +29,7 @@ impl ChannelWindowAdjust {
 }
 
 impl From<ChannelWindowAdjust> for Message {
-    fn from(v: ChannelWindowAdjust) -> Message {
-        Message::ChannelWindowAdjust(v)
+    fn from(v: ChannelWindowAdjust) -> Self {
+        Self::ChannelWindowAdjust(v)
     }
 }

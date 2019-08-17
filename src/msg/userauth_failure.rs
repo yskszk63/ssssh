@@ -26,7 +26,7 @@ impl UserauthFailure {
         }
     }
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let authentications_that_can_continue = buf.get_name_list()?;
         let parital_success = buf.get_boolean()?;
         Ok(Self {
@@ -43,7 +43,7 @@ impl UserauthFailure {
 }
 
 impl From<UserauthFailure> for Message {
-    fn from(v: UserauthFailure) -> Message {
-        Message::UserauthFailure(v)
+    fn from(v: UserauthFailure) -> Self {
+        Self::UserauthFailure(v)
     }
 }

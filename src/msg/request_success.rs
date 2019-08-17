@@ -10,12 +10,14 @@ pub struct RequestSuccess {
 }
 
 impl RequestSuccess {
+    /*
     pub fn new() -> Self {
         let data = Bytes::from("");
         Self { data }
     }
+    */
 
-    pub fn from(buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let data = buf.take(usize::max_value()).collect();
         Ok(Self { data })
     }
@@ -27,7 +29,7 @@ impl RequestSuccess {
 }
 
 impl From<RequestSuccess> for Message {
-    fn from(v: RequestSuccess) -> Message {
-        Message::RequestSuccess(v)
+    fn from(v: RequestSuccess) -> Self {
+        Self::RequestSuccess(v)
     }
 }

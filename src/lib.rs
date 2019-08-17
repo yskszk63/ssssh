@@ -1,6 +1,7 @@
 #![feature(async_await)]
+#![warn(clippy::pedantic)]
 
-pub use handle::{ChannelHandle, GlobalHandle};
+pub use handle::{AuthHandle, ChannelHandle};
 pub use handler::{Auth, AuthError, AuthHandler, ChannelError, ChannelHandler};
 pub use server::{Server, ServerBuilder};
 

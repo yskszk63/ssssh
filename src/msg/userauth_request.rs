@@ -26,7 +26,7 @@ impl UserauthRequest {
         &self.method_name
     }
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let user_name = buf.get_string()?;
         let service_name = buf.get_string()?;
         let method_name = buf.get_string()?;
@@ -49,7 +49,7 @@ impl UserauthRequest {
 }
 
 impl From<UserauthRequest> for Message {
-    fn from(v: UserauthRequest) -> Message {
-        Message::UserauthRequest(v)
+    fn from(v: UserauthRequest) -> Self {
+        Self::UserauthRequest(v)
     }
 }

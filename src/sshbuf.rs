@@ -74,7 +74,7 @@ pub trait SshBuf: Buf {
 
     fn get_name_list(&mut self) -> SshBufResult<Vec<String>> {
         Ok(match &self.get_string()? {
-            val if val.len() == 0 => vec![],
+            val if val.is_empty() => vec![],
             val => val.split(',').map(String::from).collect(),
         })
     }
@@ -98,10 +98,7 @@ pub trait SshBufMut: BufMut {
             return Err(SshBufError::Overflow);
         };
 
-        let v = match v {
-            false => 0,
-            true => 1,
-        };
+        let v = if v { 1 } else { 0 };
         self.put_u8(v);
         Ok(())
     }
@@ -136,7 +133,7 @@ pub trait SshBufMut: BufMut {
     }
 
     fn put_mpint(&mut self, v: &[u8]) -> SshBufResult<()> {
-        let (head, len) = if v.len() > 0 && v[0] & 0x80 != 0 {
+        let (head, len) = if !v.is_empty() && v[0] & 0x80 != 0 {
             (&b"\x00"[..], v.len() + 1)
         } else {
             (&b""[..], v.len())

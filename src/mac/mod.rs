@@ -7,8 +7,10 @@ mod none;
 mod sha;
 
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub enum MacError {}
 
+#[allow(clippy::module_name_repetitions)]
 pub type MacResult<T> = Result<T, MacError>;
 
 pub trait Mac {

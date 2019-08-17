@@ -3,6 +3,7 @@ use openssl::symm::{Cipher, Crypter, Mode};
 
 use super::{Encrypt, EncryptResult};
 
+#[allow(clippy::module_name_repetitions)]
 pub struct Aes256CtrEncrypt {
     encrypter: openssl::symm::Crypter,
 }

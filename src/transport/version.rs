@@ -51,6 +51,7 @@ impl Version {
 }
 
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub enum VersionExchangeError {
     InvalidFormat,
     Io(io::Error),
@@ -62,6 +63,7 @@ impl From<io::Error> for VersionExchangeError {
     }
 }
 
+#[allow(clippy::module_name_repetitions)]
 pub type VersionExchangeResult<T> = Result<T, VersionExchangeError>;
 
 const CR: u8 = b'\r';

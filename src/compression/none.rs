@@ -2,6 +2,7 @@ use bytes::Bytes;
 
 use super::{Compression, CompressionResult};
 
+#[allow(clippy::module_name_repetitions)]
 pub struct NoneCompression;
 
 impl Compression for NoneCompression {

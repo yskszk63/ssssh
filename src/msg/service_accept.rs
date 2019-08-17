@@ -16,7 +16,7 @@ impl ServiceAccept {
         Self { name }
     }
 
-    pub fn from(mut buf: Cursor<Bytes>) -> MessageResult<Self> {
+    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let name = buf.get_string()?;
         Ok(Self { name })
     }
@@ -28,7 +28,7 @@ impl ServiceAccept {
 }
 
 impl From<ServiceAccept> for Message {
-    fn from(v: ServiceAccept) -> Message {
-        Message::ServiceAccept(v)
+    fn from(v: ServiceAccept) -> Self {
+        Self::ServiceAccept(v)
     }
 }

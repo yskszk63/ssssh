@@ -5,8 +5,10 @@ pub use none::*;
 mod none;
 
 #[derive(Debug)]
+#[allow(clippy::module_name_repetitions)]
 pub enum CompressionError {}
 
+#[allow(clippy::module_name_repetitions)]
 pub type CompressionResult<T> = Result<T, CompressionError>;
 
 pub trait Compression {
