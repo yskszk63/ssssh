@@ -400,6 +400,13 @@ where
                     .handle_shell_request(msg.recipient_channel(), handle)
                     .await
             }
+            "exec" => {
+                let handle = GlobalHandle::new(self.message_send.clone())
+                    .new_channel_handle(msg.recipient_channel());
+                self.channel_handler
+                    .handle_exec_request(msg.recipient_channel(), handle)
+                    .await
+            }
             x => {
                 dbg!(x);
                 return Err(ConnectionError::Overflow); // TODO
