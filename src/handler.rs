@@ -100,6 +100,14 @@ pub trait ChannelHandler {
         async { Ok(()) }.boxed()
     }
 
+    fn handle_eof(
+        &mut self,
+        _session_id: u32,
+        _handle: ChannelHandle,
+    ) -> BoxFuture<Result<(), Self::Error>> {
+        async { Ok(()) }.boxed()
+    }
+
     fn handle_close(
         &mut self,
         _session_id: u32,

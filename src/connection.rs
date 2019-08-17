@@ -259,6 +259,7 @@ where
                     ChannelOpen(item) => self.on_channel_open(item).await?,
                     ChannelRequest(item) => self.on_channel_request(item).await?,
                     ChannelData(item) => self.on_channel_data(item).await?,
+                    ChannelEof(item) => self.on_channel_eof(item).await?,
                     ChannelClose(item) => self.on_channel_close(item).await?,
                     Ignore(..) => {}
                     Disconnect(item) => {
@@ -428,6 +429,17 @@ where
         let r = self
             .channel_handler
             .handle_close(msg.recipient_channel(), handle)
+            .await;
+        r.map_err(|e| ConnectionError::ChannelError(e.into()))?; // TODO
+        Ok(())
+    }
+
+    async fn on_channel_eof(&mut self, msg: msg::ChannelEof) -> ConnectionResult<()> {
+        let handle = GlobalHandle::new(self.message_send.clone())
+            .new_channel_handle(msg.recipient_channel());
+        let r = self
+            .channel_handler
+            .handle_eof(msg.recipient_channel(), handle)
             .await;
         r.map_err(|e| ConnectionError::ChannelError(e.into()))?; // TODO
         Ok(())
