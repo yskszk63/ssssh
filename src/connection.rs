@@ -19,7 +19,7 @@ use tokio::sync::mpsc;
 
 use crate::algorithm::{Algorithm, Preference};
 use crate::handle::{AuthHandle, ChannelHandle, GlobalHandle};
-use crate::handler::{Auth, Handler};
+use crate::handler::{Auth, Handler, Unsupported};
 use crate::hostkey::HostKeys;
 use crate::kex::{kex, KexEnv};
 use crate::msg::{self, Message, MessageError, MessageId, MessageResult};
@@ -377,46 +377,82 @@ where
     }
 
     async fn on_channel_open(&mut self, msg: msg::ChannelOpen) -> ConnectionResult<()> {
-        let channel_handle = self.global_handle.new_channel_handle(msg.sender_channel());
-        self.channel_handles
-            .insert(channel_handle.channel_id(), channel_handle);
-        let channel_handle = self.channel_handles.get(&msg.sender_channel()).unwrap();
+        use msg::ChannelOpenChannelType::*;
 
-        match msg.channel_type() {
-            "session" => self.handler.channel_open_session(channel_handle).await,
-            _ => return Err(ConnectionError::Overflow), // TODO
-        }
-        .map_err(|e| ConnectionError::ChannelError(e.into()))?;
+        let result: msg::Message = match msg.channel_type() {
+            Session => {
+                let channel_handle = self.global_handle.new_channel_handle(msg.sender_channel());
+                self.channel_handles
+                    .insert(channel_handle.channel_id(), channel_handle);
+                let channel_handle = self.channel_handles.get(&msg.sender_channel()).unwrap();
 
-        let result = msg::ChannelOpenConfirmation::new(
-            msg.sender_channel(),
-            msg.sender_channel(),
-            msg.initial_window_size(),
-            msg.maximum_packet_size(),
-        );
+                match self.handler.channel_open_session(channel_handle).await {
+                    Ok(..) => {
+                        msg::ChannelOpenConfirmation::new(
+                            msg.sender_channel(),
+                            msg.sender_channel(),
+                            msg.initial_window_size(),
+                            msg.maximum_packet_size(),
+                        ).into()
+                    }
+                    Err(e) => {
+                        self.channel_handles.remove(&msg.sender_channel());
+                        println!("{}", e);
+                        msg::ChannelOpenFailure::new(
+                            msg.sender_channel(),
+                            msg::ChannelOpenFailureReasonCode::ConnectFailed,
+                            "Failed to open channel",
+                            "",
+                        ).into()
+                    }
+                }
+            }
+            Unknown(t) => {
+                println!("{}", t);
+                msg::ChannelOpenFailure::new(
+                    msg.sender_channel(),
+                    msg::ChannelOpenFailureReasonCode::UnknownChannelType,
+                    "Unknown Channel Type",
+                    "",
+                ).into()
+            }
+        };
         self.send(result).await?;
         Ok(())
     }
 
     async fn on_channel_request(&mut self, msg: msg::ChannelRequest) -> ConnectionResult<()> {
+        use msg::ChannelRequestType::*;
         let handle = self
             .channel_handles
             .get(&msg.recipient_channel())
             .ok_or_else(|| ConnectionError::Underflow)?; // TODO
 
-        match msg.request_type() {
-            "pty-req" => self.handler.channel_pty_request(handle).await,
-            "shell" => self.handler.channel_shell_request(handle).await,
-            "exec" => self.handler.channel_exec_request(handle).await,
+        let result = match msg.request_type() {
+            PtyReq(item) => self.handler.channel_pty_request(item, handle).await,
+            Shell => self.handler.channel_shell_request(handle).await,
+            Exec(path) => self.handler.channel_exec_request(path, handle).await,
             x => {
                 dbg!(x);
-                return Err(ConnectionError::Overflow); // TODO
+                Err(Unsupported.into())
             }
-        }
-        .map_err(|e| ConnectionError::ChannelError(e.into()))?; // TODO channel failure
+        };
+        match result {
+            Ok(()) => {
+                if msg.want_reply() {
+                    self.send(msg::ChannelSuccess::new(msg.recipient_channel()))
+                    .await?;
+                }
+            }
+            Err(e) => {
+                dbg!(e);
+                if msg.want_reply() {
+                    self.send(msg::ChannelFailure::new(msg.recipient_channel()))
+                    .await?;
+                }
+            }
+        };
 
-        self.send(msg::ChannelSuccess::new(msg.recipient_channel()))
-            .await?;
         Ok(())
     }
 

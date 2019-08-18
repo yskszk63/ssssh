@@ -25,6 +25,17 @@ impl Handler for MyHandler {
             .boxed()
     }
 
+    fn channel_open_session(
+        &mut self,
+        _handle: &ChannelHandle,
+    ) -> BoxFuture<Result<(), Self::Error>> {
+        async {
+            //let e: Result<(), _> = Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe)).into();
+            //Ok(e?)
+            Ok(())
+        }.boxed()
+    }
+
     fn channel_shell_request(
         &mut self,
         handle: &ChannelHandle,
@@ -40,12 +51,28 @@ impl Handler for MyHandler {
                 handle.send_data("Hello World!").await;
                 handle.send_extended_data("Hello World!").await;
                 handle.send_eof().await;
+                handle.send_exit_status(0).await;
                 handle.send_close().await;
             });
             Ok(())
         }
             .boxed()
     }
+    /*
+
+    fn channel_data(
+        &mut self,
+        data: &[u8],
+        handle: &ChannelHandle,
+    ) -> BoxFuture<Result<(), Self::Error>> {
+        let mut handle = handle.clone();
+        let data = bytes::Bytes::from(data);
+        async move {
+            handle.send_data(data).await;
+            Ok(())
+        }.boxed()
+    }
+    */
 }
 
 #[tokio::main(single_thread)]
@@ -65,6 +92,7 @@ async fn main() {
             .unwrap()
             .await
             .unwrap();
+        println!("DONE.");
     });
 
     let builder = ServerBuilder::default();

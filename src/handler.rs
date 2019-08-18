@@ -1,8 +1,15 @@
+use std::fmt;
 use std::error::Error as StdError;
 
+use failure::Fail;
 use futures::future::{BoxFuture, FutureExt as _};
 
 use crate::handle::{AuthHandle, ChannelHandle};
+pub use crate::msg::PtyReq;
+
+#[derive(Debug, Fail)]
+#[fail(display = "Unsupported")]
+pub struct Unsupported;
 
 pub enum Auth {
     Accept,
@@ -10,7 +17,7 @@ pub enum Auth {
 }
 
 pub trait Handler {
-    type Error: Into<Box<dyn StdError + Send + Sync>>;
+    type Error: Into<Box<dyn StdError + Send + Sync>> + fmt::Display + fmt::Debug + From<Unsupported>;
 
     fn auth_none(
         &mut self,
@@ -47,23 +54,31 @@ pub trait Handler {
 
     fn channel_pty_request(
         &mut self,
+        _pty: &PtyReq,
         _handle: &ChannelHandle,
     ) -> BoxFuture<Result<(), Self::Error>> {
-        async { Ok(()) }.boxed()
+        async {
+            Err(Unsupported.into())
+        }.boxed()
     }
 
     fn channel_shell_request(
         &mut self,
         _handle: &ChannelHandle,
     ) -> BoxFuture<Result<(), Self::Error>> {
-        async { Ok(()) }.boxed()
+        async {
+            Err(Unsupported.into())
+        }.boxed()
     }
 
     fn channel_exec_request(
         &mut self,
+        _program: &str,
         _handle: &ChannelHandle,
     ) -> BoxFuture<Result<(), Self::Error>> {
-        async { Ok(()) }.boxed()
+        async {
+            Err(Unsupported.into())
+        }.boxed()
     }
 
     fn channel_data(

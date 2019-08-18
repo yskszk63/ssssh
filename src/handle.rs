@@ -2,6 +2,7 @@ use bytes::Bytes;
 use tokio::sync::mpsc;
 
 use crate::msg::{self, Message};
+pub use crate::msg::Signal;
 
 #[derive(Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
@@ -103,6 +104,18 @@ impl ChannelHandle {
     pub async fn send_extended_data(&mut self, msg: impl Into<Bytes>) {
         self.global
             .send(msg::ChannelExtendedData::new(self.channel, msg.into()))
+            .await
+    }
+
+    pub async fn send_exit_status(&mut self, status: u32) {
+        self.global
+            .send(msg::ChannelRequest::new_exit_status(self.channel, status))
+            .await
+    }
+
+    pub async fn send_exit_signal(&mut self, signal: Signal, coredumped: bool, error_message: impl Into<String>, language_tag: impl Into<String>) {
+        self.global
+            .send(msg::ChannelRequest::new_exit_signal(self.channel, signal, coredumped, error_message, language_tag))
             .await
     }
 
