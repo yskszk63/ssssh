@@ -3,7 +3,7 @@
 
 pub use handle::{AuthHandle, ChannelHandle};
 pub use handler::{Auth, AuthError, AuthHandler, ChannelError, ChannelHandler};
-pub use server::{Server, ServerBuilder};
+pub use server::{Server, ServerBuilder, AcceptError};
 
 mod algorithm;
 mod compression;

@@ -68,8 +68,13 @@ async fn main() {
     let builder = ServerBuilder::default();
     let mut server = builder.build("[::1]:2222".parse().unwrap(), || Handler, || Handler);
     loop {
-    let connection = server.accept().await;
-    //connection.run().await;
-    tokio::spawn(connection.run());
+        match server.accept().await {
+            Ok(connection) => {
+                tokio::spawn(connection.run());
+            }
+            Err(e) => {
+                eprintln!("{}", e);
+            }
+        }
     }
 }

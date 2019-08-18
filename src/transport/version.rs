@@ -1,6 +1,8 @@
-use std::io;
+use std::cmp;
+use std::io::{self, BufRead as _};
 
 use bytes::{BufMut as _, Bytes, BytesMut};
+use failure::Fail;
 use futures::{SinkExt as _, TryStreamExt as _};
 use tokio::codec::{Decoder, Encoder, FramedParts};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -24,7 +26,7 @@ impl Version {
         let client_version = if let Some(e) = codec.try_next().await? {
             match &e.get(..8) {
                 Some(b"SSH-2.0-") => e,
-                _ => return Err(VersionExchangeError::InvalidFormat), // TODO
+                _ => return Err(VersionExchangeError::InvalidFormat),
             }
         } else {
             return Err(VersionExchangeError::InvalidFormat);
@@ -50,11 +52,13 @@ impl Version {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Fail)]
 #[allow(clippy::module_name_repetitions)]
 pub enum VersionExchangeError {
+    #[fail(display = "Invalid SSH identification string")]
     InvalidFormat,
-    Io(io::Error),
+    #[fail(display = "IO Error")]
+    Io(#[fail(cause)] io::Error),
 }
 
 impl From<io::Error> for VersionExchangeError {
@@ -69,6 +73,7 @@ pub type VersionExchangeResult<T> = Result<T, VersionExchangeError>;
 const CR: u8 = b'\r';
 const LF: u8 = b'\n';
 const CRLF: &[u8] = &[CR, LF];
+const MAX_LENGTH: usize = 255;
 
 #[derive(Debug)]
 struct VersionCodec;
@@ -89,16 +94,20 @@ impl Decoder for VersionCodec {
     type Error = VersionExchangeError;
 
     fn decode(&mut self, src: &mut BytesMut) -> VersionExchangeResult<Option<Bytes>> {
-        let cr_index = match src.iter().position(|b| *b == CR) {
-            Some(e) => e,
-            None => return Ok(None),
-        };
-        if src.get(cr_index + 1) != Some(&LF) {
-            return Err(Self::Error::InvalidFormat);
+        let len = cmp::min(src.len(), MAX_LENGTH);
+
+        let mut line = String::new();
+        let n = (&src.as_ref()[..len]).read_line(&mut line)?;
+        src.advance(n);
+
+        if line.ends_with('\n') {
+            line.pop();
+            if line.ends_with('\r') {
+                line.pop();
+            }
         }
-        let result = src.split_to(cr_index).freeze();
-        src.advance(2);
-        Ok(Some(result))
+
+        Ok(Some(line.into()))
     }
 }
 

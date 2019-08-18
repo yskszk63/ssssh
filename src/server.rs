@@ -1,11 +1,37 @@
+use std::io;
 use std::net::SocketAddr;
 
+use failure::Fail;
 use tokio::net::{TcpListener, TcpStream};
 
 use crate::algorithm::Preference;
 use crate::connection::Connection;
 use crate::handler::{AuthHandler, ChannelHandler};
 use crate::hostkey::{HostKey, HostKeys};
+use crate::transport::version::VersionExchangeError;
+
+#[derive(Debug, Fail)]
+pub enum AcceptError {
+    #[fail(display = "Invalid SSH identification string")]
+    InvalidFormat,
+    #[fail(display = "Io Error")]
+    Io(#[fail(cause)] io::Error),
+}
+
+impl From<io::Error> for AcceptError {
+    fn from(v: io::Error) -> Self {
+        Self::Io(v)
+    }
+}
+
+impl From<VersionExchangeError> for AcceptError {
+    fn from(v: VersionExchangeError) -> Self {
+        match v {
+            VersionExchangeError::InvalidFormat => Self::InvalidFormat,
+            VersionExchangeError::Io(e) => e.into(),
+        }
+    }
+}
 
 #[derive(Debug)]
 #[allow(clippy::module_name_repetitions)]
@@ -72,15 +98,17 @@ where
     AHF: Fn() -> AH,
     CHF: Fn() -> CH,
 {
-    pub async fn accept(&mut self) -> Connection<TcpStream, SocketAddr, AH, CH> {
+    pub async fn accept(
+        &mut self,
+    ) -> Result<Connection<TcpStream, SocketAddr, AH, CH>, AcceptError> {
         if self.socket.is_none() {
-            self.socket = Some(TcpListener::bind(&self.addr).unwrap());
+            self.socket = Some(TcpListener::bind(&self.addr)?);
         }
 
         let socket = self.socket.as_mut().unwrap();
 
-        let (socket, remote) = socket.accept().await.unwrap();
-        Connection::establish(
+        let (socket, remote) = socket.accept().await?;
+        Ok(Connection::establish(
             socket,
             self.version.clone(),
             remote,
@@ -89,7 +117,6 @@ where
             (self.auth_handler_factory)(),
             (self.channel_handler_factory)(),
         )
-        .await
-        .unwrap()
+        .await?)
     }
 }
