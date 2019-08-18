@@ -272,6 +272,7 @@ where
                     ChannelEof(item) => self.on_channel_eof(item).await?,
                     ChannelClose(item) => self.on_channel_close(item).await?,
                     ChannelWindowAdjust(item) => self.on_channel_window_adjust(item).await?,
+                    GlobalRequest(item) => self.on_global_request(item).await?,
                     Ignore(..) => {}
                     Unimplemented(item) => self.on_unimplemented(item).await?,
                     Disconnect(item) => {
@@ -408,8 +409,8 @@ where
                     }
                 }
             }
-            Unknown(t) => {
-                println!("{}", t);
+            t => {
+                println!("{:?}", t);
                 msg::ChannelOpenFailure::new(
                     msg.sender_channel(),
                     msg::ChannelOpenFailureReasonCode::UnknownChannelType,
@@ -487,6 +488,13 @@ where
 
         let r = self.handler.channel_close(&handle).await;
         r.map_err(|e| ConnectionError::ChannelError(e.into()))?; // TODO
+        Ok(())
+    }
+
+    async fn on_global_request(&mut self, msg: msg::GlobalRequest) -> ConnectionResult<()> {
+        // TODO
+        dbg!(&msg);
+        self.send(msg::RequestFailure).await?;
         Ok(())
     }
 

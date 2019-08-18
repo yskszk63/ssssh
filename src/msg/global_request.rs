@@ -6,10 +6,27 @@ use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug, Clone)]
+#[allow(clippy::module_name_repetitions)]
+pub enum GlobalRequestType {
+    TcpipForward(String, u32),
+    CancelTcpipForward(String, u32),
+    Unknown(String, Bytes),
+}
+
+impl AsRef<str> for GlobalRequestType {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::TcpipForward(..) => "tcpip-forward",
+            Self::CancelTcpipForward(..) => "cancel-tcpip-forward",
+            Self::Unknown(name, ..) => name,
+        }
+    }
+}
+
+#[derive(Debug, Clone)]
 pub struct GlobalRequest {
-    request_type: String,
+    request_type: GlobalRequestType,
     want_reply: bool,
-    data: Bytes,
 }
 
 impl GlobalRequest {
@@ -26,18 +43,37 @@ impl GlobalRequest {
     pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let request_type = buf.get_string()?;
         let want_reply = buf.get_boolean()?;
-        let data = buf.take(usize::max_value()).collect();
+
+        let request_type = match request_type.as_ref() {
+            "tcpip-forward" => {
+                GlobalRequestType::TcpipForward(buf.get_string()?, buf.get_uint32()?)
+            }
+            "cancel-tcpip-forward" => {
+                GlobalRequestType::CancelTcpipForward(buf.get_string()?, buf.get_uint32()?)
+            }
+            u => {
+                GlobalRequestType::Unknown(u.to_string(), buf.take(usize::max_value()).iter().collect())
+            }
+        };
+
         Ok(Self {
             request_type,
             want_reply,
-            data,
         })
     }
 
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_string(&self.request_type)?;
+        buf.put_string(self.request_type.as_ref())?;
         buf.put_boolean(self.want_reply)?;
-        buf.put_slice(&self.data);
+        match &self.request_type {
+            GlobalRequestType::TcpipForward(addr, port) | GlobalRequestType::CancelTcpipForward(addr, port) => {
+                buf.put_string(addr)?;
+                buf.put_uint32(*port)?;
+            }
+            GlobalRequestType::Unknown(_, data) => {
+                buf.put_slice(data);
+            }
+        }
         Ok(())
     }
 }

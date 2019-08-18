@@ -1,34 +1,40 @@
 use std::io::Cursor;
 
-use bytes::{Buf as _, Bytes, BytesMut};
+use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
 
 use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug, Clone)]
+pub struct X11 {
+    originator_address: String,
+    originator_port: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct ForwardedTcpip {
+    address: String,
+    port: u32,
+    originator_address: String,
+    originator_port: u32,
+}
+
+#[derive(Debug, Clone)]
+pub struct DirectTcpip {
+    host: String,
+    port: u32,
+    originator_address: String,
+    originator_port: u32,
+}
+
+#[derive(Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
 pub enum ChannelOpenChannelType {
     Session,
-    Unknown(String),
-}
-
-impl From<String> for ChannelOpenChannelType {
-    fn from(v: String) -> Self {
-        match v.as_str() {
-            "session" => Self::Session,
-            e => Self::Unknown(e.to_string()),
-        }
-    }
-}
-
-impl From<ChannelOpenChannelType> for String {
-    fn from(v: ChannelOpenChannelType) -> Self {
-        use ChannelOpenChannelType::*;
-        match v {
-            Session => "session".into(),
-            Unknown(e) => e,
-        }
-    }
+    X11(X11),
+    ForwardedTcpip(ForwardedTcpip),
+    DirectTcpip(DirectTcpip),
+    Unknown(String, Bytes),
 }
 
 impl AsRef<str> for ChannelOpenChannelType {
@@ -36,7 +42,10 @@ impl AsRef<str> for ChannelOpenChannelType {
         use ChannelOpenChannelType::*;
         match self {
             Session => "session",
-            Unknown(e) => &e,
+            X11(..) => "x11",
+            ForwardedTcpip(..) => "forwarded-tcpip",
+            DirectTcpip(..) => "direct-tcpip",
+            Unknown(e, ..) => &e,
         }
     }
 }
@@ -47,7 +56,6 @@ pub struct ChannelOpen {
     sender_channel: u32,
     initial_window_size: u32,
     maximum_packet_size: u32,
-    data: Bytes,
 }
 
 impl ChannelOpen {
@@ -68,17 +76,47 @@ impl ChannelOpen {
     }
 
     pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let channel_type = buf.get_string()?.into();
+        let channel_type = buf.get_string()?;
         let sender_channel = buf.get_uint32()?;
         let initial_window_size = buf.get_uint32()?;
         let maximum_packet_size = buf.get_uint32()?;
-        let data = buf.take(usize::max_value()).collect();
+
+        let channel_type = match channel_type.as_ref() {
+            "session" => {
+                ChannelOpenChannelType::Session
+            }
+            "x11" => {
+                ChannelOpenChannelType::X11(X11 {
+                    originator_address: buf.get_string()?,
+                    originator_port: buf.get_uint32()?,
+                })
+            }
+            "forwarded-tcpip" => {
+                ChannelOpenChannelType::ForwardedTcpip(ForwardedTcpip {
+                    address: buf.get_string()?,
+                    port: buf.get_uint32()?,
+                    originator_address: buf.get_string()?,
+                    originator_port: buf.get_uint32()?,
+                })
+            }
+            "direct-tcpip" => {
+                ChannelOpenChannelType::DirectTcpip(DirectTcpip {
+                    host: buf.get_string()?,
+                    port: buf.get_uint32()?,
+                    originator_address: buf.get_string()?,
+                    originator_port: buf.get_uint32()?,
+                })
+            }
+            u => {
+                ChannelOpenChannelType::Unknown(u.to_string(), buf.take(usize::max_value()).iter().collect())
+            }
+        };
+
         Ok(Self {
             channel_type,
             sender_channel,
             initial_window_size,
             maximum_packet_size,
-            data,
         })
     }
 
@@ -87,7 +125,28 @@ impl ChannelOpen {
         buf.put_uint32(self.sender_channel)?;
         buf.put_uint32(self.initial_window_size)?;
         buf.put_uint32(self.maximum_packet_size)?;
-        buf.put_binary_string(&self.data)?;
+        match &self.channel_type {
+            ChannelOpenChannelType::Session => {},
+            ChannelOpenChannelType::X11(item) => {
+                buf.put_string(&item.originator_address)?;
+                buf.put_uint32(item.originator_port)?;
+            }
+            ChannelOpenChannelType::ForwardedTcpip(item) => {
+                buf.put_string(&item.address)?;
+                buf.put_uint32(item.port)?;
+                buf.put_string(&item.originator_address)?;
+                buf.put_uint32(item.originator_port)?;
+            }
+            ChannelOpenChannelType::DirectTcpip(item) => {
+                buf.put_string(&item.host)?;
+                buf.put_uint32(item.port)?;
+                buf.put_string(&item.originator_address)?;
+                buf.put_uint32(item.originator_port)?;
+            }
+            ChannelOpenChannelType::Unknown(_, data) => {
+                buf.put_slice(&data)
+            }
+        }
         Ok(())
     }
 }
