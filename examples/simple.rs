@@ -58,7 +58,6 @@ impl Handler for MyHandler {
         }
             .boxed()
     }
-    /*
 
     fn channel_data(
         &mut self,
@@ -72,7 +71,6 @@ impl Handler for MyHandler {
             Ok(())
         }.boxed()
     }
-    */
 }
 
 #[tokio::main(single_thread)]

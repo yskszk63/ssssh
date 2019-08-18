@@ -198,6 +198,7 @@ where
             .sign(self.seq_stoc, &unencrypted_pkt, &encrypted)
             .unwrap();
         self.seq_stoc += 1;
+        dst.reserve(encrypted.len() + sign.len());
         dst.put(encrypted);
         dst.put(sign);
         Ok(())

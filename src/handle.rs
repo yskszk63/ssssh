@@ -1,5 +1,6 @@
 use bytes::Bytes;
-use tokio::sync::mpsc;
+use futures::channel::mpsc;
+use futures::SinkExt as _;
 
 use crate::msg::{self, Message};
 pub use crate::msg::Signal;

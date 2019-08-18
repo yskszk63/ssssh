@@ -15,7 +15,7 @@ use rand::rngs::StdRng;
 use rand::SeedableRng as _;
 use tokio::codec::{Decoder as _, Framed};
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::sync::mpsc;
+use futures::channel::mpsc;
 
 use crate::algorithm::{Algorithm, Preference};
 use crate::handle::{AuthHandle, ChannelHandle, GlobalHandle};
@@ -124,7 +124,7 @@ where
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: Message) -> MessageResult<()> {
-        let mut buf = BytesMut::with_capacity(1024 * 8);
+        let mut buf = BytesMut::with_capacity(1024 * 8 * 1024); // TODO
         item.put(&mut buf)?;
         Ok(Pin::new(&mut self.io).start_send(buf.freeze())?)
     }
@@ -214,7 +214,7 @@ where
         let mut parts = Codec::new(rng).framed(socket).into_parts();
         parts.read_buf = rbuf;
 
-        let (message_send, message_recieve) = mpsc::channel(32); // TODO
+        let (message_send, message_recieve) = mpsc::channel(0xFFFF); // TODO
 
         let io = Framed::from_parts(parts);
         let (io, change_key_send) = Transport::new(io);
@@ -271,6 +271,7 @@ where
                     ChannelData(item) => self.on_channel_data(item).await?,
                     ChannelEof(item) => self.on_channel_eof(item).await?,
                     ChannelClose(item) => self.on_channel_close(item).await?,
+                    ChannelWindowAdjust(item) => self.on_channel_window_adjust(item).await?,
                     Ignore(..) => {}
                     Unimplemented(item) => self.on_unimplemented(item).await?,
                     Disconnect(item) => {
@@ -486,6 +487,12 @@ where
 
         let r = self.handler.channel_close(&handle).await;
         r.map_err(|e| ConnectionError::ChannelError(e.into()))?; // TODO
+        Ok(())
+    }
+
+    async fn on_channel_window_adjust(&mut self, msg: msg::ChannelWindowAdjust) -> ConnectionResult<()> {
+        // TODO
+        self.send(msg).await?;
         Ok(())
     }
 
