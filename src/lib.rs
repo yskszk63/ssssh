@@ -2,8 +2,8 @@
 #![warn(clippy::pedantic)]
 
 pub use handle::{AuthHandle, ChannelHandle};
-pub use handler::{Auth, AuthError, AuthHandler, ChannelError, ChannelHandler};
-pub use server::{Server, ServerBuilder, AcceptError};
+pub use handler::{Auth, Handler};
+pub use server::{AcceptError, Server, ServerBuilder};
 
 mod algorithm;
 mod compression;

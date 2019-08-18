@@ -3,33 +3,34 @@
 use futures::future::{BoxFuture, FutureExt as _};
 
 use ssssh::ServerBuilder;
-use ssssh::{Auth, AuthError, AuthHandler, ChannelError, ChannelHandler};
+use ssssh::{Auth, Handler};
 use ssssh::{AuthHandle, ChannelHandle};
 
-struct Handler;
+struct MyHandler;
 
-impl AuthHandler for Handler {
-    type Error = AuthError;
+impl Handler for MyHandler {
+    type Error = failure::Error;
 
-    fn handle_password(
+    fn auth_password(
         &mut self,
         _username: &str,
         _password: &[u8],
-        _handle: AuthHandle,
+        handle: &AuthHandle,
     ) -> BoxFuture<Result<Auth, Self::Error>> {
-        async { Ok(Auth::Accept) }.boxed()
+        let mut handle = handle.clone();
+        async move {
+            handle.send_banner("Allow Logged in", "").await;
+            Ok(Auth::Accept)
+        }
+            .boxed()
     }
-}
 
-impl ChannelHandler for Handler {
-    type Error = ChannelError;
-
-    fn handle_shell_request(
+    fn channel_shell_request(
         &mut self,
-        _session_id: u32,
-        mut handle: ChannelHandle,
+        handle: &ChannelHandle,
     ) -> BoxFuture<Result<(), Self::Error>> {
-        async {
+        let mut handle = handle.clone();
+        async move {
             tokio::spawn(async move {
                 handle.send_data("Hello World!").await;
                 handle.send_data("Hello World!").await;
@@ -37,6 +38,7 @@ impl ChannelHandler for Handler {
                 handle.send_data("Hello World!").await;
                 handle.send_data("Hello World!").await;
                 handle.send_data("Hello World!").await;
+                handle.send_extended_data("Hello World!").await;
                 handle.send_eof().await;
                 handle.send_close().await;
             });
@@ -66,7 +68,7 @@ async fn main() {
     });
 
     let builder = ServerBuilder::default();
-    let mut server = builder.build("[::1]:2222".parse().unwrap(), || Handler, || Handler);
+    let mut server = builder.build("[::1]:2222".parse().unwrap(), || MyHandler);
     loop {
         match server.accept().await {
             Ok(connection) => {

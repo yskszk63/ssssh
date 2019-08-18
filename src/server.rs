@@ -6,7 +6,7 @@ use tokio::net::{TcpListener, TcpStream};
 
 use crate::algorithm::Preference;
 use crate::connection::Connection;
-use crate::handler::{AuthHandler, ChannelHandler};
+use crate::handler::Handler;
 use crate::hostkey::{HostKey, HostKeys};
 use crate::transport::version::VersionExchangeError;
 
@@ -60,12 +60,7 @@ impl ServerBuilder {
         self.preference = Some(v);
         self
     }
-    pub fn build<AHF, CHF>(
-        self,
-        addr: SocketAddr,
-        auth_handler_factory: AHF,
-        channel_handler_factory: CHF,
-    ) -> Server<AHF, CHF> {
+    pub fn build<HF>(self, addr: SocketAddr, handler_factory: HF) -> Server<HF> {
         Server {
             version: self.version.unwrap_or_else(|| "SSH-2.0-sssh".into()),
             addr,
@@ -74,33 +69,27 @@ impl ServerBuilder {
                 .hostkeys
                 .unwrap_or_else(|| HostKeys::new(vec![HostKey::gen_ssh_ed25519()])),
             socket: None,
-            auth_handler_factory,
-            channel_handler_factory,
+            handler_factory,
         }
     }
 }
 
 #[derive(Debug)]
-pub struct Server<AHF, CHF> {
+pub struct Server<HF> {
     version: String,
     addr: SocketAddr,
     preference: Preference,
     hostkeys: HostKeys,
     socket: Option<TcpListener>,
-    auth_handler_factory: AHF,
-    channel_handler_factory: CHF,
+    handler_factory: HF,
 }
 
-impl<AHF, CHF, AH, CH> Server<AHF, CHF>
+impl<HF, H> Server<HF>
 where
-    AH: AuthHandler,
-    CH: ChannelHandler,
-    AHF: Fn() -> AH,
-    CHF: Fn() -> CH,
+    H: Handler,
+    HF: Fn() -> H,
 {
-    pub async fn accept(
-        &mut self,
-    ) -> Result<Connection<TcpStream, SocketAddr, AH, CH>, AcceptError> {
+    pub async fn accept(&mut self) -> Result<Connection<TcpStream, H>, AcceptError> {
         if self.socket.is_none() {
             self.socket = Some(TcpListener::bind(&self.addr)?);
         }
@@ -114,8 +103,7 @@ where
             remote,
             self.hostkeys.clone(),
             self.preference.clone(),
-            (self.auth_handler_factory)(),
-            (self.channel_handler_factory)(),
+            (self.handler_factory)(),
         )
         .await?)
     }

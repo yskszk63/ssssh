@@ -1,3 +1,4 @@
+use std::collections::HashMap;
 use std::convert::TryFrom as _;
 use std::error::Error as StdError;
 use std::fmt::Display;
@@ -17,8 +18,8 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::sync::mpsc;
 
 use crate::algorithm::{Algorithm, Preference};
-use crate::handle::GlobalHandle;
-use crate::handler::{Auth, AuthHandler, ChannelHandler};
+use crate::handle::{AuthHandle, ChannelHandle, GlobalHandle};
+use crate::handler::{Auth, Handler};
 use crate::hostkey::HostKeys;
 use crate::kex::{kex, KexEnv};
 use crate::msg::{self, Message, MessageError, MessageId, MessageResult};
@@ -173,51 +174,54 @@ pub type ConnectionResult<T> = Result<T, ConnectionError>;
 type IncommingOrOutgoing<IO> = MapEither<SplitStream<Transport<IO>>, mpsc::Receiver<Message>>;
 
 #[derive(Debug)]
-pub struct Connection<IO, R, AH, CH>
+pub struct Connection<IO, H>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
     version: Version,
     rx: Select<IncommingOrOutgoing<IO>, IncommingOrOutgoing<IO>>,
     tx: SplitSink<Transport<IO>, Message>,
-    remote: Option<R>,
+    remote: Option<String>,
     hostkeys: HostKeys,
     preference: Preference,
-    auth_handler: AH,
-    channel_handler: CH,
     change_key_send: mpsc::Sender<ChangeKeyRequest>,
     message_send: mpsc::Sender<Message>,
+    handler: H,
+    global_handle: GlobalHandle,
+    auth_handle: Option<AuthHandle>,
+    channel_handles: HashMap<u32, ChannelHandle>,
 }
 
-impl<IO, R, AH, CH> Connection<IO, R, AH, CH>
+impl<IO, H> Connection<IO, H>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
-    R: Display,
-    AH: AuthHandler,
-    CH: ChannelHandler,
+    H: Handler,
 {
-    pub async fn establish(
+    pub async fn establish<R>(
         mut socket: IO,
         server_version: impl Into<Bytes>,
         remote: R,
         hostkeys: HostKeys,
         preference: Preference,
-        auth_handler: AH,
-        channel_handler: CH,
-    ) -> VersionExchangeResult<Self> {
+        handler: H,
+    ) -> VersionExchangeResult<Self>
+    where
+        R: Display,
+    {
         let (version, rbuf) = Version::exchange(&mut socket, server_version).await?;
 
         let rng = StdRng::from_entropy();
         let mut parts = Codec::new(rng).framed(socket).into_parts();
         parts.read_buf = rbuf;
 
-        let (message_send, message_recieve) = mpsc::channel(1);
+        let (message_send, message_recieve) = mpsc::channel(32); // TODO
 
         let io = Framed::from_parts(parts);
         let (io, change_key_send) = Transport::new(io);
         let (tx, rx) = io.split();
         let rx = select(MapEither::Left(rx), MapEither::Right(message_recieve));
-        let remote = Some(remote);
+        let global_handle = GlobalHandle::new(message_send.clone());
+        let remote = Some(remote.to_string());
         Ok(Self {
             version,
             rx,
@@ -225,26 +229,32 @@ where
             remote,
             hostkeys,
             preference,
-            auth_handler,
-            channel_handler,
+            handler,
             change_key_send,
             message_send,
+            global_handle,
+            auth_handle: None,
+            channel_handles: HashMap::new(),
         })
-    }
-
-    async fn send(&mut self, item: impl Into<Message>) -> MessageResult<()> {
-        self.message_send.send(item.into()).await.unwrap();
-        Ok(())
     }
 
     pub async fn run(mut self) {
         if let Err(e) = &mut self.run0().await {
             eprintln!("{:?}", e);
-            self.tx
-                .send(msg::Disconnect::new(2, "unexpected", "").into())
+            self.send_immediately(msg::Disconnect::new(2, "unexpected", ""))
                 .await
                 .ok(); // TODO
         }
+    }
+
+    async fn send(&mut self, msg: impl Into<Message>) -> MessageResult<()> {
+        self.message_send.send(msg.into()).await.unwrap();
+        Ok(())
+    }
+
+    async fn send_immediately(&mut self, msg: impl Into<Message>) -> MessageResult<()> {
+        self.tx.send(msg.into()).await?;
+        Ok(())
     }
 
     async fn run0(&mut self) -> ConnectionResult<()> {
@@ -262,6 +272,7 @@ where
                     ChannelEof(item) => self.on_channel_eof(item).await?,
                     ChannelClose(item) => self.on_channel_close(item).await?,
                     Ignore(..) => {}
+                    Unimplemented(item) => self.on_unimplemented(item).await?,
                     Disconnect(item) => {
                         self.on_disconnect(item).await?;
                         break;
@@ -269,7 +280,7 @@ where
                     x => panic!("{:?}", x),
                 },
                 Either::Right(m) => {
-                    self.tx.send(m).await?;
+                    self.send_immediately(m).await?;
                 }
             }
         }
@@ -278,7 +289,7 @@ where
 
     async fn on_kexinit(&mut self, client_kexinit: msg::Kexinit) -> ConnectionResult<()> {
         let server_kexinit = self.preference.to_kexinit();
-        self.tx.send(server_kexinit.clone().into()).await?;
+        self.send_immediately(server_kexinit.clone()).await?;
 
         let algorithm = Algorithm::negotiate(&client_kexinit, &self.preference).unwrap();
         let hostkey = self
@@ -302,7 +313,7 @@ where
         };
 
         if let Some(Either::Left(Ok(Message::Newkeys(..)))) = self.rx.next().await {
-            self.tx.send(msg::Newkeys.into()).await?;
+            self.send_immediately(msg::Newkeys).await?;
         } else {
             panic!()
         }
@@ -331,17 +342,21 @@ where
             return Err(ConnectionError::Overflow); // TODO
         };
 
-        let handle = GlobalHandle::new(self.message_send.clone()).new_auth_handle();
+        if self.auth_handle.is_none() {
+            self.auth_handle = Some(self.global_handle.new_auth_handle())
+        };
+        let handle = self.auth_handle.as_ref().unwrap();
+
         let result = match msg.method_name() {
-            "none" => self.auth_handler.handle_none(msg.user_name(), handle).await,
+            "none" => self.handler.auth_none(msg.user_name(), &handle).await,
             "publickey" => {
-                self.auth_handler
-                    .handle_publickey(msg.user_name(), &[][..], handle)
+                self.handler
+                    .auth_publickey(msg.user_name(), &[][..], &handle)
                     .await // TODO
             }
             "password" => {
-                self.auth_handler
-                    .handle_password(msg.user_name(), &[][..], handle)
+                self.handler
+                    .auth_password(msg.user_name(), &[][..], &handle)
                     .await // TODO
             }
             _ => Ok(Auth::Reject),
@@ -362,14 +377,13 @@ where
     }
 
     async fn on_channel_open(&mut self, msg: msg::ChannelOpen) -> ConnectionResult<()> {
+        let channel_handle = self.global_handle.new_channel_handle(msg.sender_channel());
+        self.channel_handles
+            .insert(channel_handle.channel_id(), channel_handle);
+        let channel_handle = self.channel_handles.get(&msg.sender_channel()).unwrap();
+
         match msg.channel_type() {
-            "session" => {
-                let handle = GlobalHandle::new(self.message_send.clone())
-                    .new_channel_handle(msg.sender_channel());
-                self.channel_handler
-                    .handle_open_session(msg.sender_channel(), handle)
-                    .await
-            }
+            "session" => self.handler.channel_open_session(channel_handle).await,
             _ => return Err(ConnectionError::Overflow), // TODO
         }
         .map_err(|e| ConnectionError::ChannelError(e.into()))?;
@@ -385,28 +399,15 @@ where
     }
 
     async fn on_channel_request(&mut self, msg: msg::ChannelRequest) -> ConnectionResult<()> {
+        let handle = self
+            .channel_handles
+            .get(&msg.recipient_channel())
+            .ok_or_else(|| ConnectionError::Underflow)?; // TODO
+
         match msg.request_type() {
-            "pty-req" => {
-                let handle = GlobalHandle::new(self.message_send.clone())
-                    .new_channel_handle(msg.recipient_channel());
-                self.channel_handler
-                    .handle_pty_request(msg.recipient_channel(), handle)
-                    .await
-            }
-            "shell" => {
-                let handle = GlobalHandle::new(self.message_send.clone())
-                    .new_channel_handle(msg.recipient_channel());
-                self.channel_handler
-                    .handle_shell_request(msg.recipient_channel(), handle)
-                    .await
-            }
-            "exec" => {
-                let handle = GlobalHandle::new(self.message_send.clone())
-                    .new_channel_handle(msg.recipient_channel());
-                self.channel_handler
-                    .handle_exec_request(msg.recipient_channel(), handle)
-                    .await
-            }
+            "pty-req" => self.handler.channel_pty_request(handle).await,
+            "shell" => self.handler.channel_shell_request(handle).await,
+            "exec" => self.handler.channel_exec_request(handle).await,
             x => {
                 dbg!(x);
                 return Err(ConnectionError::Overflow); // TODO
@@ -420,40 +421,45 @@ where
     }
 
     async fn on_channel_data(&mut self, msg: msg::ChannelData) -> ConnectionResult<()> {
-        let handle = GlobalHandle::new(self.message_send.clone())
-            .new_channel_handle(msg.recipient_channel());
-        let r = self
-            .channel_handler
-            .handle_data(msg.recipient_channel(), &msg.data(), handle)
-            .await;
-        r.map_err(|e| ConnectionError::ChannelError(e.into()))?; // TODO
-        Ok(())
-    }
+        let handle = self
+            .channel_handles
+            .get(&msg.recipient_channel())
+            .ok_or_else(|| ConnectionError::Underflow)?; // TODO
 
-    async fn on_channel_close(&mut self, msg: msg::ChannelClose) -> ConnectionResult<()> {
-        let handle = GlobalHandle::new(self.message_send.clone())
-            .new_channel_handle(msg.recipient_channel());
-        let r = self
-            .channel_handler
-            .handle_close(msg.recipient_channel(), handle)
-            .await;
+        let r = self.handler.channel_data(&msg.data(), handle).await;
         r.map_err(|e| ConnectionError::ChannelError(e.into()))?; // TODO
         Ok(())
     }
 
     async fn on_channel_eof(&mut self, msg: msg::ChannelEof) -> ConnectionResult<()> {
-        let handle = GlobalHandle::new(self.message_send.clone())
-            .new_channel_handle(msg.recipient_channel());
-        let r = self
-            .channel_handler
-            .handle_eof(msg.recipient_channel(), handle)
-            .await;
+        let handle = self
+            .channel_handles
+            .get(&msg.recipient_channel())
+            .ok_or_else(|| ConnectionError::Underflow)?; // TODO
+
+        let r = self.handler.channel_eof(handle).await;
+        r.map_err(|e| ConnectionError::ChannelError(e.into()))?; // TODO
+        Ok(())
+    }
+
+    async fn on_channel_close(&mut self, msg: msg::ChannelClose) -> ConnectionResult<()> {
+        let handle = self
+            .channel_handles
+            .remove(&msg.recipient_channel())
+            .ok_or_else(|| ConnectionError::Underflow)?; // TODO
+
+        let r = self.handler.channel_close(&handle).await;
         r.map_err(|e| ConnectionError::ChannelError(e.into()))?; // TODO
         Ok(())
     }
 
     async fn on_disconnect(&mut self, _msg: msg::Disconnect) -> ConnectionResult<()> {
         // TODO
+        Ok(())
+    }
+
+    async fn on_unimplemented(&mut self, msg: msg::Unimplemented) -> ConnectionResult<()> {
+        dbg!(msg);
         Ok(())
     }
 }

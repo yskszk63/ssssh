@@ -46,7 +46,7 @@ impl GlobalHandle {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
 pub struct AuthHandle {
     global: GlobalHandle,
@@ -71,7 +71,7 @@ impl AuthHandle {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
 pub struct ChannelHandle {
     global: GlobalHandle,
@@ -79,6 +79,10 @@ pub struct ChannelHandle {
 }
 
 impl ChannelHandle {
+    pub fn channel_id(&self) -> u32 {
+        self.channel
+    }
+
     pub async fn send_debug(
         &mut self,
         always_display: bool,
