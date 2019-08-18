@@ -238,7 +238,7 @@ impl Kexinit {
 
     pub fn to_bytes(&self) -> Bytes {
         let mut buf = BytesMut::with_capacity(1024 * 8);
-        buf.put_u8(MessageId::Kexinit as u8);
+        buf.put_u8(MessageId::Kexinit.into());
         self.put(&mut buf).unwrap();
         buf.freeze()
     }

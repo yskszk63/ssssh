@@ -19,7 +19,7 @@ use futures::channel::mpsc;
 
 use crate::algorithm::{Algorithm, Preference};
 use crate::handle::{AuthHandle, ChannelHandle, GlobalHandle};
-use crate::handler::{Auth, Handler, Unsupported};
+use crate::handler::{Auth, PasswordAuth, PasswordChangeAuth, Handler, Unsupported};
 use crate::hostkey::HostKeys;
 use crate::kex::{kex, KexEnv};
 use crate::msg::{self, Message, MessageError, MessageId, MessageResult};
@@ -340,6 +340,8 @@ where
     }
 
     async fn on_userauth_request(&mut self, msg: msg::UserauthRequest) -> ConnectionResult<()> {
+        use msg::UserauthRequestMethod as M;
+
         if msg.service_name() != "ssh-connection" {
             return Err(ConnectionError::Overflow); // TODO
         };
@@ -349,30 +351,105 @@ where
         };
         let handle = self.auth_handle.as_ref().unwrap();
 
-        let result = match msg.method_name() {
-            "none" => self.handler.auth_none(msg.user_name(), &handle).await,
-            "publickey" => {
-                self.handler
-                    .auth_publickey(msg.user_name(), &[][..], &handle)
-                    .await // TODO
+        match &msg.method() {
+            M::None => {
+                let result = self.handler.auth_none(msg.user_name(), &handle).await
+                    .map_err(|e| ConnectionError::AuthError(e.into()))?;
+                match result {
+                    Auth::Accept => self.send(msg::UserauthSuccess).await?,
+                    Auth::Reject => {
+                        self.send(msg::UserauthFailure::new(
+                            vec!["publickey", "password"],
+                            false,
+                        ))
+                        .await?
+                    }
+                };
             }
-            "password" => {
-                self.handler
-                    .auth_password(msg.user_name(), &[][..], &handle)
-                    .await // TODO
-            }
-            _ => Ok(Auth::Reject),
-        };
 
-        let result = result.map_err(|e| ConnectionError::AuthError(e.into()))?;
-        match result {
-            Auth::Accept => self.send(msg::UserauthSuccess).await?,
-            Auth::Reject => {
+            M::Publickey(item) => {
+                if let Some(_signature) = item.signature() {
+                    // TODO CHECK
+                    self.send(msg::UserauthSuccess).await?
+
+                } else {
+                    let result = self.handler
+                        .auth_publickey(msg.user_name(), item.blob(), &handle)
+                        .await
+                        .map_err(|e| ConnectionError::AuthError(e.into()))?;
+                    match result {
+                        Auth::Accept => {
+                            self.send(msg::UserauthPkOk::new(item.algorithm(), item.blob().clone())).await?
+                        }
+                        Auth::Reject => {
+                            self.send(msg::UserauthFailure::new(
+                                vec!["publickey", "password"],
+                                false,
+                            ))
+                            .await?
+                        }
+                    };
+                 }
+            }
+
+            M::Password(item) => {
+                if let Some(newpassword) = item.newpassword() {
+                    let result = self.handler
+                        .auth_password_change(msg.user_name(), item.password(), newpassword, &handle)
+                        .await
+                        .map_err(|e| ConnectionError::AuthError(e.into()))?;
+                    match result {
+                        PasswordChangeAuth::Accept => {
+                            self.send(msg::UserauthSuccess).await?
+                        }
+                        PasswordChangeAuth::ChangePasswdreq(msg) => {
+                            self.send(msg::UserauthPasswdChangereq::new(msg, "")).await?
+                        }
+                        PasswordChangeAuth::Partial => {
+                            self.send(msg::UserauthFailure::new(
+                                vec!["publickey", "password"],
+                                true,
+                            ))
+                            .await?
+                        }
+                        PasswordChangeAuth::Reject => {
+                            self.send(msg::UserauthFailure::new(
+                                vec!["publickey", "password"],
+                                false,
+                            ))
+                            .await?
+                        }
+                    };
+
+                 } else {
+                    let result = self.handler
+                        .auth_password(msg.user_name(), item.password(), &handle)
+                        .await
+                        .map_err(|e| ConnectionError::AuthError(e.into()))?;
+                    match result {
+                        PasswordAuth::Accept => {
+                            self.send(msg::UserauthSuccess).await?
+                        }
+                        PasswordAuth::ChangePasswdreq(msg) => {
+                            self.send(msg::UserauthPasswdChangereq::new(msg, "")).await?
+                        }
+                        PasswordAuth::Reject => {
+                            self.send(msg::UserauthFailure::new(
+                                vec!["publickey", "password"],
+                                false,
+                            ))
+                            .await?
+                        }
+                    };
+                }
+            }
+            M::Hostbased(..) | _ => {
+                dbg!(&msg);
                 self.send(msg::UserauthFailure::new(
                     vec!["publickey", "password"],
                     false,
                 ))
-                .await?
+                .await?;
             }
         };
         Ok(())

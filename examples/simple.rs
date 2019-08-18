@@ -3,7 +3,7 @@
 use futures::future::{BoxFuture, FutureExt as _};
 
 use ssssh::ServerBuilder;
-use ssssh::{Auth, Handler};
+use ssssh::{Auth, PasswordAuth, PasswordChangeAuth, Handler};
 use ssssh::{AuthHandle, ChannelHandle};
 
 struct MyHandler;
@@ -11,16 +11,30 @@ struct MyHandler;
 impl Handler for MyHandler {
     type Error = failure::Error;
 
+    fn auth_password_change(
+        &mut self,
+        _username: &str,
+        _oldpassword: &str,
+        _newpassword: &str,
+        _handle: &AuthHandle,
+    ) -> BoxFuture<Result<PasswordChangeAuth, Self::Error>> {
+        async move {
+            Ok(PasswordChangeAuth::ChangePasswdreq("password expired".into()))
+        }
+            .boxed()
+    }
+
     fn auth_password(
         &mut self,
         _username: &str,
-        _password: &[u8],
+        password: &str,
         handle: &AuthHandle,
-    ) -> BoxFuture<Result<Auth, Self::Error>> {
+    ) -> BoxFuture<Result<PasswordAuth, Self::Error>> {
+        dbg!(password);
         let mut handle = handle.clone();
         async move {
             handle.send_banner("Allow Logged in", "").await;
-            Ok(Auth::Accept)
+            Ok(PasswordAuth::ChangePasswdreq("password expired".into()))
         }
             .boxed()
     }

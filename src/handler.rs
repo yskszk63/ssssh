@@ -16,6 +16,19 @@ pub enum Auth {
     Reject,
 }
 
+pub enum PasswordAuth {
+    Accept,
+    Reject,
+    ChangePasswdreq(String),
+}
+
+pub enum PasswordChangeAuth {
+    Accept,
+    Partial,
+    Reject,
+    ChangePasswdreq(String),
+}
+
 pub trait Handler {
     type Error: Into<Box<dyn StdError + Send + Sync>> + fmt::Display + fmt::Debug + From<Unsupported>;
 
@@ -39,10 +52,20 @@ pub trait Handler {
     fn auth_password(
         &mut self,
         _username: &str,
-        _password: &[u8],
+        _password: &str,
         _handle: &AuthHandle,
-    ) -> BoxFuture<Result<Auth, Self::Error>> {
-        async { Ok(Auth::Reject) }.boxed()
+    ) -> BoxFuture<Result<PasswordAuth, Self::Error>> {
+        async { Ok(PasswordAuth::Reject) }.boxed()
+    }
+
+    fn auth_password_change(
+        &mut self,
+        _username: &str,
+        _oldpassword: &str,
+        _newpassword: &str,
+        _handle: &AuthHandle,
+    ) -> BoxFuture<Result<PasswordChangeAuth, Self::Error>> {
+        async { Ok(PasswordChangeAuth::Reject) }.boxed()
     }
 
     fn channel_open_session(

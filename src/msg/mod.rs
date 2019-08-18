@@ -34,6 +34,9 @@ pub use userauth_banner::*;
 pub use userauth_failure::*;
 pub use userauth_request::*;
 pub use userauth_success::*;
+pub use userauth_pk_ok::*;
+pub use userauth_passwd_changereq::*;
+pub use msg60::*;
 
 mod channel_close;
 mod channel_data;
@@ -64,6 +67,9 @@ mod userauth_banner;
 mod userauth_failure;
 mod userauth_request;
 mod userauth_success;
+mod userauth_pk_ok;
+mod userauth_passwd_changereq;
+mod msg60;
 
 #[derive(Debug)]
 pub enum MessageError {
@@ -129,6 +135,9 @@ pub enum Message {
     ChannelOpenFailure(ChannelOpenFailure),
     ChannelWindowAdjust(ChannelWindowAdjust),
     ChannelExtendedData(ChannelExtendedData),
+    UserauthPkOk(UserauthPkOk),
+    UserauthPasswdChangereq(UserauthPasswdChangereq),
+    Msg60(Msg60),
 }
 
 impl Message {
@@ -162,11 +171,14 @@ impl Message {
             Self::ChannelOpenFailure(..) => MessageId::ChannelOpenFailure,
             Self::ChannelWindowAdjust(..) => MessageId::ChannelWindowAdjust,
             Self::ChannelExtendedData(..) => MessageId::ChannelExtendedData,
+            Self::UserauthPkOk(..) => MessageId::UserauthPkOk,
+            Self::UserauthPasswdChangereq(..) => MessageId::UserauthPasswdChangereq,
+            Self::Msg60(..) => MessageId::Msg60,
         }
     }
 
     pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_u8(self.id() as u8);
+        buf.put_u8(self.id().into());
         match self {
             Self::Kexinit(v) => v.put(buf)?,
             Self::KexEcdhInit(v) => v.put(buf)?,
@@ -196,6 +208,9 @@ impl Message {
             Self::ChannelOpenFailure(v) => v.put(buf)?,
             Self::ChannelWindowAdjust(v) => v.put(buf)?,
             Self::ChannelExtendedData(v) => v.put(buf)?,
+            Self::UserauthPkOk(v) => v.put(buf)?,
+            Self::UserauthPasswdChangereq(v) => v.put(buf)?,
+            Self::Msg60(v) => v.put(buf)?,
         };
         Ok(())
     }
@@ -236,6 +251,9 @@ impl TryFrom<Bytes> for Message {
             MessageId::ChannelOpenFailure => ChannelOpenFailure::from(buf)?.into(),
             MessageId::ChannelWindowAdjust => ChannelWindowAdjust::from(buf)?.into(),
             MessageId::ChannelExtendedData => ChannelExtendedData::from(buf)?.into(),
+            MessageId::UserauthPkOk => UserauthPkOk::from(buf)?.into(),
+            MessageId::UserauthPasswdChangereq => UserauthPasswdChangereq::from(buf)?.into(),
+            MessageId::Msg60 => Msg60::from(buf)?.into(),
         })
     }
 }
