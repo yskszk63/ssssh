@@ -2,7 +2,7 @@ use bytes::{Bytes, BytesMut};
 use sodiumoxide::crypto::sign::ed25519::{gen_keypair, sign_detached};
 
 use crate::algorithm::HostKeyAlgorithm;
-use crate::sshbuf::{SshBufMut, SshBufResult};
+use crate::sshbuf::SshBufMut;
 
 #[derive(Debug, Clone)]
 pub struct HostKeys {
@@ -58,14 +58,14 @@ impl HostKey {
         }
     }
 
-    pub fn put_to(&self, buf: &mut impl SshBufMut) -> SshBufResult<()> {
+    pub(crate) fn put_to(&self, buf: &mut impl SshBufMut) {
         buf.put_binary_string(&{
             match self {
                 Self::SshEd25519 { public, .. } => {
                     let name = "ssh-ed25519";
                     let mut buf = BytesMut::with_capacity(name.len() + 4 + 32 + 4);
-                    buf.put_string(name)?;
-                    buf.put_binary_string(&public)?;
+                    buf.put_string(name);
+                    buf.put_binary_string(&public);
                     buf
                 }
             }

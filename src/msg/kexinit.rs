@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
+use bytes::{Buf as _, Bytes, BytesMut};
 use rand::{thread_rng, RngCore as _};
 
 use super::{Message, MessageId, MessageResult};
@@ -218,28 +218,26 @@ impl Kexinit {
         Ok(v)
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_slice(&self.cookie);
-        buf.put_name_list(&self.kex_algorithms)?;
-        buf.put_name_list(&self.server_host_key_algorithms)?;
-        buf.put_name_list(&self.encryption_algorithms_client_to_server)?;
-        buf.put_name_list(&self.encryption_algorithms_server_to_client)?;
-        buf.put_name_list(&self.mac_algorithms_client_to_server)?;
-        buf.put_name_list(&self.mac_algorithms_server_to_client)?;
-        buf.put_name_list(&self.compression_algorithms_client_to_server)?;
-        buf.put_name_list(&self.compression_algorithms_server_to_client)?;
-        buf.put_name_list(&self.languages_client_to_server)?;
-        buf.put_name_list(&self.languages_server_to_client)?;
-        buf.put_boolean(self.first_kex_packet_follows)?;
-        buf.put_uint32(0)?;
-
-        Ok(())
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.extend_from_slice(&self.cookie); // u128?
+        buf.put_name_list(&self.kex_algorithms);
+        buf.put_name_list(&self.server_host_key_algorithms);
+        buf.put_name_list(&self.encryption_algorithms_client_to_server);
+        buf.put_name_list(&self.encryption_algorithms_server_to_client);
+        buf.put_name_list(&self.mac_algorithms_client_to_server);
+        buf.put_name_list(&self.mac_algorithms_server_to_client);
+        buf.put_name_list(&self.compression_algorithms_client_to_server);
+        buf.put_name_list(&self.compression_algorithms_server_to_client);
+        buf.put_name_list(&self.languages_client_to_server);
+        buf.put_name_list(&self.languages_server_to_client);
+        buf.put_boolean(self.first_kex_packet_follows);
+        buf.put_uint32(0);
     }
 
     pub fn to_bytes(&self) -> Bytes {
-        let mut buf = BytesMut::with_capacity(1024 * 8);
-        buf.put_u8(MessageId::Kexinit.into());
-        self.put(&mut buf).unwrap();
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(&vec![MessageId::Kexinit.into()]);
+        self.put(&mut buf);
         buf.freeze()
     }
 }
@@ -259,8 +257,8 @@ mod tests {
     fn test() {
         let m = Kexinit::builder().build();
 
-        let mut buf = BytesMut::with_capacity(1024 * 8);
-        m.put(&mut buf).unwrap();
+        let mut buf = BytesMut::new();
+        m.put(&mut buf);
         Kexinit::from(&mut buf.freeze().into_buf()).unwrap();
     }
 }

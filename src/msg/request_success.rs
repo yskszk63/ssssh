@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
+use bytes::{Buf as _, Bytes, BytesMut};
 
 use super::{Message, MessageResult};
 
@@ -22,9 +22,8 @@ impl RequestSuccess {
         Ok(Self { data })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_slice(&self.data);
-        Ok(())
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.extend_from_slice(&self.data);
     }
 }
 

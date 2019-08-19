@@ -21,10 +21,9 @@ impl ChannelWindowAdjust {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_uint32(self.recipient_channel)?;
-        buf.put_uint32(self.bytes_to_add)?;
-        Ok(())
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.put_uint32(self.recipient_channel);
+        buf.put_uint32(self.bytes_to_add);
     }
 }
 

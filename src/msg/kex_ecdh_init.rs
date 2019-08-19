@@ -22,9 +22,8 @@ impl KexEcdhInit {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_binary_string(&self.ephemeral_public_key)?;
-        Ok(())
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.put_binary_string(&self.ephemeral_public_key);
     }
 }
 

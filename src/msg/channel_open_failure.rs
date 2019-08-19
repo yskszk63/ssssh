@@ -76,12 +76,11 @@ impl ChannelOpenFailure {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_uint32(self.recipient_channel)?;
-        buf.put_uint32(self.reason_code.clone().into())?;
-        buf.put_string(&self.description)?;
-        buf.put_string(&self.language_tag)?;
-        Ok(())
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.put_uint32(self.recipient_channel);
+        buf.put_uint32(self.reason_code.clone().into());
+        buf.put_string(&self.description);
+        buf.put_string(&self.language_tag);
     }
 }
 

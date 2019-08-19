@@ -20,9 +20,8 @@ impl ChannelFailure {
         Ok(Self { recipient_channel })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_uint32(self.recipient_channel)?;
-        Ok(())
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.put_uint32(self.recipient_channel);
     }
 }
 

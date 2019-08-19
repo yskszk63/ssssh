@@ -21,9 +21,8 @@ impl ServiceAccept {
         Ok(Self { name })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_string(&self.name)?;
-        Ok(())
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.put_string(&self.name);
     }
 }
 

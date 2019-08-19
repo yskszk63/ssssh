@@ -16,9 +16,8 @@ impl Ignore {
         Ok(Self { data })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_binary_string(&self.data)?;
-        Ok(())
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.put_binary_string(&self.data);
     }
 }
 

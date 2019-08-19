@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
+use bytes::{Buf as _, Bytes, BytesMut};
 
 use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
@@ -145,39 +145,38 @@ impl UserauthRequest {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_string(&self.user_name)?;
-        buf.put_string(&self.service_name)?;
-        buf.put_string(&self.method.as_ref())?;
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.put_string(&self.user_name);
+        buf.put_string(&self.service_name);
+        buf.put_string(&self.method.as_ref());
         match &self.method {
             UserauthRequestMethod::None => {}
             UserauthRequestMethod::Publickey(item) => {
-                buf.put_boolean(item.signature.is_some())?;
-                buf.put_string(item.algorithm.as_ref())?;
-                buf.put_binary_string(&item.blob)?;
+                buf.put_boolean(item.signature.is_some());
+                buf.put_string(item.algorithm.as_ref());
+                buf.put_binary_string(&item.blob);
                 if let Some(e) = &item.signature {
-                    buf.put_binary_string(e)?;
+                    buf.put_binary_string(e);
                 }
             }
             UserauthRequestMethod::Password(item) => {
-                buf.put_boolean(item.newpassword.is_some())?;
-                buf.put_string(item.password.as_ref())?;
+                buf.put_boolean(item.newpassword.is_some());
+                buf.put_string(item.password.as_ref());
                 if let Some(e) = &item.newpassword {
-                    buf.put_string(e)?;
+                    buf.put_string(e);
                 }
             }
             UserauthRequestMethod::Hostbased(item) => {
-                buf.put_string(&item.algorithm)?;
-                buf.put_binary_string(&item.client_hostkey)?;
-                buf.put_string(&item.client_hostname)?;
-                buf.put_string(&item.user_name)?;
-                buf.put_binary_string(&item.signature)?;
+                buf.put_string(&item.algorithm);
+                buf.put_binary_string(&item.client_hostkey);
+                buf.put_string(&item.client_hostname);
+                buf.put_string(&item.user_name);
+                buf.put_binary_string(&item.signature);
             }
             UserauthRequestMethod::Unknown(_, data) => {
-                buf.put_slice(&data);
+                buf.extend_from_slice(&data);
             }
         }
-        Ok(())
     }
 }
 
