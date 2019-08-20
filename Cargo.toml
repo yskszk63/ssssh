@@ -17,4 +17,4 @@ ring = "0.16"
 
 [dev-dependencies]
 tokio-test = { git="https://github.com/tokio-rs/tokio" }
-tokio-process = { git="https://github.com/tokio-rs/tokio" }
+tokio-net = { git="https://github.com/tokio-rs/tokio", features=["process"] }

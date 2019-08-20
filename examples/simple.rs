@@ -94,8 +94,7 @@ impl Handler for MyHandler {
 #[tokio::main(single_thread)]
 async fn main() {
     tokio::executor::spawn(async {
-        use std::process::Command;
-        use tokio_process::CommandExt as _;
+        use tokio_net::process::Command;
         Command::new("ssh")
             .arg("-oStrictHostKeyChecking=no")
             .arg("-oUserKnownHostsFile=/dev/null")
@@ -104,7 +103,7 @@ async fn main() {
             .arg("::1")
             //.stdout(std::process::Stdio::null())
             //.stderr(std::process::Stdio::null())
-            .spawn_async()
+            .spawn()
             .unwrap()
             .await
             .unwrap();
