@@ -4,7 +4,6 @@ use std::string::FromUtf8Error;
 #[derive(Debug)]
 pub(crate) enum SshBufError {
     Underflow,
-    Overflow,
     FromUtf8Error(FromUtf8Error),
 }
 
@@ -92,6 +91,8 @@ pub(crate) trait SshBuf: Buf {
     }
 }
 
+impl<B: Buf> SshBuf for B {}
+
 pub(crate) trait SshBufMut {
     fn put_boolean(&mut self, v: bool);
     fn put_uint32(&mut self, v: u32);
@@ -144,8 +145,6 @@ impl SshBufMut for BytesMut {
         self.extend_from_slice(v);
     }
 }
-
-impl<B: Buf> SshBuf for B {}
 
 #[cfg(test)]
 mod tests {

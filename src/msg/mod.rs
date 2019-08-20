@@ -91,7 +91,6 @@ impl From<SshBufError> for MessageError {
     fn from(v: SshBufError) -> Self {
         match v {
             SshBufError::FromUtf8Error(e) => Self::FromUtf8Error(e),
-            SshBufError::Overflow => Self::Overflow,
             SshBufError::Underflow => Self::Underflow,
         }
     }
