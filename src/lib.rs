@@ -2,7 +2,7 @@
 #![warn(clippy::pedantic)]
 
 pub use handle::{AuthHandle, ChannelHandle};
-pub use handler::{Auth, PasswordAuth, PasswordChangeAuth, Handler, Unsupported};
+pub use handler::{Auth, Handler, PasswordAuth, PasswordChangeAuth, Unsupported};
 pub use server::{AcceptError, Server, ServerBuilder};
 
 mod algorithm;

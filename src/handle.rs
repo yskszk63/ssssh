@@ -2,8 +2,8 @@ use bytes::Bytes;
 use futures::channel::mpsc;
 use futures::SinkExt as _;
 
-use crate::msg::{self, Message};
 pub use crate::msg::Signal;
+use crate::msg::{self, Message};
 
 #[derive(Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
@@ -114,9 +114,21 @@ impl ChannelHandle {
             .await
     }
 
-    pub async fn send_exit_signal(&mut self, signal: Signal, coredumped: bool, error_message: impl Into<String>, language_tag: impl Into<String>) {
+    pub async fn send_exit_signal(
+        &mut self,
+        signal: Signal,
+        coredumped: bool,
+        error_message: impl Into<String>,
+        language_tag: impl Into<String>,
+    ) {
         self.global
-            .send(msg::ChannelRequest::new_exit_signal(self.channel, signal, coredumped, error_message, language_tag))
+            .send(msg::ChannelRequest::new_exit_signal(
+                self.channel,
+                signal,
+                coredumped,
+                error_message,
+                language_tag,
+            ))
             .await
     }
 

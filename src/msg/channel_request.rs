@@ -193,10 +193,7 @@ pub enum ChannelRequestType {
     Signal(Signal),
     ExitStatus(u32),
     ExitSignal(ExitSignal),
-    Unknown {
-        name: String,
-        data: Bytes,
-    }
+    Unknown { name: String, data: Bytes },
 }
 
 impl ChannelRequestType {
@@ -237,10 +234,12 @@ impl ChannelRequest {
     }
 
     pub fn new_exit_signal(
-        recipient_channel: u32, signal: Signal,
-        coredumped: bool, error_message: impl Into<String>,
-        language_tag: impl Into<String>) -> Self {
-
+        recipient_channel: u32,
+        signal: Signal,
+        coredumped: bool,
+        error_message: impl Into<String>,
+        language_tag: impl Into<String>,
+    ) -> Self {
         Self {
             recipient_channel,
             request_type: ChannelRequestType::ExitSignal(ExitSignal {
@@ -271,67 +270,43 @@ impl ChannelRequest {
         let want_reply = buf.get_boolean()?;
 
         let request_type = match request_type.as_ref() {
-            "pty-req" => {
-                ChannelRequestType::PtyReq(PtyReq {
-                    term_name : buf.get_string()?,
-                    terminal_width : buf.get_uint32()?,
-                    terminal_height : buf.get_uint32()?,
-                    terminal_width_px : buf.get_uint32()?,
-                    terminal_height_px : buf.get_uint32()?,
-                    terminal_modes : buf.get_binary_string()?.into(),
-                })
-            }
-            "x11-req" => {
-                ChannelRequestType::X11Req(X11Req {
-                    signle_connection: buf.get_boolean()?,
-                    x11_authentication_protocol: buf.get_string()?,
-                    x11_authentication_cookie: buf.get_string()?.into(),
-                    x11_screen_number: buf.get_uint32()?,
-                })
-            }
-            "env" => {
-                ChannelRequestType::Env(buf.get_string()?, buf.get_string()?)
-            }
-            "shell" => {
-                ChannelRequestType::Shell
-            }
-            "exec" => {
-                ChannelRequestType::Exec(buf.get_string()?)
-            }
-            "subsystem" => {
-                ChannelRequestType::Subsystem(buf.get_string()?)
-            }
-            "window-change" => {
-                ChannelRequestType::WindowChange(WindowChange {
-                    terminal_width : buf.get_uint32()?,
-                    terminal_height : buf.get_uint32()?,
-                    terminal_width_px : buf.get_uint32()?,
-                    terminal_height_px : buf.get_uint32()?,
-                })
-            }
-            "xon-xoff" => {
-                ChannelRequestType::XonXoff(buf.get_boolean()?)
-            }
-            "signal" => {
-                ChannelRequestType::Signal(buf.get_string()?.into())
-            }
-            "exit-status" => {
-                ChannelRequestType::ExitStatus(buf.get_uint32()?)
-            }
-            "exit-signal" => {
-                ChannelRequestType::ExitSignal(ExitSignal {
-                    signal: buf.get_string()?.into(),
-                    coredumped: buf.get_boolean()?,
-                    error_message: buf.get_string()?,
-                    language_tag: buf.get_string()?,
-                })
-            }
-            name => {
-                ChannelRequestType::Unknown {
-                    name: name.to_string(),
-                    data: buf.take(usize::max_value()).iter().collect()
-                }
-            }
+            "pty-req" => ChannelRequestType::PtyReq(PtyReq {
+                term_name: buf.get_string()?,
+                terminal_width: buf.get_uint32()?,
+                terminal_height: buf.get_uint32()?,
+                terminal_width_px: buf.get_uint32()?,
+                terminal_height_px: buf.get_uint32()?,
+                terminal_modes: buf.get_binary_string()?.into(),
+            }),
+            "x11-req" => ChannelRequestType::X11Req(X11Req {
+                signle_connection: buf.get_boolean()?,
+                x11_authentication_protocol: buf.get_string()?,
+                x11_authentication_cookie: buf.get_string()?.into(),
+                x11_screen_number: buf.get_uint32()?,
+            }),
+            "env" => ChannelRequestType::Env(buf.get_string()?, buf.get_string()?),
+            "shell" => ChannelRequestType::Shell,
+            "exec" => ChannelRequestType::Exec(buf.get_string()?),
+            "subsystem" => ChannelRequestType::Subsystem(buf.get_string()?),
+            "window-change" => ChannelRequestType::WindowChange(WindowChange {
+                terminal_width: buf.get_uint32()?,
+                terminal_height: buf.get_uint32()?,
+                terminal_width_px: buf.get_uint32()?,
+                terminal_height_px: buf.get_uint32()?,
+            }),
+            "xon-xoff" => ChannelRequestType::XonXoff(buf.get_boolean()?),
+            "signal" => ChannelRequestType::Signal(buf.get_string()?.into()),
+            "exit-status" => ChannelRequestType::ExitStatus(buf.get_uint32()?),
+            "exit-signal" => ChannelRequestType::ExitSignal(ExitSignal {
+                signal: buf.get_string()?.into(),
+                coredumped: buf.get_boolean()?,
+                error_message: buf.get_string()?,
+                language_tag: buf.get_string()?,
+            }),
+            name => ChannelRequestType::Unknown {
+                name: name.to_string(),
+                data: buf.take(usize::max_value()).iter().collect(),
+            },
         };
 
         Ok(Self {
@@ -391,7 +366,7 @@ impl ChannelRequest {
                 buf.put_string(v.error_message());
                 buf.put_string(v.language_tag());
             }
-            Unknown {data, ..} => {
+            Unknown { data, .. } => {
                 buf.extend_from_slice(&data);
             }
         }

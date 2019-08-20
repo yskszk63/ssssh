@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use bytes::{Bytes, BytesMut, Buf as _};
+use bytes::{Buf as _, Bytes, BytesMut};
 
 use super::{Message, MessageResult};
 

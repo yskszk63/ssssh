@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use bytes::{Buf as _,Bytes, BytesMut};
+use bytes::{Buf as _, Bytes, BytesMut};
 
 use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
@@ -82,34 +82,27 @@ impl ChannelOpen {
         let maximum_packet_size = buf.get_uint32()?;
 
         let channel_type = match channel_type.as_ref() {
-            "session" => {
-                ChannelOpenChannelType::Session
-            }
-            "x11" => {
-                ChannelOpenChannelType::X11(X11 {
-                    originator_address: buf.get_string()?,
-                    originator_port: buf.get_uint32()?,
-                })
-            }
-            "forwarded-tcpip" => {
-                ChannelOpenChannelType::ForwardedTcpip(ForwardedTcpip {
-                    address: buf.get_string()?,
-                    port: buf.get_uint32()?,
-                    originator_address: buf.get_string()?,
-                    originator_port: buf.get_uint32()?,
-                })
-            }
-            "direct-tcpip" => {
-                ChannelOpenChannelType::DirectTcpip(DirectTcpip {
-                    host: buf.get_string()?,
-                    port: buf.get_uint32()?,
-                    originator_address: buf.get_string()?,
-                    originator_port: buf.get_uint32()?,
-                })
-            }
-            u => {
-                ChannelOpenChannelType::Unknown(u.to_string(), buf.take(usize::max_value()).iter().collect())
-            }
+            "session" => ChannelOpenChannelType::Session,
+            "x11" => ChannelOpenChannelType::X11(X11 {
+                originator_address: buf.get_string()?,
+                originator_port: buf.get_uint32()?,
+            }),
+            "forwarded-tcpip" => ChannelOpenChannelType::ForwardedTcpip(ForwardedTcpip {
+                address: buf.get_string()?,
+                port: buf.get_uint32()?,
+                originator_address: buf.get_string()?,
+                originator_port: buf.get_uint32()?,
+            }),
+            "direct-tcpip" => ChannelOpenChannelType::DirectTcpip(DirectTcpip {
+                host: buf.get_string()?,
+                port: buf.get_uint32()?,
+                originator_address: buf.get_string()?,
+                originator_port: buf.get_uint32()?,
+            }),
+            u => ChannelOpenChannelType::Unknown(
+                u.to_string(),
+                buf.take(usize::max_value()).iter().collect(),
+            ),
         };
 
         Ok(Self {
@@ -126,7 +119,7 @@ impl ChannelOpen {
         buf.put_uint32(self.initial_window_size);
         buf.put_uint32(self.maximum_packet_size);
         match &self.channel_type {
-            ChannelOpenChannelType::Session => {},
+            ChannelOpenChannelType::Session => {}
             ChannelOpenChannelType::X11(item) => {
                 buf.put_string(&item.originator_address);
                 buf.put_uint32(item.originator_port);
@@ -143,9 +136,7 @@ impl ChannelOpen {
                 buf.put_string(&item.originator_address);
                 buf.put_uint32(item.originator_port);
             }
-            ChannelOpenChannelType::Unknown(_, data) => {
-                buf.extend_from_slice(&data)
-            }
+            ChannelOpenChannelType::Unknown(_, data) => buf.extend_from_slice(&data),
         }
     }
 }

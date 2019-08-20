@@ -11,9 +11,9 @@ tokio = { git="https://github.com/tokio-rs/tokio" }
 futures-preview = "0.3.0-alpha.18"
 bytes = "0.4"
 rand = "0.7"
-sodiumoxide = "0.2"
 openssl = "0.10"
 failure = "0.1"
+ring = "0.16"
 
 [dev-dependencies]
 tokio-test = { git="https://github.com/tokio-rs/tokio" }

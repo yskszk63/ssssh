@@ -12,8 +12,7 @@ impl UserauthSuccess {
         Ok(Self)
     }
 
-    pub fn put(&self, _buf: &mut BytesMut) {
-    }
+    pub fn put(&self, _buf: &mut BytesMut) {}
 }
 
 impl From<UserauthSuccess> for Message {

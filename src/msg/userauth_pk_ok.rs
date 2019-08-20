@@ -30,10 +30,7 @@ impl UserauthPkOk {
     pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let algorithm = buf.get_string()?;
         let blob = buf.get_binary_string()?.into();
-        Ok(Self {
-            algorithm,
-            blob,
-        })
+        Ok(Self { algorithm, blob })
     }
 
     pub fn put(&self, buf: &mut BytesMut) {
