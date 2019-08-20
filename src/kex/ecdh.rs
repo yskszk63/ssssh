@@ -76,14 +76,14 @@ where
     let hostkey = env.hostkey;
 
     let mut buf = BytesMut::with_capacity(1024 * 8);
-    buf.put_binary_string(client_version).unwrap();
-    buf.put_binary_string(server_version).unwrap();
-    buf.put_binary_string(&client_kexinit).unwrap();
-    buf.put_binary_string(&server_kexinit).unwrap();
-    hostkey.put_to(&mut buf).unwrap();
-    buf.put_binary_string(client_ephemeral_public).unwrap();
-    buf.put_binary_string(server_ephemeral_public).unwrap();
-    buf.put_mpint(shared_key).unwrap();
+    buf.put_binary_string(client_version);
+    buf.put_binary_string(server_version);
+    buf.put_binary_string(&client_kexinit);
+    buf.put_binary_string(&server_kexinit);
+    hostkey.put_to(&mut buf);
+    buf.put_binary_string(client_ephemeral_public);
+    buf.put_binary_string(server_ephemeral_public);
+    buf.put_mpint(shared_key);
 
     let hash = sodiumoxide::crypto::hash::sha256::hash(&buf).0;
     Bytes::from(&hash[..])

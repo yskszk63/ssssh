@@ -30,9 +30,8 @@ impl Unimplemented {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_uint32(self.packet_sequence_number)?;
-        Ok(())
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.put_uint32(self.packet_sequence_number);
     }
 }
 

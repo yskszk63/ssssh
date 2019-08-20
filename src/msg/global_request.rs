@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
+use bytes::{Buf as _, Bytes, BytesMut};
 
 use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
@@ -62,19 +62,18 @@ impl GlobalRequest {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_string(self.request_type.as_ref())?;
-        buf.put_boolean(self.want_reply)?;
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.put_string(self.request_type.as_ref());
+        buf.put_boolean(self.want_reply);
         match &self.request_type {
             GlobalRequestType::TcpipForward(addr, port) | GlobalRequestType::CancelTcpipForward(addr, port) => {
-                buf.put_string(addr)?;
-                buf.put_uint32(*port)?;
+                buf.put_string(addr);
+                buf.put_uint32(*port);
             }
             GlobalRequestType::Unknown(_, data) => {
-                buf.put_slice(data);
+                buf.extend_from_slice(data);
             }
         }
-        Ok(())
     }
 }
 

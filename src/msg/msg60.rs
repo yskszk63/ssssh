@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use bytes::{Bytes, BytesMut, Buf as _, BufMut as _};
+use bytes::{Bytes, BytesMut, Buf as _};
 
 use super::{Message, MessageResult};
 
@@ -12,9 +12,8 @@ impl Msg60 {
         Ok(Self(buf.take(usize::max_value()).iter().collect()))
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_slice(&self.0);
-        Ok(())
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.extend_from_slice(&self.0);
     }
 }
 

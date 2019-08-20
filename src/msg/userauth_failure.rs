@@ -35,10 +35,9 @@ impl UserauthFailure {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_name_list(&self.authentications_that_can_continue)?;
-        buf.put_boolean(self.parital_success)?;
-        Ok(())
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.put_name_list(&self.authentications_that_can_continue);
+        buf.put_boolean(self.parital_success);
     }
 }
 

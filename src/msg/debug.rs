@@ -38,11 +38,10 @@ impl Debug {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_boolean(self.always_display)?;
-        buf.put_string(&self.message)?;
-        buf.put_string(&self.language_tag)?;
-        Ok(())
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.put_boolean(self.always_display);
+        buf.put_string(&self.message);
+        buf.put_string(&self.language_tag);
     }
 }
 

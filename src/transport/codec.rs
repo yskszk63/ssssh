@@ -1,6 +1,6 @@
 use std::io;
 
-use bytes::{Buf, BufMut, Bytes, BytesMut};
+use bytes::{Buf as _, BufMut as _, IntoBuf as _, Bytes, BytesMut};
 use openssl::hash::MessageDigest;
 use rand::{CryptoRng, RngCore};
 use tokio::codec::{Decoder, Encoder};
@@ -39,7 +39,7 @@ fn calculate_hash(
     len: usize,
 ) -> Bytes {
     let mut content = BytesMut::with_capacity(1024 * 8);
-    content.put_mpint(key).unwrap();
+    content.put_mpint(key);
     content.put_slice(hash);
     content.put_u8(kind);
     content.put_slice(session_id);
@@ -225,7 +225,7 @@ where
                     }
                     let encrypted_first = src.split_to(bs).freeze();
                     let first = enc.encrypt(&encrypted_first).unwrap();
-                    let len = io::Cursor::new(&first).get_u32_be() as usize;
+                    let len = first.as_ref().into_buf().get_u32_be() as usize;
                     self.encrypt_state = EncryptState::FillBuffer {
                         encrypted_first,
                         first,

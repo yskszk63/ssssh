@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
+use bytes::{Buf as _, Bytes, BytesMut};
 
 use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
@@ -341,61 +341,60 @@ impl ChannelRequest {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
+    pub fn put(&self, buf: &mut BytesMut) {
         use ChannelRequestType::*;
 
-        buf.put_uint32(self.recipient_channel)?;
-        buf.put_string(&self.request_type.name())?;
-        buf.put_boolean(self.want_reply)?;
+        buf.put_uint32(self.recipient_channel);
+        buf.put_string(&self.request_type.name());
+        buf.put_boolean(self.want_reply);
         match &self.request_type {
             PtyReq(v) => {
-                buf.put_string(v.term_name())?;
-                buf.put_uint32(v.terminal_width())?;
-                buf.put_uint32(v.terminal_height())?;
-                buf.put_uint32(v.terminal_width_px())?;
-                buf.put_uint32(v.terminal_height_px())?;
-                buf.put_binary_string(v.terminal_modes())?;
+                buf.put_string(v.term_name());
+                buf.put_uint32(v.terminal_width());
+                buf.put_uint32(v.terminal_height());
+                buf.put_uint32(v.terminal_width_px());
+                buf.put_uint32(v.terminal_height_px());
+                buf.put_binary_string(v.terminal_modes());
             }
             X11Req(v) => {
-                buf.put_boolean(v.signle_connection())?;
-                buf.put_string(v.x11_authentication_protocol())?;
-                buf.put_binary_string(v.x11_authentication_cookie())?;
-                buf.put_uint32(v.x11_screen_number())?;
+                buf.put_boolean(v.signle_connection());
+                buf.put_string(v.x11_authentication_protocol());
+                buf.put_binary_string(v.x11_authentication_cookie());
+                buf.put_uint32(v.x11_screen_number());
             }
             Env(k, v) => {
-                buf.put_string(k)?;
-                buf.put_string(v)?;
+                buf.put_string(k);
+                buf.put_string(v);
             }
             Shell => {}
             Exec(v) | Subsystem(v) => {
-                buf.put_string(v)?;
+                buf.put_string(v);
             }
             WindowChange(v) => {
-                buf.put_uint32(v.terminal_width())?;
-                buf.put_uint32(v.terminal_height())?;
-                buf.put_uint32(v.terminal_width_px())?;
-                buf.put_uint32(v.terminal_height_px())?;
+                buf.put_uint32(v.terminal_width());
+                buf.put_uint32(v.terminal_height());
+                buf.put_uint32(v.terminal_width_px());
+                buf.put_uint32(v.terminal_height_px());
             }
             XonXoff(v) => {
-                buf.put_boolean(*v)?;
+                buf.put_boolean(*v);
             }
             Signal(v) => {
-                buf.put_string(v.as_ref())?;
+                buf.put_string(v.as_ref());
             }
             ExitStatus(v) => {
-                buf.put_uint32(*v)?;
+                buf.put_uint32(*v);
             }
             ExitSignal(v) => {
-                buf.put_string(v.signal().as_ref())?;
-                buf.put_boolean(v.coredumped())?;
-                buf.put_string(v.error_message())?;
-                buf.put_string(v.language_tag())?;
+                buf.put_string(v.signal().as_ref());
+                buf.put_boolean(v.coredumped());
+                buf.put_string(v.error_message());
+                buf.put_string(v.language_tag());
             }
             Unknown {data, ..} => {
-                buf.put_slice(&data);
+                buf.extend_from_slice(&data);
             }
         }
-        Ok(())
     }
 }
 

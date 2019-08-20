@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
+use bytes::{Buf as _, Bytes, BytesMut};
 
 use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
@@ -46,13 +46,12 @@ impl ChannelOpenConfirmation {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_uint32(self.recipient_channel)?;
-        buf.put_uint32(self.sender_channel)?;
-        buf.put_uint32(self.initial_window_size)?;
-        buf.put_uint32(self.maximum_packet_size)?;
-        buf.put_slice(&self.data);
-        Ok(())
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.put_uint32(self.recipient_channel);
+        buf.put_uint32(self.sender_channel);
+        buf.put_uint32(self.initial_window_size);
+        buf.put_uint32(self.maximum_packet_size);
+        buf.extend_from_slice(&self.data);
     }
 }
 

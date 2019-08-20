@@ -1,10 +1,9 @@
-use bytes::{Buf, BufMut};
+use bytes::{Buf, BytesMut};
 use std::string::FromUtf8Error;
 
 #[derive(Debug)]
-pub enum SshBufError {
+pub(crate) enum SshBufError {
     Underflow,
-    Overflow,
     FromUtf8Error(FromUtf8Error),
 }
 
@@ -14,9 +13,9 @@ impl From<FromUtf8Error> for SshBufError {
     }
 }
 
-pub type SshBufResult<T> = Result<T, SshBufError>;
+pub(crate) type SshBufResult<T> = Result<T, SshBufError>;
 
-pub trait SshBuf: Buf {
+pub(crate) trait SshBuf: Buf {
     fn get_boolean(&mut self) -> SshBufResult<bool> {
         if !self.has_remaining() {
             return Err(SshBufError::Underflow);
@@ -92,80 +91,60 @@ pub trait SshBuf: Buf {
     }
 }
 
-pub trait SshBufMut: BufMut {
-    fn put_boolean(&mut self, v: bool) -> SshBufResult<()> {
-        if !self.has_remaining_mut() {
-            return Err(SshBufError::Overflow);
-        };
+impl<B: Buf> SshBuf for B {}
 
+pub(crate) trait SshBufMut {
+    fn put_boolean(&mut self, v: bool);
+    fn put_uint32(&mut self, v: u32);
+    fn put_uint64(&mut self, v: u64);
+    fn put_string(&mut self, v: &str);
+    fn put_mpint(&mut self, v: &[u8]);
+    fn put_name_list(&mut self, v: impl IntoIterator<Item=impl Into<String>>);
+    fn put_binary_string(&mut self, v: &[u8]);
+}
+
+impl SshBufMut for BytesMut {
+    fn put_boolean(&mut self, v: bool) {
         let v = if v { 1 } else { 0 };
-        self.put_u8(v);
-        Ok(())
+        self.extend_from_slice(&[v][..]);
     }
 
-    fn put_uint32(&mut self, v: u32) -> SshBufResult<()> {
-        if self.remaining_mut() < 4 {
-            return Err(SshBufError::Overflow);
-        }
-
-        self.put_u32_be(v);
-        Ok(())
+    fn put_uint32(&mut self, v: u32) {
+        self.extend_from_slice(&v.to_be_bytes());
     }
 
-    fn put_uint64(&mut self, v: u64) -> SshBufResult<()> {
-        if self.remaining_mut() < 8 {
-            return Err(SshBufError::Overflow);
-        }
-
-        self.put_u64_be(v);
-        Ok(())
+    fn put_uint64(&mut self, v: u64) {
+        self.extend_from_slice(&v.to_be_bytes());
     }
 
-    fn put_string(&mut self, v: &str) -> SshBufResult<()> {
+    fn put_string(&mut self, v: &str) {
         let v = v.as_bytes();
-        self.put_uint32(v.len() as u32)?;
-
-        if self.remaining_mut() < v.len() {
-            return Err(SshBufError::Overflow);
-        }
-        self.put_slice(v);
-        Ok(())
+        self.put_uint32(v.len() as u32);
+        self.extend_from_slice(v);
     }
 
-    fn put_mpint(&mut self, v: &[u8]) -> SshBufResult<()> {
+    fn put_mpint(&mut self, v: &[u8]) {
         let (head, len) = if !v.is_empty() && v[0] & 0x80 != 0 {
             (&b"\x00"[..], v.len() + 1)
         } else {
             (&b""[..], v.len())
         };
-        //self.put_uint32(v.len() as u32)?;
-        self.put_uint32(len as u32)?;
-
-        if self.remaining_mut() < len {
-            return Err(SshBufError::Overflow);
+        self.put_uint32(len as u32);
+        if !head.is_empty() {
+            self.extend_from_slice(head);
         }
-        self.put_slice(head);
-        self.put_slice(v);
-        Ok(())
+        self.extend_from_slice(v);
     }
 
-    fn put_name_list(&mut self, v: &[String]) -> SshBufResult<()> {
-        self.put_string(&v.join(","))
+    fn put_name_list(&mut self, v: impl IntoIterator<Item=impl Into<String>>) {
+        self.put_string(&v.into_iter().map(Into::into).collect::<Vec<_>>().join(","))
     }
 
-    fn put_binary_string(&mut self, v: &[u8]) -> SshBufResult<()> {
-        self.put_uint32(v.len() as u32)?;
-
-        if self.remaining_mut() < v.len() {
-            return Err(SshBufError::Overflow);
-        }
-        self.put_slice(v);
-        Ok(())
+    fn put_binary_string(&mut self, v: &[u8]) {
+        self.put_uint32(v.len() as u32);
+        self.extend_from_slice(v);
     }
 }
-
-impl<B: Buf> SshBuf for B {}
-impl<B: BufMut> SshBufMut for B {}
 
 #[cfg(test)]
 mod tests {
@@ -176,8 +155,8 @@ mod tests {
     #[test]
     fn test_boolean() {
         let mut buf = BytesMut::default();
-        buf.put_boolean(true).unwrap();
-        buf.put_boolean(false).unwrap();
+        buf.put_boolean(true);
+        buf.put_boolean(false);
         assert_eq!(buf, BytesMut::from(&[1, 0][..]));
 
         let mut buf = io::Cursor::new(buf);
@@ -188,7 +167,7 @@ mod tests {
     #[test]
     fn test_uint32() {
         let mut buf = BytesMut::default();
-        buf.put_uint32(0xcafebabe).unwrap();
+        buf.put_uint32(0xcafebabe);
         assert_eq!(buf, BytesMut::from(&[0xca, 0xfe, 0xba, 0xbe][..]));
 
         let mut buf = io::Cursor::new(buf);
@@ -198,7 +177,7 @@ mod tests {
     #[test]
     fn test_uint64() {
         let mut buf = BytesMut::default();
-        buf.put_uint64(0xcafebabe).unwrap();
+        buf.put_uint64(0xcafebabe);
         assert_eq!(
             buf,
             BytesMut::from(&[0x00, 0x00, 0x00, 0x00, 0xca, 0xfe, 0xba, 0xbe][..])
@@ -211,8 +190,8 @@ mod tests {
     #[test]
     fn test_string() {
         let mut buf = BytesMut::default();
-        buf.put_string("").unwrap();
-        buf.put_string("testing").unwrap();
+        buf.put_string("");
+        buf.put_string("testing");
         assert_eq!(
             buf,
             BytesMut::from(
@@ -231,9 +210,8 @@ mod tests {
     #[test]
     fn test_mpint() {
         let mut buf = BytesMut::default();
-        buf.put_mpint(&[][..]).unwrap();
-        buf.put_mpint(&[0x09, 0xa3, 0x78, 0xf9, 0xb2, 0xe3, 0x32, 0xa7][..])
-            .unwrap();
+        buf.put_mpint(&[][..]);
+        buf.put_mpint(&[0x09, 0xa3, 0x78, 0xf9, 0xb2, 0xe3, 0x32, 0xa7][..]);
         assert_eq!(
             buf,
             BytesMut::from(
@@ -255,10 +233,9 @@ mod tests {
     #[test]
     fn test_name_list() {
         let mut buf = BytesMut::default();
-        buf.put_name_list(&[][..]).unwrap();
-        buf.put_name_list(&["zlib".into()][..]).unwrap();
-        buf.put_name_list(&["zlib".into(), "none".into()][..])
-            .unwrap();
+        buf.put_name_list(vec![] as Vec<&str>);
+        buf.put_name_list(vec!["zlib"]);
+        buf.put_name_list(vec!["zlib", "none"]);
         assert_eq!(
             buf,
             BytesMut::from(

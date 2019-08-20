@@ -1,6 +1,6 @@
 use std::io::Cursor;
 
-use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
+use bytes::{Buf as _,Bytes, BytesMut};
 
 use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
@@ -120,34 +120,33 @@ impl ChannelOpen {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_string(self.channel_type.as_ref())?;
-        buf.put_uint32(self.sender_channel)?;
-        buf.put_uint32(self.initial_window_size)?;
-        buf.put_uint32(self.maximum_packet_size)?;
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.put_string(self.channel_type.as_ref());
+        buf.put_uint32(self.sender_channel);
+        buf.put_uint32(self.initial_window_size);
+        buf.put_uint32(self.maximum_packet_size);
         match &self.channel_type {
             ChannelOpenChannelType::Session => {},
             ChannelOpenChannelType::X11(item) => {
-                buf.put_string(&item.originator_address)?;
-                buf.put_uint32(item.originator_port)?;
+                buf.put_string(&item.originator_address);
+                buf.put_uint32(item.originator_port);
             }
             ChannelOpenChannelType::ForwardedTcpip(item) => {
-                buf.put_string(&item.address)?;
-                buf.put_uint32(item.port)?;
-                buf.put_string(&item.originator_address)?;
-                buf.put_uint32(item.originator_port)?;
+                buf.put_string(&item.address);
+                buf.put_uint32(item.port);
+                buf.put_string(&item.originator_address);
+                buf.put_uint32(item.originator_port);
             }
             ChannelOpenChannelType::DirectTcpip(item) => {
-                buf.put_string(&item.host)?;
-                buf.put_uint32(item.port)?;
-                buf.put_string(&item.originator_address)?;
-                buf.put_uint32(item.originator_port)?;
+                buf.put_string(&item.host);
+                buf.put_uint32(item.port);
+                buf.put_string(&item.originator_address);
+                buf.put_uint32(item.originator_port);
             }
             ChannelOpenChannelType::Unknown(_, data) => {
-                buf.put_slice(&data)
+                buf.extend_from_slice(&data)
             }
         }
-        Ok(())
     }
 }
 

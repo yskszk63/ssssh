@@ -35,21 +35,20 @@ impl KexEcdhReply {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
+    pub fn put(&self, buf: &mut BytesMut) {
         buf.put_binary_string(&{
-            let mut buf = BytesMut::with_capacity(1024 * 8);
-            buf.put_string("ssh-ed25519")?; // TODO xxxx
-            buf.put_binary_string(&self.public_host_key)?;
+            let mut buf = BytesMut::new();
+            buf.put_string("ssh-ed25519"); // TODO xxxx
+            buf.put_binary_string(&self.public_host_key);
             buf
-        })?;
-        buf.put_binary_string(&self.ephemeral_public_key)?;
+        });
+        buf.put_binary_string(&self.ephemeral_public_key);
         buf.put_binary_string(&{
             let mut b = BytesMut::with_capacity(1024 * 8);
-            b.put_string("ssh-ed25519")?; // TODO xxx
-            b.put_binary_string(&self.signature)?;
+            b.put_string("ssh-ed25519"); // TODO xxx
+            b.put_binary_string(&self.signature);
             b
-        })?;
-        Ok(())
+        });
     }
 }
 

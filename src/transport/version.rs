@@ -1,7 +1,7 @@
 use std::cmp;
 use std::io::{self, BufRead as _};
 
-use bytes::{BufMut as _, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
 use failure::Fail;
 use futures::{SinkExt as _, TryStreamExt as _};
 use tokio::codec::{Decoder, Encoder, FramedParts};
@@ -83,8 +83,8 @@ impl Encoder for VersionCodec {
     type Error = VersionExchangeError;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> VersionExchangeResult<()> {
-        dst.put_slice(&item);
-        dst.put_slice(CRLF);
+        dst.extend_from_slice(&item);
+        dst.extend_from_slice(CRLF);
         Ok(())
     }
 }

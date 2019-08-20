@@ -36,10 +36,9 @@ impl UserauthPasswdChangereq {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_string(&self.prompt)?;
-        buf.put_string(&self.language_tag)?;
-        Ok(())
+    pub fn put(&self, buf: &mut BytesMut) {
+        buf.put_string(&self.prompt);
+        buf.put_string(&self.language_tag);
     }
 }
 
