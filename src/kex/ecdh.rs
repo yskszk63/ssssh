@@ -1,7 +1,9 @@
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use futures::{Sink, SinkExt as _, TryStream, TryStreamExt as _};
-use rand::{thread_rng, RngCore as _};
-use sodiumoxide::crypto::scalarmult::curve25519;
+use ring::agreement::{agree_ephemeral, EphemeralPrivateKey, PublicKey, UnparsedPublicKey, X25519};
+use ring::digest::{Context, SHA256};
+use ring::error::Unspecified;
+use ring::rand::SystemRandom;
 
 use super::{KexEnv, KexError, KexResult, KexReturn};
 use crate::msg::{KexEcdhReply, Message, MessageError};
@@ -20,18 +22,21 @@ where
     };
 
     let client_ephemeral_public = kex_ecdh_init.ephemeral_public_key();
-    let client_ephemeral_public = curve25519::GroupElement::from_slice(client_ephemeral_public)
-        .ok_or_else(|| KexError::ProtocolError)?;
+    let client_ephemeral_public = UnparsedPublicKey::new(&X25519, client_ephemeral_public);
+
     let (server_ephemeral_secret, server_ephemeral_public) = gen_keypair();
-    let key = match curve25519::scalarmult(&server_ephemeral_secret, &client_ephemeral_public) {
-        Ok(e) => Bytes::from(&e.0[..]),
-        Err(..) => return Err(KexError::ProtocolError),
-    };
+    let key = agree_ephemeral(
+        server_ephemeral_secret,
+        &client_ephemeral_public,
+        Unspecified,
+        |e| Ok(Bytes::from(e)),
+    )
+    .unwrap();
 
     let hash = calculate_hash(
         env,
-        &client_ephemeral_public.0,
-        &server_ephemeral_public.0,
+        client_ephemeral_public.bytes(),
+        server_ephemeral_public.as_ref(),
         &key,
     );
     let signature = env.hostkey.sign(&hash).unwrap();
@@ -40,7 +45,7 @@ where
         .send(
             KexEcdhReply::new(
                 env.hostkey.publickey(),
-                &server_ephemeral_public.0,
+                server_ephemeral_public.as_ref(),
                 &signature,
             )
             .into(),
@@ -50,12 +55,10 @@ where
     Ok(KexReturn { hash, key })
 }
 
-fn gen_keypair() -> (curve25519::Scalar, curve25519::GroupElement) {
-    let mut secret = [0; curve25519::SCALARBYTES];
-    thread_rng().fill_bytes(&mut secret);
-    let secret = curve25519::Scalar(secret);
-    let publickey = curve25519::scalarmult_base(&secret);
-
+fn gen_keypair() -> (EphemeralPrivateKey, PublicKey) {
+    let rnd = SystemRandom::new();
+    let secret = EphemeralPrivateKey::generate(&X25519, &rnd).unwrap();
+    let publickey = secret.compute_public_key().unwrap();
     (secret, publickey)
 }
 
@@ -75,16 +78,15 @@ where
     let server_kexinit = env.server_kexinit.to_bytes();
     let hostkey = env.hostkey;
 
-    let mut buf = BytesMut::with_capacity(1024 * 8);
-    buf.put_binary_string(client_version);
-    buf.put_binary_string(server_version);
-    buf.put_binary_string(&client_kexinit);
-    buf.put_binary_string(&server_kexinit);
-    hostkey.put_to(&mut buf);
-    buf.put_binary_string(client_ephemeral_public);
-    buf.put_binary_string(server_ephemeral_public);
-    buf.put_mpint(shared_key);
-
-    let hash = sodiumoxide::crypto::hash::sha256::hash(&buf).0;
-    Bytes::from(&hash[..])
+    let mut ctx = Context::new(&SHA256);
+    ctx.put_binary_string(client_version);
+    ctx.put_binary_string(server_version);
+    ctx.put_binary_string(&client_kexinit);
+    ctx.put_binary_string(&server_kexinit);
+    hostkey.put_to(&mut ctx);
+    ctx.put_binary_string(client_ephemeral_public);
+    ctx.put_binary_string(server_ephemeral_public);
+    ctx.put_mpint(shared_key);
+    let hash = ctx.finish();
+    Bytes::from(hash.as_ref())
 }

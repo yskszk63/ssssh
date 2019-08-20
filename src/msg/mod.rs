@@ -24,6 +24,7 @@ pub use ignore::*;
 pub use kex_ecdh_init::*;
 pub use kex_ecdh_reply::*;
 pub use kexinit::*;
+pub use msg60::*;
 pub use newkeys::*;
 pub use request_failure::*;
 pub use request_success::*;
@@ -32,11 +33,10 @@ pub use service_request::*;
 pub use unimplemented::*;
 pub use userauth_banner::*;
 pub use userauth_failure::*;
+pub use userauth_passwd_changereq::*;
+pub use userauth_pk_ok::*;
 pub use userauth_request::*;
 pub use userauth_success::*;
-pub use userauth_pk_ok::*;
-pub use userauth_passwd_changereq::*;
-pub use msg60::*;
 
 mod channel_close;
 mod channel_data;
@@ -57,6 +57,7 @@ mod ignore;
 mod kex_ecdh_init;
 mod kex_ecdh_reply;
 mod kexinit;
+mod msg60;
 mod newkeys;
 mod request_failure;
 mod request_success;
@@ -65,11 +66,10 @@ mod service_request;
 mod unimplemented;
 mod userauth_banner;
 mod userauth_failure;
+mod userauth_passwd_changereq;
+mod userauth_pk_ok;
 mod userauth_request;
 mod userauth_success;
-mod userauth_pk_ok;
-mod userauth_passwd_changereq;
-mod msg60;
 
 #[derive(Debug)]
 pub enum MessageError {

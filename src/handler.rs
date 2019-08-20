@@ -1,5 +1,5 @@
-use std::fmt;
 use std::error::Error as StdError;
+use std::fmt;
 
 use failure::Fail;
 use futures::future::{BoxFuture, FutureExt as _};
@@ -30,7 +30,10 @@ pub enum PasswordChangeAuth {
 }
 
 pub trait Handler {
-    type Error: Into<Box<dyn StdError + Send + Sync>> + fmt::Display + fmt::Debug + From<Unsupported>;
+    type Error: Into<Box<dyn StdError + Send + Sync>>
+        + fmt::Display
+        + fmt::Debug
+        + From<Unsupported>;
 
     fn auth_none(
         &mut self,
@@ -80,18 +83,14 @@ pub trait Handler {
         _pty: &PtyReq,
         _handle: &ChannelHandle,
     ) -> BoxFuture<Result<(), Self::Error>> {
-        async {
-            Err(Unsupported.into())
-        }.boxed()
+        async { Err(Unsupported.into()) }.boxed()
     }
 
     fn channel_shell_request(
         &mut self,
         _handle: &ChannelHandle,
     ) -> BoxFuture<Result<(), Self::Error>> {
-        async {
-            Err(Unsupported.into())
-        }.boxed()
+        async { Err(Unsupported.into()) }.boxed()
     }
 
     fn channel_exec_request(
@@ -99,9 +98,7 @@ pub trait Handler {
         _program: &str,
         _handle: &ChannelHandle,
     ) -> BoxFuture<Result<(), Self::Error>> {
-        async {
-            Err(Unsupported.into())
-        }.boxed()
+        async { Err(Unsupported.into()) }.boxed()
     }
 
     fn channel_data(

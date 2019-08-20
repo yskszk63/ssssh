@@ -3,7 +3,7 @@
 use futures::future::{BoxFuture, FutureExt as _};
 
 use ssssh::ServerBuilder;
-use ssssh::{Auth, PasswordAuth, PasswordChangeAuth, Handler};
+use ssssh::{Auth, Handler, PasswordAuth, PasswordChangeAuth};
 use ssssh::{AuthHandle, ChannelHandle};
 
 struct MyHandler;
@@ -19,7 +19,9 @@ impl Handler for MyHandler {
         _handle: &AuthHandle,
     ) -> BoxFuture<Result<PasswordChangeAuth, Self::Error>> {
         async move {
-            Ok(PasswordChangeAuth::ChangePasswdreq("password expired".into()))
+            Ok(PasswordChangeAuth::ChangePasswdreq(
+                "password expired".into(),
+            ))
         }
             .boxed()
     }
@@ -47,7 +49,8 @@ impl Handler for MyHandler {
             //let e: Result<(), _> = Err(std::io::Error::from(std::io::ErrorKind::BrokenPipe)).into();
             //Ok(e?)
             Ok(())
-        }.boxed()
+        }
+            .boxed()
     }
 
     fn channel_shell_request(
@@ -83,7 +86,8 @@ impl Handler for MyHandler {
         async move {
             handle.send_data(data).await;
             Ok(())
-        }.boxed()
+        }
+            .boxed()
     }
 }
 

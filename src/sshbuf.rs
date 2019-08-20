@@ -1,5 +1,7 @@
-use bytes::{Buf, BytesMut};
 use std::string::FromUtf8Error;
+
+use bytes::{Buf, BytesMut};
+use ring::digest::Context as DigestContext;
 
 #[derive(Debug)]
 pub(crate) enum SshBufError {
@@ -99,7 +101,7 @@ pub(crate) trait SshBufMut {
     fn put_uint64(&mut self, v: u64);
     fn put_string(&mut self, v: &str);
     fn put_mpint(&mut self, v: &[u8]);
-    fn put_name_list(&mut self, v: impl IntoIterator<Item=impl Into<String>>);
+    fn put_name_list(&mut self, v: impl IntoIterator<Item = impl Into<String>>);
     fn put_binary_string(&mut self, v: &[u8]);
 }
 
@@ -136,13 +138,56 @@ impl SshBufMut for BytesMut {
         self.extend_from_slice(v);
     }
 
-    fn put_name_list(&mut self, v: impl IntoIterator<Item=impl Into<String>>) {
+    fn put_name_list(&mut self, v: impl IntoIterator<Item = impl Into<String>>) {
         self.put_string(&v.into_iter().map(Into::into).collect::<Vec<_>>().join(","))
     }
 
     fn put_binary_string(&mut self, v: &[u8]) {
         self.put_uint32(v.len() as u32);
         self.extend_from_slice(v);
+    }
+}
+
+impl SshBufMut for DigestContext {
+    fn put_boolean(&mut self, v: bool) {
+        let v = if v { 1 } else { 0 };
+        self.update(&[v][..]);
+    }
+
+    fn put_uint32(&mut self, v: u32) {
+        self.update(&v.to_be_bytes());
+    }
+
+    fn put_uint64(&mut self, v: u64) {
+        self.update(&v.to_be_bytes());
+    }
+
+    fn put_string(&mut self, v: &str) {
+        let v = v.as_bytes();
+        self.put_uint32(v.len() as u32);
+        self.update(v);
+    }
+
+    fn put_mpint(&mut self, v: &[u8]) {
+        let (head, len) = if !v.is_empty() && v[0] & 0x80 != 0 {
+            (&b"\x00"[..], v.len() + 1)
+        } else {
+            (&b""[..], v.len())
+        };
+        self.put_uint32(len as u32);
+        if !head.is_empty() {
+            self.update(head);
+        }
+        self.update(v);
+    }
+
+    fn put_name_list(&mut self, v: impl IntoIterator<Item = impl Into<String>>) {
+        self.put_string(&v.into_iter().map(Into::into).collect::<Vec<_>>().join(","))
+    }
+
+    fn put_binary_string(&mut self, v: &[u8]) {
+        self.put_uint32(v.len() as u32);
+        self.update(v);
     }
 }
 

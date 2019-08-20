@@ -8,6 +8,7 @@ use std::string::FromUtf8Error;
 use std::task::{Context, Poll};
 
 use bytes::{Bytes, BytesMut};
+use futures::channel::mpsc;
 use futures::future::Either;
 use futures::stream::{select, Select, SplitSink, SplitStream};
 use futures::{ready, Sink, SinkExt as _, Stream, StreamExt as _};
@@ -15,11 +16,10 @@ use rand::rngs::StdRng;
 use rand::SeedableRng as _;
 use tokio::codec::{Decoder as _, Framed};
 use tokio::io::{AsyncRead, AsyncWrite};
-use futures::channel::mpsc;
 
 use crate::algorithm::{Algorithm, Preference};
 use crate::handle::{AuthHandle, ChannelHandle, GlobalHandle};
-use crate::handler::{Auth, PasswordAuth, PasswordChangeAuth, Handler, Unsupported};
+use crate::handler::{Auth, Handler, PasswordAuth, PasswordChangeAuth, Unsupported};
 use crate::hostkey::HostKeys;
 use crate::kex::{kex, KexEnv};
 use crate::msg::{self, Message, MessageError, MessageId, MessageResult};
@@ -353,7 +353,10 @@ where
 
         match &msg.method() {
             M::None => {
-                let result = self.handler.auth_none(msg.user_name(), &handle).await
+                let result = self
+                    .handler
+                    .auth_none(msg.user_name(), &handle)
+                    .await
                     .map_err(|e| ConnectionError::AuthError(e.into()))?;
                 match result {
                     Auth::Accept => self.send(msg::UserauthSuccess).await?,
@@ -371,15 +374,19 @@ where
                 if let Some(_signature) = item.signature() {
                     // TODO CHECK
                     self.send(msg::UserauthSuccess).await?
-
                 } else {
-                    let result = self.handler
+                    let result = self
+                        .handler
                         .auth_publickey(msg.user_name(), item.blob(), &handle)
                         .await
                         .map_err(|e| ConnectionError::AuthError(e.into()))?;
                     match result {
                         Auth::Accept => {
-                            self.send(msg::UserauthPkOk::new(item.algorithm(), item.blob().clone())).await?
+                            self.send(msg::UserauthPkOk::new(
+                                item.algorithm(),
+                                item.blob().clone(),
+                            ))
+                            .await?
                         }
                         Auth::Reject => {
                             self.send(msg::UserauthFailure::new(
@@ -389,21 +396,26 @@ where
                             .await?
                         }
                     };
-                 }
+                }
             }
 
             M::Password(item) => {
                 if let Some(newpassword) = item.newpassword() {
-                    let result = self.handler
-                        .auth_password_change(msg.user_name(), item.password(), newpassword, &handle)
+                    let result = self
+                        .handler
+                        .auth_password_change(
+                            msg.user_name(),
+                            item.password(),
+                            newpassword,
+                            &handle,
+                        )
                         .await
                         .map_err(|e| ConnectionError::AuthError(e.into()))?;
                     match result {
-                        PasswordChangeAuth::Accept => {
-                            self.send(msg::UserauthSuccess).await?
-                        }
+                        PasswordChangeAuth::Accept => self.send(msg::UserauthSuccess).await?,
                         PasswordChangeAuth::ChangePasswdreq(msg) => {
-                            self.send(msg::UserauthPasswdChangereq::new(msg, "")).await?
+                            self.send(msg::UserauthPasswdChangereq::new(msg, ""))
+                                .await?
                         }
                         PasswordChangeAuth::Partial => {
                             self.send(msg::UserauthFailure::new(
@@ -420,18 +432,17 @@ where
                             .await?
                         }
                     };
-
-                 } else {
-                    let result = self.handler
+                } else {
+                    let result = self
+                        .handler
                         .auth_password(msg.user_name(), item.password(), &handle)
                         .await
                         .map_err(|e| ConnectionError::AuthError(e.into()))?;
                     match result {
-                        PasswordAuth::Accept => {
-                            self.send(msg::UserauthSuccess).await?
-                        }
+                        PasswordAuth::Accept => self.send(msg::UserauthSuccess).await?,
                         PasswordAuth::ChangePasswdreq(msg) => {
-                            self.send(msg::UserauthPasswdChangereq::new(msg, "")).await?
+                            self.send(msg::UserauthPasswdChangereq::new(msg, ""))
+                                .await?
                         }
                         PasswordAuth::Reject => {
                             self.send(msg::UserauthFailure::new(
@@ -466,14 +477,13 @@ where
                 let channel_handle = self.channel_handles.get(&msg.sender_channel()).unwrap();
 
                 match self.handler.channel_open_session(channel_handle).await {
-                    Ok(..) => {
-                        msg::ChannelOpenConfirmation::new(
-                            msg.sender_channel(),
-                            msg.sender_channel(),
-                            msg.initial_window_size(),
-                            msg.maximum_packet_size(),
-                        ).into()
-                    }
+                    Ok(..) => msg::ChannelOpenConfirmation::new(
+                        msg.sender_channel(),
+                        msg.sender_channel(),
+                        msg.initial_window_size(),
+                        msg.maximum_packet_size(),
+                    )
+                    .into(),
                     Err(e) => {
                         self.channel_handles.remove(&msg.sender_channel());
                         println!("{}", e);
@@ -482,7 +492,8 @@ where
                             msg::ChannelOpenFailureReasonCode::ConnectFailed,
                             "Failed to open channel",
                             "",
-                        ).into()
+                        )
+                        .into()
                     }
                 }
             }
@@ -493,7 +504,8 @@ where
                     msg::ChannelOpenFailureReasonCode::UnknownChannelType,
                     "Unknown Channel Type",
                     "",
-                ).into()
+                )
+                .into()
             }
         };
         self.send(result).await?;
@@ -520,14 +532,14 @@ where
             Ok(()) => {
                 if msg.want_reply() {
                     self.send(msg::ChannelSuccess::new(msg.recipient_channel()))
-                    .await?;
+                        .await?;
                 }
             }
             Err(e) => {
                 dbg!(e);
                 if msg.want_reply() {
                     self.send(msg::ChannelFailure::new(msg.recipient_channel()))
-                    .await?;
+                        .await?;
                 }
             }
         };
@@ -575,7 +587,10 @@ where
         Ok(())
     }
 
-    async fn on_channel_window_adjust(&mut self, msg: msg::ChannelWindowAdjust) -> ConnectionResult<()> {
+    async fn on_channel_window_adjust(
+        &mut self,
+        msg: msg::ChannelWindowAdjust,
+    ) -> ConnectionResult<()> {
         // TODO
         self.send(msg).await?;
         Ok(())

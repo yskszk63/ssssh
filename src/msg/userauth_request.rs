@@ -98,9 +98,7 @@ impl UserauthRequest {
         let service_name = buf.get_string()?;
         let method_name = buf.get_string()?;
         let method = match method_name.as_ref() {
-            "none" => {
-                UserauthRequestMethod::None
-            }
+            "none" => UserauthRequestMethod::None,
             "publickey" => {
                 let has_signature = buf.get_boolean()?;
                 UserauthRequestMethod::Publickey(Publickey {
@@ -110,7 +108,7 @@ impl UserauthRequest {
                         Some(buf.get_binary_string()?.into())
                     } else {
                         None
-                    }
+                    },
                 })
             }
             "password" => {
@@ -121,21 +119,20 @@ impl UserauthRequest {
                         Some(buf.get_string()?)
                     } else {
                         None
-                    }
+                    },
                 })
             }
-            "hostbased" => {
-                UserauthRequestMethod::Hostbased(Hostbased {
-                    algorithm: buf.get_string()?,
-                    client_hostkey: buf.get_binary_string()?.into(),
-                    client_hostname: buf.get_string()?,
-                    user_name: buf.get_string()?,
-                    signature: buf.get_binary_string()?.into(),
-                })
-            }
-            u => {
-                UserauthRequestMethod::Unknown(u.to_string(), buf.take(usize::max_value()).iter().collect())
-            }
+            "hostbased" => UserauthRequestMethod::Hostbased(Hostbased {
+                algorithm: buf.get_string()?,
+                client_hostkey: buf.get_binary_string()?.into(),
+                client_hostname: buf.get_string()?,
+                user_name: buf.get_string()?,
+                signature: buf.get_binary_string()?.into(),
+            }),
+            u => UserauthRequestMethod::Unknown(
+                u.to_string(),
+                buf.take(usize::max_value()).iter().collect(),
+            ),
         };
 
         Ok(Self {

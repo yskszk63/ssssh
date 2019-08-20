@@ -1,8 +1,8 @@
 use std::io;
 
-use bytes::{Buf as _, BufMut as _, IntoBuf as _, Bytes, BytesMut};
-use openssl::hash::MessageDigest;
+use bytes::{Buf as _, BufMut as _, Bytes, BytesMut, IntoBuf as _};
 use rand::{CryptoRng, RngCore};
+use ring::digest::{Context, SHA256};
 use tokio::codec::{Decoder, Encoder};
 
 use crate::algorithm::{
@@ -38,18 +38,15 @@ fn calculate_hash(
     algorithm: &Algorithm,
     len: usize,
 ) -> Bytes {
-    let mut content = BytesMut::with_capacity(1024 * 8);
-    content.put_mpint(key);
-    content.put_slice(hash);
-    content.put_u8(kind);
-    content.put_slice(session_id);
-
-    let hash_fn = match algorithm.kex_algorithm() {
-        KexAlgorithm::Curve25519Sha256 => MessageDigest::sha256(),
+    let alg = match algorithm.kex_algorithm() {
+        KexAlgorithm::Curve25519Sha256 => &SHA256,
     };
-    openssl::hash::hash(hash_fn, &content).unwrap()[..len]
-        .iter()
-        .collect()
+    let mut ctx = Context::new(alg);
+    ctx.put_mpint(key);
+    ctx.update(hash);
+    ctx.update(&[kind]);
+    ctx.update(session_id);
+    Bytes::from(&ctx.finish().as_ref()[..len])
 }
 
 #[derive(Debug)]
@@ -261,6 +258,7 @@ where
                     }
                     let expect = src.split_to(mac.size());
                     let sign = mac.sign(self.seq_ctos, &plain, &encrypted).unwrap();
+                    // TODO verify
                     if !openssl::memcmp::eq(&sign, &expect) {
                         panic!("ERR\n  {:?}\n  {:?}", &sign, &expect,);
                     }

@@ -50,11 +50,12 @@ pub struct ChannelOpenFailure {
 }
 
 impl ChannelOpenFailure {
-    pub fn new(recipient_channel: u32,
+    pub fn new(
+        recipient_channel: u32,
         reason_code: ChannelOpenFailureReasonCode,
         description: impl Into<String>,
-        language_tag: impl Into<String>) -> Self {
-
+        language_tag: impl Into<String>,
+    ) -> Self {
         Self {
             recipient_channel,
             reason_code,

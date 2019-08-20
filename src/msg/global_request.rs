@@ -51,9 +51,10 @@ impl GlobalRequest {
             "cancel-tcpip-forward" => {
                 GlobalRequestType::CancelTcpipForward(buf.get_string()?, buf.get_uint32()?)
             }
-            u => {
-                GlobalRequestType::Unknown(u.to_string(), buf.take(usize::max_value()).iter().collect())
-            }
+            u => GlobalRequestType::Unknown(
+                u.to_string(),
+                buf.take(usize::max_value()).iter().collect(),
+            ),
         };
 
         Ok(Self {
@@ -66,7 +67,8 @@ impl GlobalRequest {
         buf.put_string(self.request_type.as_ref());
         buf.put_boolean(self.want_reply);
         match &self.request_type {
-            GlobalRequestType::TcpipForward(addr, port) | GlobalRequestType::CancelTcpipForward(addr, port) => {
+            GlobalRequestType::TcpipForward(addr, port)
+            | GlobalRequestType::CancelTcpipForward(addr, port) => {
                 buf.put_string(addr);
                 buf.put_uint32(*port);
             }
