@@ -1,3 +1,5 @@
+use failure::Fail;
+
 use crate::msg::Kexinit;
 use crate::named::Named;
 
@@ -133,8 +135,9 @@ impl Default for Preference {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Fail)]
 pub enum NegotiateError {
+    #[fail(display = "No such algorithm")]
     Missing,
 }
 

@@ -67,7 +67,7 @@ impl ServerBuilder {
             preference: self.preference.unwrap_or_default(),
             hostkeys: self
                 .hostkeys
-                .unwrap_or_else(|| HostKeys::new(vec![HostKey::gen_ssh_ed25519()])),
+                .unwrap_or_else(|| HostKeys::new(vec![HostKey::gen_ssh_ed25519().unwrap()])),
             socket: None,
             handler_factory,
         }

@@ -9,17 +9,17 @@ pub struct Aes256CtrEncrypt {
 }
 
 impl Aes256CtrEncrypt {
-    pub fn new_for_encrypt(key: &Bytes, iv: &Bytes) -> Self {
+    pub fn new_for_encrypt(key: &Bytes, iv: &Bytes) -> EncryptResult<Self> {
         Self::new(key, iv, Mode::Encrypt)
     }
 
-    pub fn new_for_decrypt(key: &Bytes, iv: &Bytes) -> Self {
+    pub fn new_for_decrypt(key: &Bytes, iv: &Bytes) -> EncryptResult<Self> {
         Self::new(key, iv, Mode::Decrypt)
     }
 
-    fn new(key: &Bytes, iv: &Bytes, mode: Mode) -> Self {
-        let encrypter = Crypter::new(Cipher::aes_256_ctr(), mode, &key, Some(&iv)).unwrap();
-        Self { encrypter }
+    fn new(key: &Bytes, iv: &Bytes, mode: Mode) -> EncryptResult<Self> {
+        let encrypter = Crypter::new(Cipher::aes_256_ctr(), mode, &key, Some(&iv))?;
+        Ok(Self { encrypter })
     }
 }
 
@@ -39,7 +39,7 @@ impl Encrypt for Aes256CtrEncrypt {
         let mut b = vec![0; bs];
 
         while !pkt.is_empty() {
-            let c = self.encrypter.update(&pkt.split_to(bs), &mut b).unwrap();
+            let c = self.encrypter.update(&pkt.split_to(bs), &mut b)?;
             r.put_slice(&b[..c]);
         }
         Ok(r.freeze())

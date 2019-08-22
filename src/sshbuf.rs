@@ -1,11 +1,14 @@
 use std::string::FromUtf8Error;
 
 use bytes::{Buf, BytesMut};
+use failure::Fail;
 use ring::digest::Context as DigestContext;
 
-#[derive(Debug)]
+#[derive(Debug, Fail)]
 pub(crate) enum SshBufError {
+    #[fail(display = "Underflow")]
     Underflow,
+    #[fail(display = "From UTF8 Error Ocurred {}", _0)]
     FromUtf8Error(FromUtf8Error),
 }
 

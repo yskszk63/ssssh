@@ -4,10 +4,10 @@ use std::error::Error as StdError;
 use std::fmt::Display;
 use std::io;
 use std::pin::Pin;
-use std::string::FromUtf8Error;
 use std::task::{Context, Poll};
 
 use bytes::{Bytes, BytesMut};
+use failure::Fail;
 use futures::channel::mpsc;
 use futures::future::Either;
 use futures::stream::{select, Select, SplitSink, SplitStream};
@@ -22,8 +22,8 @@ use crate::handle::{AuthHandle, ChannelHandle, GlobalHandle};
 use crate::handler::{Auth, Handler, PasswordAuth, PasswordChangeAuth, Unsupported};
 use crate::hostkey::HostKeys;
 use crate::kex::{kex, KexEnv};
-use crate::msg::{self, Message, MessageError, MessageId, MessageResult};
-use crate::transport::codec::{Codec, CodecError};
+use crate::msg::{self, Message, MessageError, MessageResult};
+use crate::transport::codec::Codec;
 use crate::transport::version::{Version, VersionExchangeResult};
 
 #[derive(Debug)]
@@ -142,29 +142,28 @@ where
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Fail)]
 #[allow(clippy::module_name_repetitions)]
 pub enum ConnectionError {
-    UnknownMessageId(u8),
-    Unimplemented(MessageId),
-    Underflow,
-    Overflow,
-    FromUtf8Error(FromUtf8Error),
+    #[fail(display = "Kex Error {:?}", _0)]
+    KexError(Box<dyn Send + Sync + std::fmt::Debug>), // TODO StdError
+    #[fail(display = "Message Error {}", _0)]
+    MessageError(MessageError),
+    #[fail(display = "Auth Error {}", _0)]
     AuthError(Box<dyn StdError + Send + Sync>),
+    #[fail(display = "Channel Error {}", _0)]
     ChannelError(Box<dyn StdError + Send + Sync>),
+    #[fail(display = "Unknown {}", _0)]
+    Unknown(String),
+    #[fail(display = "Unknown Channel Id {}", _0)]
+    UnknownChannelId(u32),
+    #[fail(display = "Io Error {}", _0)]
     Io(io::Error),
 }
 
 impl From<MessageError> for ConnectionError {
     fn from(v: MessageError) -> Self {
-        match v {
-            MessageError::FromUtf8Error(e) => Self::FromUtf8Error(e),
-            MessageError::Unimplemented(e) => Self::Unimplemented(e),
-            MessageError::Overflow => Self::Overflow,
-            MessageError::Underflow => Self::Underflow,
-            MessageError::UnknownMessageId(id) => Self::UnknownMessageId(id),
-            MessageError::Codec(CodecError::Io(e)) => Self::Io(e),
-        }
+        Self::MessageError(v)
     }
 }
 
@@ -291,28 +290,30 @@ where
 
     async fn on_kexinit(&mut self, client_kexinit: msg::Kexinit) -> ConnectionResult<()> {
         let server_kexinit = self.preference.to_kexinit();
-        self.send_immediately(server_kexinit.clone()).await?;
+        self.send_immediately(server_kexinit.clone())
+            .await
+            .map_err(|e| ConnectionError::KexError(Box::new(e)))?;
 
-        let algorithm = Algorithm::negotiate(&client_kexinit, &self.preference).unwrap();
+        let algorithm = Algorithm::negotiate(&client_kexinit, &self.preference)
+            .map_err(|e| ConnectionError::KexError(Box::new(e)))?;
+
         let hostkey = self
             .hostkeys
             .lookup(&algorithm.server_host_key_algorithm())
-            .unwrap();
+            .ok_or_else(|| ConnectionError::KexError(Box::new("no match hostkye")))?; // TODO
 
-        let (h, k) = {
-            let mut env = KexEnv::new(
-                &mut self.tx,
-                self.rx.get_mut().0.get_left_mut().unwrap(),
-                &self.version,
-                &client_kexinit,
-                &server_kexinit,
-                hostkey,
-            );
-            kex(algorithm.kex_algorithm(), &mut env)
-                .await
-                .unwrap()
-                .split()
-        };
+        let mut env = KexEnv::new(
+            &mut self.tx,
+            self.rx.get_mut().0.get_left_mut().unwrap(),
+            &self.version,
+            &client_kexinit,
+            &server_kexinit,
+            hostkey,
+        );
+        let (h, k) = kex(algorithm.kex_algorithm(), &mut env)
+            .await
+            .unwrap()
+            .split();
 
         if let Some(Either::Left(Ok(Message::Newkeys(..)))) = self.rx.next().await {
             self.send_immediately(msg::Newkeys).await?;
@@ -326,7 +327,7 @@ where
                 algorithm,
             })
             .await
-            .unwrap();
+            .map_err(|e| ConnectionError::KexError(Box::new(e)))?;
 
         Ok(())
     }
@@ -334,7 +335,7 @@ where
     async fn on_service_request(&mut self, msg: msg::ServiceRequest) -> ConnectionResult<()> {
         match msg.name() {
             "ssh-userauth" => self.send(msg::ServiceAccept::new(msg.name())).await?,
-            _ => return Err(ConnectionError::Overflow), // TODO
+            _ => return Err(ConnectionError::Unknown(msg.name().into())), // TODO
         }
         Ok(())
     }
@@ -343,7 +344,7 @@ where
         use msg::UserauthRequestMethod as M;
 
         if msg.service_name() != "ssh-connection" {
-            return Err(ConnectionError::Overflow); // TODO
+            return Err(ConnectionError::Unknown(msg.service_name().into())); // TODO
         };
 
         if self.auth_handle.is_none() {
@@ -514,10 +515,12 @@ where
 
     async fn on_channel_request(&mut self, msg: msg::ChannelRequest) -> ConnectionResult<()> {
         use msg::ChannelRequestType::*;
+
+        let channel_id = &msg.recipient_channel();
         let handle = self
             .channel_handles
-            .get(&msg.recipient_channel())
-            .ok_or_else(|| ConnectionError::Underflow)?; // TODO
+            .get(&channel_id)
+            .ok_or_else(|| ConnectionError::UnknownChannelId(*channel_id))?;
 
         let result = match msg.request_type() {
             PtyReq(item) => self.handler.channel_pty_request(item, handle).await,
@@ -548,32 +551,35 @@ where
     }
 
     async fn on_channel_data(&mut self, msg: msg::ChannelData) -> ConnectionResult<()> {
+        let channel_id = msg.recipient_channel();
         let handle = self
             .channel_handles
-            .get(&msg.recipient_channel())
-            .ok_or_else(|| ConnectionError::Underflow)?; // TODO
+            .get(&channel_id)
+            .ok_or_else(|| ConnectionError::UnknownChannelId(channel_id))?;
 
         let r = self.handler.channel_data(&msg.data(), handle).await;
-        r.map_err(|e| ConnectionError::ChannelError(e.into()))?; // TODO
+        r.map_err(|e| ConnectionError::ChannelError(e.into()))?;
         Ok(())
     }
 
     async fn on_channel_eof(&mut self, msg: msg::ChannelEof) -> ConnectionResult<()> {
+        let channel_id = msg.recipient_channel();
         let handle = self
             .channel_handles
             .get(&msg.recipient_channel())
-            .ok_or_else(|| ConnectionError::Underflow)?; // TODO
+            .ok_or_else(|| ConnectionError::UnknownChannelId(channel_id))?;
 
         let r = self.handler.channel_eof(handle).await;
-        r.map_err(|e| ConnectionError::ChannelError(e.into()))?; // TODO
+        r.map_err(|e| ConnectionError::ChannelError(e.into()))?;
         Ok(())
     }
 
     async fn on_channel_close(&mut self, msg: msg::ChannelClose) -> ConnectionResult<()> {
+        let channel_id = msg.recipient_channel();
         let handle = self
             .channel_handles
             .remove(&msg.recipient_channel())
-            .ok_or_else(|| ConnectionError::Underflow)?; // TODO
+            .ok_or_else(|| ConnectionError::UnknownChannelId(channel_id))?;
 
         let r = self.handler.channel_close(&handle).await;
         r.map_err(|e| ConnectionError::ChannelError(e.into()))?; // TODO

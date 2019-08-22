@@ -1,14 +1,26 @@
 use bytes::Bytes;
 
+use failure::Fail;
+use openssl::error::ErrorStack;
+
 pub use aes::*;
 pub use plain::*;
 
 mod aes;
 mod plain;
 
-#[derive(Debug)]
 #[allow(clippy::module_name_repetitions)]
-pub enum EncryptError {}
+#[derive(Debug, Fail)]
+pub enum EncryptError {
+    #[fail(display = "OpenSSL Error")]
+    OpenSsl(ErrorStack),
+}
+
+impl From<ErrorStack> for EncryptError {
+    fn from(v: ErrorStack) -> Self {
+        Self::OpenSsl(v)
+    }
+}
 
 #[allow(clippy::module_name_repetitions)]
 pub type EncryptResult<T> = Result<T, EncryptError>;

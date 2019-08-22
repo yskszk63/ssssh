@@ -2,6 +2,7 @@ use std::convert::TryFrom;
 use std::string::FromUtf8Error;
 
 use bytes::{Buf as _, BufMut as _, Bytes, BytesMut, IntoBuf as _};
+use failure::Fail;
 
 use crate::sshbuf::SshBufError;
 use crate::transport::codec::CodecError;
@@ -71,13 +72,17 @@ mod userauth_pk_ok;
 mod userauth_request;
 mod userauth_success;
 
-#[derive(Debug)]
+#[derive(Debug, Fail)]
 pub enum MessageError {
+    #[fail(display = "Unknown Message Id {}", _0)]
     UnknownMessageId(u8),
+    #[fail(display = "Unimplemented Id {:?}", _0)]
     Unimplemented(MessageId),
+    #[fail(display = "Under flow")]
     Underflow,
-    Overflow,
+    #[fail(display = "{}", _0)]
     FromUtf8Error(FromUtf8Error),
+    #[fail(display = "codec error {:?}", _0)]
     Codec(CodecError),
 }
 

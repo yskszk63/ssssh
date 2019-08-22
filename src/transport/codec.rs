@@ -1,6 +1,7 @@
 use std::io;
 
 use bytes::{Buf as _, BufMut as _, Bytes, BytesMut, IntoBuf as _};
+use failure::Fail;
 use rand::{CryptoRng, RngCore};
 use ring::digest::{Context, SHA256};
 use tokio::codec::{Decoder, Encoder};
@@ -15,9 +16,10 @@ use crate::sshbuf::SshBufMut as _;
 
 const MINIMUM_PAD_SIZE: usize = 4;
 
-#[derive(Debug)]
 #[allow(clippy::module_name_repetitions)]
+#[derive(Debug, Fail)]
 pub enum CodecError {
+    #[fail(display = "IO Error Ocurred {}", _0)]
     Io(io::Error),
 }
 
@@ -125,13 +127,14 @@ where
 
         self.encrypt_ctos = match algorithm.encryption_algorithm_client_to_server() {
             EncryptionAlgorithm::Aes256Ctr => {
-                Box::new(Aes256CtrEncrypt::new_for_decrypt(&key_ctos, &iv_ctos))
+                Box::new(Aes256CtrEncrypt::new_for_decrypt(&key_ctos, &iv_ctos).unwrap())
+                // TODO
             }
         };
 
         self.encrypt_stoc = match algorithm.encryption_algorithm_server_to_client() {
             EncryptionAlgorithm::Aes256Ctr => {
-                Box::new(Aes256CtrEncrypt::new_for_encrypt(&key_stoc, &iv_stoc))
+                Box::new(Aes256CtrEncrypt::new_for_encrypt(&key_stoc, &iv_stoc).unwrap())
             }
         };
 
@@ -191,9 +194,7 @@ where
 
         let encrypted = enc.encrypt(&unencrypted_pkt).unwrap();
 
-        let sign = mac
-            .sign(self.seq_stoc, &unencrypted_pkt, &encrypted)
-            .unwrap();
+        let sign = mac.sign(self.seq_stoc, &unencrypted_pkt, &encrypted);
         self.seq_stoc += 1;
         dst.reserve(encrypted.len() + sign.len());
         dst.put(encrypted);
@@ -257,7 +258,7 @@ where
                         return Ok(None);
                     }
                     let expect = src.split_to(mac.size());
-                    let sign = mac.sign(self.seq_ctos, &plain, &encrypted).unwrap();
+                    let sign = mac.sign(self.seq_ctos, &plain, &encrypted);
                     // TODO verify
                     if !openssl::memcmp::eq(&sign, &expect) {
                         panic!("ERR\n  {:?}\n  {:?}", &sign, &expect,);

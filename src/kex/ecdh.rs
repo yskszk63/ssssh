@@ -39,7 +39,7 @@ where
         server_ephemeral_public.as_ref(),
         &key,
     );
-    let signature = env.hostkey.sign(&hash).unwrap();
+    let signature = env.hostkey.sign(&hash);
 
     env.tx
         .send(

@@ -1,12 +1,15 @@
 use bytes::Bytes;
 
+use failure::Fail;
+
 pub use none::*;
 
 mod none;
 
-#[derive(Debug)]
 #[allow(clippy::module_name_repetitions)]
-pub enum CompressionError {}
+#[derive(Debug, Fail)]
+#[fail(display = "")] // TODO
+pub struct CompressionError {}
 
 #[allow(clippy::module_name_repetitions)]
 pub type CompressionResult<T> = Result<T, CompressionError>;

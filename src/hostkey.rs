@@ -1,6 +1,8 @@
 use std::sync::Arc;
 
 use bytes::{Bytes, BytesMut};
+use failure::Fail;
+use ring::error::{KeyRejected, Unspecified};
 use ring::rand::SystemRandom;
 use ring::signature::{Ed25519KeyPair, KeyPair as _};
 
@@ -23,10 +25,27 @@ impl HostKeys {
     }
 }
 
-#[derive(Debug)]
-pub enum SignError {}
+#[derive(Debug, Fail)]
+pub enum GenError {
+    #[fail(display = "Unspecified")]
+    Unspecified(Unspecified),
+    #[fail(display = "KeyRejected")]
+    KeyRejected(KeyRejected),
+}
 
-pub type SignResult<T> = Result<T, SignError>;
+impl From<Unspecified> for GenError {
+    fn from(v: Unspecified) -> Self {
+        Self::Unspecified(v)
+    }
+}
+
+impl From<KeyRejected> for GenError {
+    fn from(v: KeyRejected) -> Self {
+        Self::KeyRejected(v)
+    }
+}
+
+pub type GenResult<T> = Result<T, GenError>;
 
 #[derive(Debug, Clone)]
 pub enum HostKey {
@@ -37,14 +56,14 @@ pub enum HostKey {
 }
 
 impl HostKey {
-    pub fn gen_ssh_ed25519() -> Self {
-        let pkcs8 = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).unwrap();
-        let pair = Ed25519KeyPair::from_pkcs8(pkcs8.as_ref()).unwrap();
+    pub fn gen_ssh_ed25519() -> GenResult<Self> {
+        let pkcs8 = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new())?;
+        let pair = Ed25519KeyPair::from_pkcs8(pkcs8.as_ref())?;
         let public = Bytes::from(pair.public_key().as_ref());
-        Self::SshEd25519 {
+        Ok(Self::SshEd25519 {
             pair: Arc::new(pair),
             public,
-        }
+        })
     }
 
     pub fn publickey(&self) -> &Bytes {
@@ -74,12 +93,12 @@ impl HostKey {
         })
     }
 
-    pub fn sign(&self, target: &[u8]) -> SignResult<Bytes> {
+    pub fn sign(&self, target: &[u8]) -> Bytes {
         match self {
             Self::SshEd25519 { pair, .. } => {
                 let pair = pair.as_ref();
                 let sign = pair.sign(target);
-                Ok(Bytes::from(sign.as_ref()))
+                Bytes::from(sign.as_ref())
             }
         }
     }
