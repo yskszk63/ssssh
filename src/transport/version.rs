@@ -8,13 +8,13 @@ use tokio::codec::{Decoder, Encoder, FramedParts};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 #[derive(Debug)]
-pub struct Version {
+pub(crate) struct Version {
     client: Bytes,
     server: Bytes,
 }
 
 impl Version {
-    pub async fn exchange<IO>(
+    pub(crate) async fn exchange<IO>(
         connection: &mut IO,
         server_version: impl Into<Bytes>,
     ) -> VersionExchangeResult<(Self, BytesMut)>
@@ -43,11 +43,11 @@ impl Version {
         Ok((result, read_buf))
     }
 
-    pub fn client(&self) -> &Bytes {
+    pub(crate) fn client(&self) -> &Bytes {
         &self.client
     }
 
-    pub fn server(&self) -> &Bytes {
+    pub(crate) fn server(&self) -> &Bytes {
         &self.server
     }
 }
@@ -68,7 +68,7 @@ impl From<io::Error> for VersionExchangeError {
 }
 
 #[allow(clippy::module_name_repetitions)]
-pub type VersionExchangeResult<T> = Result<T, VersionExchangeError>;
+pub(crate) type VersionExchangeResult<T> = Result<T, VersionExchangeError>;
 
 const CR: u8 = b'\r';
 const LF: u8 = b'\n';

@@ -6,13 +6,13 @@ use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug, Clone)]
-pub struct UserauthFailure {
+pub(crate) struct UserauthFailure {
     authentications_that_can_continue: Vec<String>,
     parital_success: bool,
 }
 
 impl UserauthFailure {
-    pub fn new(
+    pub(crate) fn new(
         authentications_that_can_continue: impl IntoIterator<Item = impl Into<String>>,
         parital_success: bool,
     ) -> Self {
@@ -26,7 +26,7 @@ impl UserauthFailure {
         }
     }
 
-    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
+    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let authentications_that_can_continue = buf.get_name_list()?;
         let parital_success = buf.get_boolean()?;
         Ok(Self {
@@ -35,7 +35,7 @@ impl UserauthFailure {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) {
+    pub(crate) fn put(&self, buf: &mut BytesMut) {
         buf.put_name_list(&self.authentications_that_can_continue);
         buf.put_boolean(self.parital_success);
     }

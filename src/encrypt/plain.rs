@@ -3,7 +3,7 @@ use bytes::Bytes;
 use super::{Encrypt, EncryptResult};
 
 #[allow(clippy::module_name_repetitions)]
-pub struct PlainEncrypt;
+pub(crate) struct PlainEncrypt;
 
 impl Encrypt for PlainEncrypt {
     fn name(&self) -> &'static str {

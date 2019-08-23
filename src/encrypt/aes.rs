@@ -4,16 +4,16 @@ use openssl::symm::{Cipher, Crypter, Mode};
 use super::{Encrypt, EncryptResult};
 
 #[allow(clippy::module_name_repetitions)]
-pub struct Aes256CtrEncrypt {
+pub(crate) struct Aes256CtrEncrypt {
     encrypter: openssl::symm::Crypter,
 }
 
 impl Aes256CtrEncrypt {
-    pub fn new_for_encrypt(key: &Bytes, iv: &Bytes) -> EncryptResult<Self> {
+    pub(crate) fn new_for_encrypt(key: &Bytes, iv: &Bytes) -> EncryptResult<Self> {
         Self::new(key, iv, Mode::Encrypt)
     }
 
-    pub fn new_for_decrypt(key: &Bytes, iv: &Bytes) -> EncryptResult<Self> {
+    pub(crate) fn new_for_decrypt(key: &Bytes, iv: &Bytes) -> EncryptResult<Self> {
         Self::new(key, iv, Mode::Decrypt)
     }
 

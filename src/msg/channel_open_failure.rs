@@ -7,7 +7,7 @@ use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
-pub enum ChannelOpenFailureReasonCode {
+pub(crate) enum ChannelOpenFailureReasonCode {
     AdministrativeProhibited,
     ConnectFailed,
     UnknownChannelType,
@@ -42,7 +42,7 @@ impl From<ChannelOpenFailureReasonCode> for u32 {
 }
 
 #[derive(Debug, Clone)]
-pub struct ChannelOpenFailure {
+pub(crate) struct ChannelOpenFailure {
     recipient_channel: u32,
     reason_code: ChannelOpenFailureReasonCode,
     description: String,
@@ -50,7 +50,7 @@ pub struct ChannelOpenFailure {
 }
 
 impl ChannelOpenFailure {
-    pub fn new(
+    pub(crate) fn new(
         recipient_channel: u32,
         reason_code: ChannelOpenFailureReasonCode,
         description: impl Into<String>,
@@ -64,7 +64,7 @@ impl ChannelOpenFailure {
         }
     }
 
-    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
+    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let recipient_channel = buf.get_uint32()?;
         let reason_code = buf.get_uint32()?.into();
         let description = buf.get_string()?;
@@ -77,7 +77,7 @@ impl ChannelOpenFailure {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) {
+    pub(crate) fn put(&self, buf: &mut BytesMut) {
         buf.put_uint32(self.recipient_channel);
         buf.put_uint32(self.reason_code.clone().into());
         buf.put_string(&self.description);

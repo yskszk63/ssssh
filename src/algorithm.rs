@@ -5,7 +5,7 @@ use crate::named::Named;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::module_name_repetitions)]
-pub enum KexAlgorithm {
+pub(crate) enum KexAlgorithm {
     Curve25519Sha256,
 }
 
@@ -33,7 +33,7 @@ impl Named for HostKeyAlgorithm {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::module_name_repetitions)]
-pub enum EncryptionAlgorithm {
+pub(crate) enum EncryptionAlgorithm {
     Aes256Ctr,
 }
 
@@ -47,7 +47,7 @@ impl Named for EncryptionAlgorithm {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::module_name_repetitions)]
-pub enum MacAlgorithm {
+pub(crate) enum MacAlgorithm {
     HmacSha2_256,
 }
 
@@ -61,7 +61,7 @@ impl Named for MacAlgorithm {
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::module_name_repetitions)]
-pub enum CompressionAlgorithm {
+pub(crate) enum CompressionAlgorithm {
     None,
 }
 
@@ -86,7 +86,7 @@ pub struct Preference {
 }
 
 impl Preference {
-    pub fn to_kexinit(&self) -> Kexinit {
+    pub(crate) fn to_kexinit(&self) -> Kexinit {
         Kexinit::builder()
             .kex_algorithms(self.kex_algorithms.iter().map(Named::name))
             .server_host_key_algorithms(self.server_host_key_algorithms.iter().map(Named::name))
@@ -142,7 +142,7 @@ pub enum NegotiateError {
 }
 
 #[derive(Debug)]
-pub struct Algorithm {
+pub(crate) struct Algorithm {
     kex_algorithm: KexAlgorithm,
     server_host_key_algorithm: HostKeyAlgorithm,
     encryption_algorithm_client_to_server: EncryptionAlgorithm,
@@ -154,7 +154,7 @@ pub struct Algorithm {
 }
 
 impl Algorithm {
-    pub fn negotiate(client: &Kexinit, server: &Preference) -> Result<Self, NegotiateError> {
+    pub(crate) fn negotiate(client: &Kexinit, server: &Preference) -> Result<Self, NegotiateError> {
         let kex_algorithm = client
             .kex_algorithms()
             .flat_map(|e| server.kex_algorithms.iter().filter(move |s| e == s.name()))
@@ -258,35 +258,35 @@ impl Algorithm {
         })
     }
 
-    pub fn kex_algorithm(&self) -> &KexAlgorithm {
+    pub(crate) fn kex_algorithm(&self) -> &KexAlgorithm {
         &self.kex_algorithm
     }
 
-    pub fn server_host_key_algorithm(&self) -> &HostKeyAlgorithm {
+    pub(crate) fn server_host_key_algorithm(&self) -> &HostKeyAlgorithm {
         &self.server_host_key_algorithm
     }
 
-    pub fn encryption_algorithm_client_to_server(&self) -> &EncryptionAlgorithm {
+    pub(crate) fn encryption_algorithm_client_to_server(&self) -> &EncryptionAlgorithm {
         &self.encryption_algorithm_client_to_server
     }
 
-    pub fn encryption_algorithm_server_to_client(&self) -> &EncryptionAlgorithm {
+    pub(crate) fn encryption_algorithm_server_to_client(&self) -> &EncryptionAlgorithm {
         &self.encryption_algorithm_server_to_client
     }
 
-    pub fn mac_algorithm_client_to_server(&self) -> &MacAlgorithm {
+    pub(crate) fn mac_algorithm_client_to_server(&self) -> &MacAlgorithm {
         &self.mac_algorithm_client_to_server
     }
 
-    pub fn mac_algorithm_server_to_client(&self) -> &MacAlgorithm {
+    pub(crate) fn mac_algorithm_server_to_client(&self) -> &MacAlgorithm {
         &self.mac_algorithm_server_to_client
     }
 
-    pub fn compression_algorithm_client_to_server(&self) -> &CompressionAlgorithm {
+    pub(crate) fn compression_algorithm_client_to_server(&self) -> &CompressionAlgorithm {
         &self.compression_algorithm_client_to_server
     }
 
-    pub fn compression_algorithm_server_to_client(&self) -> &CompressionAlgorithm {
+    pub(crate) fn compression_algorithm_server_to_client(&self) -> &CompressionAlgorithm {
         &self.compression_algorithm_server_to_client
     }
 }

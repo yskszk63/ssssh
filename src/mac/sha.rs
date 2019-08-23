@@ -3,7 +3,7 @@ use ring::hmac::{Context, Key, HMAC_SHA256};
 
 use super::Mac;
 
-pub struct HmacSha2_256 {
+pub(crate) struct HmacSha2_256 {
     key: Key,
 }
 

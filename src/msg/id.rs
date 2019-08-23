@@ -2,17 +2,17 @@ use std::convert::TryFrom;
 
 #[derive(Debug)]
 #[allow(clippy::module_name_repetitions)]
-pub struct UnknownMessageId(u8);
+pub(crate) struct UnknownMessageId(u8);
 
 impl UnknownMessageId {
-    pub fn id(&self) -> u8 {
+    pub(crate) fn id(&self) -> u8 {
         self.0
     }
 }
 
 #[derive(Debug)]
 #[allow(clippy::module_name_repetitions)]
-pub enum MessageId {
+pub(crate) enum MessageId {
     Disconnect,
     Ignore,
     Unimplemented,

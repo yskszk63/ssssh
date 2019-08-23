@@ -18,7 +18,7 @@ const MINIMUM_PAD_SIZE: usize = 4;
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Fail)]
-pub enum CodecError {
+pub(crate) enum CodecError {
     #[fail(display = "IO Error Ocurred {}", _0)]
     Io(io::Error),
 }
@@ -30,7 +30,7 @@ impl From<io::Error> for CodecError {
 }
 
 #[allow(clippy::module_name_repetitions)]
-pub type CodecResult<T> = Result<T, CodecError>;
+pub(crate) type CodecResult<T> = Result<T, CodecError>;
 
 fn calculate_hash(
     hash: &[u8],
@@ -65,7 +65,7 @@ enum EncryptState {
     },
 }
 
-pub struct Codec<R>
+pub(crate) struct Codec<R>
 where
     R: RngCore + CryptoRng,
 {
@@ -92,7 +92,7 @@ impl<R> Codec<R>
 where
     R: RngCore + CryptoRng,
 {
-    pub fn new(rng: R) -> Self {
+    pub(crate) fn new(rng: R) -> Self {
         Self {
             rng,
             seq_ctos: 0,
@@ -108,7 +108,7 @@ where
         }
     }
 
-    pub fn change_key(&mut self, hash: &Bytes, secret: &Bytes, algorithm: &Algorithm) {
+    pub(crate) fn change_key(&mut self, hash: &Bytes, secret: &Bytes, algorithm: &Algorithm) {
         match &self.encrypt_state {
             EncryptState::Initial => {}
             e => panic!("{:?}", e),

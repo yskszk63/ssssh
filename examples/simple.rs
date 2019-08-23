@@ -1,10 +1,8 @@
-#![feature(async_await)]
-
 use futures::future::{BoxFuture, FutureExt as _};
 
 use ssssh::ServerBuilder;
-use ssssh::{Auth, Handler, PasswordAuth, PasswordChangeAuth};
 use ssssh::{AuthHandle, ChannelHandle};
+use ssssh::{Handler, PasswordAuth, PasswordChangeAuth};
 
 struct MyHandler;
 
@@ -115,7 +113,7 @@ async fn main() {
     loop {
         match server.accept().await {
             Ok(connection) => {
-                tokio::spawn(connection.run());
+                tokio::spawn(async { connection.run().await.unwrap() });
             }
             Err(e) => {
                 eprintln!("{}", e);

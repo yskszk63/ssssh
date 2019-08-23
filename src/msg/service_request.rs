@@ -6,21 +6,21 @@ use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug, Clone)]
-pub struct ServiceRequest {
+pub(crate) struct ServiceRequest {
     name: String,
 }
 
 impl ServiceRequest {
-    pub fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> &str {
         &self.name
     }
 
-    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
+    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let name = buf.get_string()?;
         Ok(Self { name })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) {
+    pub(crate) fn put(&self, buf: &mut BytesMut) {
         buf.put_string(&self.name);
     }
 }

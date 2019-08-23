@@ -3,7 +3,7 @@ use bytes::Bytes;
 use super::{Compression, CompressionResult};
 
 #[allow(clippy::module_name_repetitions)]
-pub struct NoneCompression;
+pub(crate) struct NoneCompression;
 
 impl Compression for NoneCompression {
     fn compress(&self, target: &Bytes) -> CompressionResult<Bytes> {

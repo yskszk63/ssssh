@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::convert::TryFrom as _;
 use std::error::Error as StdError;
 use std::fmt::Display;
-use std::io;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -25,48 +24,7 @@ use crate::kex::{kex, KexEnv};
 use crate::msg::{self, Message, MessageError, MessageResult};
 use crate::transport::codec::Codec;
 use crate::transport::version::{Version, VersionExchangeResult};
-
-#[derive(Debug)]
-enum MapEither<L, R> {
-    Left(L),
-    Right(R),
-}
-
-impl<L, R> MapEither<L, R> {
-    fn get_left_mut(&mut self) -> Option<&mut L> {
-        match self {
-            Self::Left(ref mut e) => Some(e),
-            Self::Right(..) => None,
-        }
-    }
-    /*
-    fn get_right_mut(&mut self) -> Option<&mut R> {
-        match self {
-            MapEither::Left(..) => None,
-            MapEither::Right(ref mut e) => Some(e),
-        }
-    }
-    */
-}
-
-impl<L, R> Stream for MapEither<L, R>
-where
-    L: Stream + Unpin,
-    R: Stream + Unpin,
-{
-    type Item = Either<<L as Stream>::Item, <R as Stream>::Item>;
-
-    fn poll_next(self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        match self.get_mut() {
-            Self::Left(ref mut item) => Pin::new(item)
-                .poll_next(cx)
-                .map(|opt| opt.map(Either::Left)),
-            Self::Right(ref mut item) => Pin::new(item)
-                .poll_next(cx)
-                .map(|opt| opt.map(Either::Right)),
-        }
-    }
-}
+use crate::util::MapEither;
 
 #[derive(Debug)]
 struct ChangeKeyRequest {
@@ -143,8 +101,12 @@ where
 }
 
 #[derive(Debug, Fail)]
+#[fail(display = "Running error")]
+pub struct Error(Box<dyn StdError + Send + Sync + 'static>);
+
+#[derive(Debug, Fail)]
 #[allow(clippy::module_name_repetitions)]
-pub enum ConnectionError {
+pub(crate) enum ConnectionError {
     #[fail(display = "Kex Error {:?}", _0)]
     KexError(Box<dyn Send + Sync + std::fmt::Debug>), // TODO StdError
     #[fail(display = "Message Error {}", _0)]
@@ -157,8 +119,8 @@ pub enum ConnectionError {
     Unknown(String),
     #[fail(display = "Unknown Channel Id {}", _0)]
     UnknownChannelId(u32),
-    #[fail(display = "Io Error {}", _0)]
-    Io(io::Error),
+    //#[fail(display = "Io Error {}", _0)]
+    //Io(io::Error),
 }
 
 impl From<MessageError> for ConnectionError {
@@ -168,7 +130,7 @@ impl From<MessageError> for ConnectionError {
 }
 
 #[allow(clippy::module_name_repetitions)]
-pub type ConnectionResult<T> = Result<T, ConnectionError>;
+pub(crate) type ConnectionResult<T> = Result<T, ConnectionError>;
 
 type IncommingOrOutgoing<IO> = MapEither<SplitStream<Transport<IO>>, mpsc::Receiver<Message>>;
 
@@ -237,12 +199,15 @@ where
         })
     }
 
-    pub async fn run(mut self) {
-        if let Err(e) = &mut self.run0().await {
+    pub async fn run(mut self) -> Result<(), Error> {
+        if let Err(e) = self.run0().await {
             eprintln!("{:?}", e);
             self.send_immediately(msg::Disconnect::new(2, "unexpected", ""))
                 .await
                 .ok(); // TODO
+            Err(Error(failure::Error::from(e).into()))
+        } else {
+            Ok(())
         }
     }
 
@@ -523,7 +488,11 @@ where
             .ok_or_else(|| ConnectionError::UnknownChannelId(*channel_id))?;
 
         let result = match msg.request_type() {
-            PtyReq(item) => self.handler.channel_pty_request(item, handle).await,
+            PtyReq(item) => {
+                self.handler
+                    .channel_pty_request(&(item.clone().into()), handle)
+                    .await
+            }
             Shell => self.handler.channel_shell_request(handle).await,
             Exec(path) => self.handler.channel_exec_request(path, handle).await,
             x => {

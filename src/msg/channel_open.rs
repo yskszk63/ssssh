@@ -6,13 +6,13 @@ use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug, Clone)]
-pub struct X11 {
+pub(crate) struct X11 {
     originator_address: String,
     originator_port: u32,
 }
 
 #[derive(Debug, Clone)]
-pub struct ForwardedTcpip {
+pub(crate) struct ForwardedTcpip {
     address: String,
     port: u32,
     originator_address: String,
@@ -20,7 +20,7 @@ pub struct ForwardedTcpip {
 }
 
 #[derive(Debug, Clone)]
-pub struct DirectTcpip {
+pub(crate) struct DirectTcpip {
     host: String,
     port: u32,
     originator_address: String,
@@ -29,7 +29,7 @@ pub struct DirectTcpip {
 
 #[derive(Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
-pub enum ChannelOpenChannelType {
+pub(crate) enum ChannelOpenChannelType {
     Session,
     X11(X11),
     ForwardedTcpip(ForwardedTcpip),
@@ -51,7 +51,7 @@ impl AsRef<str> for ChannelOpenChannelType {
 }
 
 #[derive(Debug, Clone)]
-pub struct ChannelOpen {
+pub(crate) struct ChannelOpen {
     channel_type: ChannelOpenChannelType,
     sender_channel: u32,
     initial_window_size: u32,
@@ -59,23 +59,23 @@ pub struct ChannelOpen {
 }
 
 impl ChannelOpen {
-    pub fn channel_type(&self) -> &ChannelOpenChannelType {
+    pub(crate) fn channel_type(&self) -> &ChannelOpenChannelType {
         &self.channel_type
     }
 
-    pub fn sender_channel(&self) -> u32 {
+    pub(crate) fn sender_channel(&self) -> u32 {
         self.sender_channel
     }
 
-    pub fn initial_window_size(&self) -> u32 {
+    pub(crate) fn initial_window_size(&self) -> u32 {
         self.initial_window_size
     }
 
-    pub fn maximum_packet_size(&self) -> u32 {
+    pub(crate) fn maximum_packet_size(&self) -> u32 {
         self.maximum_packet_size
     }
 
-    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
+    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let channel_type = buf.get_string()?;
         let sender_channel = buf.get_uint32()?;
         let initial_window_size = buf.get_uint32()?;
@@ -113,7 +113,7 @@ impl ChannelOpen {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) {
+    pub(crate) fn put(&self, buf: &mut BytesMut) {
         buf.put_string(self.channel_type.as_ref());
         buf.put_uint32(self.sender_channel);
         buf.put_uint32(self.initial_window_size);

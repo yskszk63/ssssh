@@ -5,13 +5,13 @@ use bytes::{Bytes, BytesMut};
 use super::{Message, MessageResult};
 
 #[derive(Debug)]
-pub struct Newkeys;
+pub(crate) struct Newkeys;
 
 impl Newkeys {
-    pub fn from(_buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
+    pub(crate) fn from(_buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         Ok(Newkeys)
     }
-    pub fn put(&self, _buf: &mut BytesMut) {}
+    pub(crate) fn put(&self, _buf: &mut BytesMut) {}
 }
 
 impl From<Newkeys> for Message {

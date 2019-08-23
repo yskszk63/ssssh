@@ -6,13 +6,13 @@ use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug, Clone)]
-pub struct UserauthBanner {
+pub(crate) struct UserauthBanner {
     message: String,
     language_tag: String,
 }
 
 impl UserauthBanner {
-    pub fn new(message: impl Into<String>, language_tag: impl Into<String>) -> Self {
+    pub(crate) fn new(message: impl Into<String>, language_tag: impl Into<String>) -> Self {
         let message = message.into();
         let language_tag = language_tag.into();
         Self {
@@ -21,7 +21,7 @@ impl UserauthBanner {
         }
     }
 
-    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
+    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let message = buf.get_string()?;
         let language_tag = buf.get_string()?;
         Ok(Self {
@@ -30,7 +30,7 @@ impl UserauthBanner {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) {
+    pub(crate) fn put(&self, buf: &mut BytesMut) {
         buf.put_string(&self.message);
         buf.put_string(&self.language_tag);
     }

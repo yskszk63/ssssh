@@ -10,7 +10,7 @@ use crate::msg::{KexEcdhReply, Message, MessageError};
 use crate::sshbuf::SshBufMut as _;
 
 #[allow(clippy::module_name_repetitions)]
-pub async fn kex_ecdh<Rx, Tx>(env: &mut KexEnv<'_, Tx, Rx>) -> KexResult
+pub(crate) async fn kex_ecdh<Rx, Tx>(env: &mut KexEnv<'_, Tx, Rx>) -> KexResult
 where
     Tx: Sink<Message, Error = MessageError> + Unpin,
     Rx: TryStream<Ok = Message, Error = MessageError> + Unpin,

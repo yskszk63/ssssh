@@ -5,14 +5,14 @@ use bytes::{Bytes, BytesMut};
 use super::{Message, MessageResult};
 
 #[derive(Debug, Clone)]
-pub struct UserauthSuccess;
+pub(crate) struct UserauthSuccess;
 
 impl UserauthSuccess {
-    pub fn from(_buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
+    pub(crate) fn from(_buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         Ok(Self)
     }
 
-    pub fn put(&self, _buf: &mut BytesMut) {}
+    pub(crate) fn put(&self, _buf: &mut BytesMut) {}
 }
 
 impl From<UserauthSuccess> for Message {

@@ -1,11 +1,57 @@
 use std::error::Error as StdError;
 use std::fmt;
 
+use bytes::Bytes;
 use failure::Fail;
 use futures::future::{BoxFuture, FutureExt as _};
 
 use crate::handle::{AuthHandle, ChannelHandle};
-pub use crate::msg::PtyReq;
+use crate::msg;
+
+#[derive(Debug, Clone)]
+pub struct PtyReq {
+    term_name: String,
+    terminal_width: u32,
+    terminal_height: u32,
+    terminal_width_px: u32,
+    terminal_height_px: u32,
+    terminal_modes: Bytes,
+}
+
+impl From<PtyReq> for msg::PtyReq {
+    fn from(v: PtyReq) -> Self {
+        let PtyReq {
+            term_name,
+            terminal_width,
+            terminal_height,
+            terminal_width_px,
+            terminal_height_px,
+            terminal_modes,
+        } = v;
+
+        Self::new(
+            term_name,
+            terminal_width,
+            terminal_height,
+            terminal_width_px,
+            terminal_height_px,
+            terminal_modes,
+        )
+    }
+}
+
+impl From<msg::PtyReq> for PtyReq {
+    fn from(v: msg::PtyReq) -> Self {
+        Self {
+            term_name: v.term_name().into(),
+            terminal_width: v.terminal_width(),
+            terminal_height: v.terminal_height(),
+            terminal_width_px: v.terminal_width_px(),
+            terminal_height_px: v.terminal_height_px(),
+            terminal_modes: v.terminal_modes().clone(),
+        }
+    }
+}
 
 #[derive(Debug, Fail)]
 #[fail(display = "Unsupported")]

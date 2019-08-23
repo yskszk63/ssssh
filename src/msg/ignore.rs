@@ -6,17 +6,17 @@ use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug, Clone)]
-pub struct Ignore {
+pub(crate) struct Ignore {
     data: Bytes,
 }
 
 impl Ignore {
-    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
+    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let data = buf.get_binary_string()?.into();
         Ok(Self { data })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) {
+    pub(crate) fn put(&self, buf: &mut BytesMut) {
         buf.put_binary_string(&self.data);
     }
 }

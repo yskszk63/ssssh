@@ -7,7 +7,7 @@ use super::{Message, MessageId, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug, Default)]
-pub struct Builder {
+pub(crate) struct Builder {
     cookie: Option<[u8; 16]>,
     kex_algorithms: Vec<String>,
     server_host_key_algorithms: Vec<String>,
@@ -23,19 +23,19 @@ pub struct Builder {
 }
 
 impl Builder {
-    pub fn cookie(&mut self, val: [u8; 16]) -> &mut Self {
+    pub(crate) fn cookie(&mut self, val: [u8; 16]) -> &mut Self {
         self.cookie = Some(val);
         self
     }
 
-    pub fn kex_algorithms(
+    pub(crate) fn kex_algorithms(
         &mut self,
         val: impl IntoIterator<Item = impl Into<String>>,
     ) -> &mut Self {
         self.kex_algorithms.extend(val.into_iter().map(Into::into));
         self
     }
-    pub fn server_host_key_algorithms(
+    pub(crate) fn server_host_key_algorithms(
         &mut self,
         val: impl IntoIterator<Item = impl Into<String>>,
     ) -> &mut Self {
@@ -43,7 +43,7 @@ impl Builder {
             .extend(val.into_iter().map(Into::into));
         self
     }
-    pub fn encryption_algorithms_client_to_server(
+    pub(crate) fn encryption_algorithms_client_to_server(
         &mut self,
         val: impl IntoIterator<Item = impl Into<String>>,
     ) -> &mut Self {
@@ -51,7 +51,7 @@ impl Builder {
             .extend(val.into_iter().map(Into::into));
         self
     }
-    pub fn encryption_algorithms_server_to_client(
+    pub(crate) fn encryption_algorithms_server_to_client(
         &mut self,
         val: impl IntoIterator<Item = impl Into<String>>,
     ) -> &mut Self {
@@ -59,7 +59,7 @@ impl Builder {
             .extend(val.into_iter().map(Into::into));
         self
     }
-    pub fn mac_algorithms_client_to_server(
+    pub(crate) fn mac_algorithms_client_to_server(
         &mut self,
         val: impl IntoIterator<Item = impl Into<String>>,
     ) -> &mut Self {
@@ -67,7 +67,7 @@ impl Builder {
             .extend(val.into_iter().map(Into::into));
         self
     }
-    pub fn mac_algorithms_server_to_client(
+    pub(crate) fn mac_algorithms_server_to_client(
         &mut self,
         val: impl IntoIterator<Item = impl Into<String>>,
     ) -> &mut Self {
@@ -75,7 +75,7 @@ impl Builder {
             .extend(val.into_iter().map(Into::into));
         self
     }
-    pub fn compression_algorithms_client_to_server(
+    pub(crate) fn compression_algorithms_client_to_server(
         &mut self,
         val: impl IntoIterator<Item = impl Into<String>>,
     ) -> &mut Self {
@@ -83,7 +83,7 @@ impl Builder {
             .extend(val.into_iter().map(Into::into));
         self
     }
-    pub fn compression_algorithms_server_to_client(
+    pub(crate) fn compression_algorithms_server_to_client(
         &mut self,
         val: impl IntoIterator<Item = impl Into<String>>,
     ) -> &mut Self {
@@ -91,7 +91,7 @@ impl Builder {
             .extend(val.into_iter().map(Into::into));
         self
     }
-    pub fn languages_client_to_server(
+    pub(crate) fn languages_client_to_server(
         &mut self,
         val: impl IntoIterator<Item = impl Into<String>>,
     ) -> &mut Self {
@@ -99,7 +99,7 @@ impl Builder {
             .extend(val.into_iter().map(Into::into));
         self
     }
-    pub fn languages_server_to_client(
+    pub(crate) fn languages_server_to_client(
         &mut self,
         val: impl IntoIterator<Item = impl Into<String>>,
     ) -> &mut Self {
@@ -107,11 +107,11 @@ impl Builder {
             .extend(val.into_iter().map(Into::into));
         self
     }
-    pub fn first_kex_packet_follows(&mut self, val: bool) -> &mut Self {
+    pub(crate) fn first_kex_packet_follows(&mut self, val: bool) -> &mut Self {
         self.first_kex_packet_follows = val;
         self
     }
-    pub fn build(&mut self) -> Kexinit {
+    pub(crate) fn build(&mut self) -> Kexinit {
         let cookie = self.cookie.unwrap_or_else(|| {
             let mut cookie = [0; 16];
             thread_rng().fill_bytes(&mut cookie);
@@ -144,7 +144,7 @@ impl Builder {
 }
 
 #[derive(Debug, Clone)]
-pub struct Kexinit {
+pub(crate) struct Kexinit {
     cookie: [u8; 16],
     kex_algorithms: Vec<String>,
     server_host_key_algorithms: Vec<String>,
@@ -160,43 +160,43 @@ pub struct Kexinit {
 }
 
 impl Kexinit {
-    pub fn builder() -> Builder {
+    pub(crate) fn builder() -> Builder {
         Builder::default()
     }
 
-    pub fn kex_algorithms(&self) -> impl Iterator<Item = &String> {
+    pub(crate) fn kex_algorithms(&self) -> impl Iterator<Item = &String> {
         self.kex_algorithms.iter()
     }
 
-    pub fn server_host_key_algorithms(&self) -> impl Iterator<Item = &String> {
+    pub(crate) fn server_host_key_algorithms(&self) -> impl Iterator<Item = &String> {
         self.server_host_key_algorithms.iter()
     }
 
-    pub fn encryption_algorithms_client_to_server(&self) -> impl Iterator<Item = &String> {
+    pub(crate) fn encryption_algorithms_client_to_server(&self) -> impl Iterator<Item = &String> {
         self.encryption_algorithms_client_to_server.iter()
     }
 
-    pub fn encryption_algorithms_server_to_client(&self) -> impl Iterator<Item = &String> {
+    pub(crate) fn encryption_algorithms_server_to_client(&self) -> impl Iterator<Item = &String> {
         self.encryption_algorithms_server_to_client.iter()
     }
 
-    pub fn mac_algorithms_client_to_server(&self) -> impl Iterator<Item = &String> {
+    pub(crate) fn mac_algorithms_client_to_server(&self) -> impl Iterator<Item = &String> {
         self.mac_algorithms_client_to_server.iter()
     }
 
-    pub fn mac_algorithms_server_to_client(&self) -> impl Iterator<Item = &String> {
+    pub(crate) fn mac_algorithms_server_to_client(&self) -> impl Iterator<Item = &String> {
         self.mac_algorithms_server_to_client.iter()
     }
 
-    pub fn compression_algorithms_client_to_server(&self) -> impl Iterator<Item = &String> {
+    pub(crate) fn compression_algorithms_client_to_server(&self) -> impl Iterator<Item = &String> {
         self.compression_algorithms_client_to_server.iter()
     }
 
-    pub fn compression_algorithms_server_to_client(&self) -> impl Iterator<Item = &String> {
+    pub(crate) fn compression_algorithms_server_to_client(&self) -> impl Iterator<Item = &String> {
         self.compression_algorithms_server_to_client.iter()
     }
 
-    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
+    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let mut cookie = [0; 16];
         buf.copy_to_slice(&mut cookie);
 
@@ -218,7 +218,7 @@ impl Kexinit {
         Ok(v)
     }
 
-    pub fn put(&self, buf: &mut BytesMut) {
+    pub(crate) fn put(&self, buf: &mut BytesMut) {
         buf.extend_from_slice(&self.cookie); // u128?
         buf.put_name_list(&self.kex_algorithms);
         buf.put_name_list(&self.server_host_key_algorithms);
@@ -234,7 +234,7 @@ impl Kexinit {
         buf.put_uint32(0);
     }
 
-    pub fn to_bytes(&self) -> Bytes {
+    pub(crate) fn to_bytes(&self) -> Bytes {
         let mut buf = BytesMut::new();
         buf.extend_from_slice(&vec![MessageId::Kexinit.into()]);
         self.put(&mut buf);

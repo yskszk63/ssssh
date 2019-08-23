@@ -6,7 +6,7 @@ use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug, Clone)]
-pub struct PtyReq {
+pub(crate) struct PtyReq {
     term_name: String,
     terminal_width: u32,
     terminal_height: u32,
@@ -16,33 +16,51 @@ pub struct PtyReq {
 }
 
 impl PtyReq {
-    pub fn term_name(&self) -> &str {
+    pub(crate) fn new(
+        term_name: String,
+        terminal_width: u32,
+        terminal_height: u32,
+        terminal_width_px: u32,
+        terminal_height_px: u32,
+        terminal_modes: Bytes,
+    ) -> Self {
+        Self {
+            term_name,
+            terminal_width,
+            terminal_height,
+            terminal_width_px,
+            terminal_height_px,
+            terminal_modes,
+        }
+    }
+
+    pub(crate) fn term_name(&self) -> &str {
         &self.term_name
     }
 
-    pub fn terminal_width(&self) -> u32 {
+    pub(crate) fn terminal_width(&self) -> u32 {
         self.terminal_width
     }
 
-    pub fn terminal_height(&self) -> u32 {
+    pub(crate) fn terminal_height(&self) -> u32 {
         self.terminal_height
     }
 
-    pub fn terminal_width_px(&self) -> u32 {
+    pub(crate) fn terminal_width_px(&self) -> u32 {
         self.terminal_width_px
     }
 
-    pub fn terminal_height_px(&self) -> u32 {
+    pub(crate) fn terminal_height_px(&self) -> u32 {
         self.terminal_height_px
     }
 
-    pub fn terminal_modes(&self) -> &Bytes {
+    pub(crate) fn terminal_modes(&self) -> &Bytes {
         &self.terminal_modes
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct X11Req {
+pub(crate) struct X11Req {
     signle_connection: bool,
     x11_authentication_protocol: String,
     x11_authentication_cookie: Bytes,
@@ -50,25 +68,25 @@ pub struct X11Req {
 }
 
 impl X11Req {
-    pub fn signle_connection(&self) -> bool {
+    pub(crate) fn signle_connection(&self) -> bool {
         self.signle_connection
     }
 
-    pub fn x11_authentication_protocol(&self) -> &str {
+    pub(crate) fn x11_authentication_protocol(&self) -> &str {
         &self.x11_authentication_protocol
     }
 
-    pub fn x11_authentication_cookie(&self) -> &Bytes {
+    pub(crate) fn x11_authentication_cookie(&self) -> &Bytes {
         &self.x11_authentication_cookie
     }
 
-    pub fn x11_screen_number(&self) -> u32 {
+    pub(crate) fn x11_screen_number(&self) -> u32 {
         self.x11_screen_number
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct WindowChange {
+pub(crate) struct WindowChange {
     terminal_width: u32,
     terminal_height: u32,
     terminal_width_px: u32,
@@ -76,25 +94,25 @@ pub struct WindowChange {
 }
 
 impl WindowChange {
-    pub fn terminal_width(&self) -> u32 {
+    pub(crate) fn terminal_width(&self) -> u32 {
         self.terminal_width
     }
 
-    pub fn terminal_height(&self) -> u32 {
+    pub(crate) fn terminal_height(&self) -> u32 {
         self.terminal_height
     }
 
-    pub fn terminal_width_px(&self) -> u32 {
+    pub(crate) fn terminal_width_px(&self) -> u32 {
         self.terminal_width_px
     }
 
-    pub fn terminal_height_px(&self) -> u32 {
+    pub(crate) fn terminal_height_px(&self) -> u32 {
         self.terminal_height_px
     }
 }
 
 #[derive(Debug, Clone)]
-pub enum Signal {
+pub(crate) enum Signal {
     Abrt,
     Alrm,
     Fpe,
@@ -154,7 +172,7 @@ impl AsRef<str> for Signal {
 }
 
 #[derive(Debug, Clone)]
-pub struct ExitSignal {
+pub(crate) struct ExitSignal {
     signal: Signal,
     coredumped: bool,
     error_message: String,
@@ -162,26 +180,26 @@ pub struct ExitSignal {
 }
 
 impl ExitSignal {
-    pub fn signal(&self) -> &Signal {
+    pub(crate) fn signal(&self) -> &Signal {
         &self.signal
     }
 
-    pub fn coredumped(&self) -> bool {
+    pub(crate) fn coredumped(&self) -> bool {
         self.coredumped
     }
 
-    pub fn error_message(&self) -> &str {
+    pub(crate) fn error_message(&self) -> &str {
         &self.error_message
     }
 
-    pub fn language_tag(&self) -> &str {
+    pub(crate) fn language_tag(&self) -> &str {
         &self.language_tag
     }
 }
 
 #[derive(Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
-pub enum ChannelRequestType {
+pub(crate) enum ChannelRequestType {
     PtyReq(PtyReq),
     X11Req(X11Req),
     Env(String, String),
@@ -218,14 +236,14 @@ impl ChannelRequestType {
 }
 
 #[derive(Debug, Clone)]
-pub struct ChannelRequest {
+pub(crate) struct ChannelRequest {
     recipient_channel: u32,
     request_type: ChannelRequestType,
     want_reply: bool,
 }
 
 impl ChannelRequest {
-    pub fn new_exit_status(recipient_channel: u32, exit_code: u32) -> Self {
+    pub(crate) fn new_exit_status(recipient_channel: u32, exit_code: u32) -> Self {
         Self {
             recipient_channel,
             request_type: ChannelRequestType::ExitStatus(exit_code),
@@ -233,7 +251,7 @@ impl ChannelRequest {
         }
     }
 
-    pub fn new_exit_signal(
+    pub(crate) fn new_exit_signal(
         recipient_channel: u32,
         signal: Signal,
         coredumped: bool,
@@ -252,19 +270,19 @@ impl ChannelRequest {
         }
     }
 
-    pub fn recipient_channel(&self) -> u32 {
+    pub(crate) fn recipient_channel(&self) -> u32 {
         self.recipient_channel
     }
 
-    pub fn request_type(&self) -> &ChannelRequestType {
+    pub(crate) fn request_type(&self) -> &ChannelRequestType {
         &self.request_type
     }
 
-    pub fn want_reply(&self) -> bool {
+    pub(crate) fn want_reply(&self) -> bool {
         self.want_reply
     }
 
-    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
+    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let recipient_channel = buf.get_uint32()?;
         let request_type = buf.get_string()?;
         let want_reply = buf.get_boolean()?;
@@ -316,7 +334,7 @@ impl ChannelRequest {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) {
+    pub(crate) fn put(&self, buf: &mut BytesMut) {
         use ChannelRequestType::*;
 
         buf.put_uint32(self.recipient_channel);

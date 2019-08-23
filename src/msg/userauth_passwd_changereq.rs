@@ -6,28 +6,32 @@ use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug, Clone)]
-pub struct UserauthPasswdChangereq {
+pub(crate) struct UserauthPasswdChangereq {
     prompt: String,
     language_tag: String,
 }
 
 impl UserauthPasswdChangereq {
-    pub fn new(prompt: impl Into<String>, language_tag: impl Into<String>) -> Self {
+    pub(crate) fn new(prompt: impl Into<String>, language_tag: impl Into<String>) -> Self {
         Self {
             prompt: prompt.into(),
             language_tag: language_tag.into(),
         }
     }
 
-    pub fn prompt(&self) -> &str {
+    /*
+    pub(crate) fn prompt(&self) -> &str {
         &self.prompt
     }
+    */
 
-    pub fn language_tag(&self) -> &str {
+    /*
+    pub(crate) fn language_tag(&self) -> &str {
         &self.language_tag
     }
+    */
 
-    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
+    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let prompt = buf.get_string()?;
         let language_tag = buf.get_string()?;
         Ok(Self {
@@ -36,7 +40,7 @@ impl UserauthPasswdChangereq {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) {
+    pub(crate) fn put(&self, buf: &mut BytesMut) {
         buf.put_string(&self.prompt);
         buf.put_string(&self.language_tag);
     }

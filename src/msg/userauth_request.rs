@@ -6,28 +6,28 @@ use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug, Clone)]
-pub struct Publickey {
+pub(crate) struct Publickey {
     algorithm: String,
     blob: Bytes,
     signature: Option<Bytes>,
 }
 
 impl Publickey {
-    pub fn algorithm(&self) -> &str {
+    pub(crate) fn algorithm(&self) -> &str {
         &self.algorithm
     }
 
-    pub fn blob(&self) -> &Bytes {
+    pub(crate) fn blob(&self) -> &Bytes {
         &self.blob
     }
 
-    pub fn signature(&self) -> &Option<Bytes> {
+    pub(crate) fn signature(&self) -> &Option<Bytes> {
         &self.signature
     }
 }
 
 #[derive(Debug, Clone)]
-pub struct Password {
+pub(crate) struct Password {
     password: String,
     newpassword: Option<String>,
 }
@@ -43,7 +43,7 @@ impl Password {
 }
 
 #[derive(Debug, Clone)]
-pub struct Hostbased {
+pub(crate) struct Hostbased {
     algorithm: String,
     client_hostkey: Bytes,
     client_hostname: String,
@@ -53,7 +53,7 @@ pub struct Hostbased {
 
 #[derive(Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
-pub enum UserauthRequestMethod {
+pub(crate) enum UserauthRequestMethod {
     None,
     Publickey(Publickey),
     Password(Password),
@@ -81,19 +81,19 @@ pub struct UserauthRequest {
 }
 
 impl UserauthRequest {
-    pub fn user_name(&self) -> &str {
+    pub(crate) fn user_name(&self) -> &str {
         &self.user_name
     }
 
-    pub fn service_name(&self) -> &str {
+    pub(crate) fn service_name(&self) -> &str {
         &self.service_name
     }
 
-    pub fn method(&self) -> &UserauthRequestMethod {
+    pub(crate) fn method(&self) -> &UserauthRequestMethod {
         &self.method
     }
 
-    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
+    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let user_name = buf.get_string()?;
         let service_name = buf.get_string()?;
         let method_name = buf.get_string()?;
@@ -142,7 +142,7 @@ impl UserauthRequest {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) {
+    pub(crate) fn put(&self, buf: &mut BytesMut) {
         buf.put_string(&self.user_name);
         buf.put_string(&self.service_name);
         buf.put_string(&self.method.as_ref());

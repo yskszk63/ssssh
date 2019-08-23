@@ -3,7 +3,7 @@ use bytes::Bytes;
 use super::Mac;
 
 #[allow(clippy::module_name_repetitions)]
-pub struct NoneMac;
+pub(crate) struct NoneMac;
 
 impl Mac for NoneMac {
     fn size(&self) -> usize {

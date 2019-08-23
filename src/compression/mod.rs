@@ -2,19 +2,19 @@ use bytes::Bytes;
 
 use failure::Fail;
 
-pub use none::*;
+pub(crate) use none::*;
 
 mod none;
 
 #[allow(clippy::module_name_repetitions)]
 #[derive(Debug, Fail)]
 #[fail(display = "")] // TODO
-pub struct CompressionError {}
+pub(crate) struct CompressionError {}
 
 #[allow(clippy::module_name_repetitions)]
-pub type CompressionResult<T> = Result<T, CompressionError>;
+pub(crate) type CompressionResult<T> = Result<T, CompressionError>;
 
-pub trait Compression {
+pub(crate) trait Compression {
     fn compress(&self, target: &Bytes) -> CompressionResult<Bytes>;
     fn decompress(&self, target: &Bytes) -> CompressionResult<Bytes>;
 }

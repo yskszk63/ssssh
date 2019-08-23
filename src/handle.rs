@@ -2,8 +2,46 @@ use bytes::Bytes;
 use futures::channel::mpsc;
 use futures::SinkExt as _;
 
-pub use crate::msg::Signal;
 use crate::msg::{self, Message};
+
+#[derive(Debug, Clone)]
+pub enum Signal {
+    Abrt,
+    Alrm,
+    Fpe,
+    Hup,
+    Ill,
+    Int,
+    Kill,
+    Pipe,
+    Quit,
+    Segv,
+    Term,
+    Usr1,
+    Usr2,
+    Unknown(String),
+}
+
+impl From<Signal> for msg::Signal {
+    fn from(v: Signal) -> Self {
+        match v {
+            Signal::Abrt => msg::Signal::Abrt,
+            Signal::Alrm => msg::Signal::Alrm,
+            Signal::Fpe => msg::Signal::Fpe,
+            Signal::Hup => msg::Signal::Hup,
+            Signal::Ill => msg::Signal::Ill,
+            Signal::Int => msg::Signal::Int,
+            Signal::Kill => msg::Signal::Kill,
+            Signal::Pipe => msg::Signal::Pipe,
+            Signal::Quit => msg::Signal::Quit,
+            Signal::Segv => msg::Signal::Segv,
+            Signal::Term => msg::Signal::Term,
+            Signal::Usr1 => msg::Signal::Usr1,
+            Signal::Usr2 => msg::Signal::Usr2,
+            Signal::Unknown(s) => msg::Signal::Unknown(s),
+        }
+    }
+}
 
 #[derive(Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
@@ -124,7 +162,7 @@ impl ChannelHandle {
         self.global
             .send(msg::ChannelRequest::new_exit_signal(
                 self.channel,
-                signal,
+                signal.into(),
                 coredumped,
                 error_message,
                 language_tag,

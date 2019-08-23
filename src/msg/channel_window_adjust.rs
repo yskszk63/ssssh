@@ -6,13 +6,13 @@ use super::{Message, MessageResult};
 use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug, Clone)]
-pub struct ChannelWindowAdjust {
+pub(crate) struct ChannelWindowAdjust {
     recipient_channel: u32,
     bytes_to_add: u32,
 }
 
 impl ChannelWindowAdjust {
-    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
+    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let recipient_channel = buf.get_uint32()?;
         let bytes_to_add = buf.get_uint32()?;
         Ok(Self {
@@ -21,7 +21,7 @@ impl ChannelWindowAdjust {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) {
+    pub(crate) fn put(&self, buf: &mut BytesMut) {
         buf.put_uint32(self.recipient_channel);
         buf.put_uint32(self.bytes_to_add);
     }

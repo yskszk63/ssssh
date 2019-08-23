@@ -7,7 +7,7 @@ use crate::sshbuf::{SshBuf as _, SshBufMut as _};
 
 #[derive(Debug, Clone)]
 #[allow(clippy::module_name_repetitions)]
-pub enum GlobalRequestType {
+pub(crate) enum GlobalRequestType {
     TcpipForward(String, u32),
     CancelTcpipForward(String, u32),
     Unknown(String, Bytes),
@@ -24,23 +24,23 @@ impl AsRef<str> for GlobalRequestType {
 }
 
 #[derive(Debug, Clone)]
-pub struct GlobalRequest {
+pub(crate) struct GlobalRequest {
     request_type: GlobalRequestType,
     want_reply: bool,
 }
 
 impl GlobalRequest {
     /*
-    pub fn request_type(&self) -> &str {
+    pub(crate) fn request_type(&self) -> &str {
         &self.request_type
     }
 
-    pub fn want_reply(&self) -> bool {
+    pub(crate) fn want_reply(&self) -> bool {
         self.want_reply
     }
     */
 
-    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
+    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let request_type = buf.get_string()?;
         let want_reply = buf.get_boolean()?;
 
@@ -63,7 +63,7 @@ impl GlobalRequest {
         })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) {
+    pub(crate) fn put(&self, buf: &mut BytesMut) {
         buf.put_string(self.request_type.as_ref());
         buf.put_boolean(self.want_reply);
         match &self.request_type {

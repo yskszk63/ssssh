@@ -10,7 +10,7 @@ mod ecdh;
 
 #[derive(Debug)]
 #[allow(clippy::module_name_repetitions)]
-pub struct KexEnv<'a, Tx, Rx>
+pub(crate) struct KexEnv<'a, Tx, Rx>
 where
     Tx: Sink<Message, Error = MessageError> + Unpin,
     Rx: TryStream<Ok = Message, Error = MessageError> + Unpin,
@@ -28,7 +28,7 @@ where
     Tx: Sink<Message, Error = MessageError> + Unpin,
     Rx: TryStream<Ok = Message, Error = MessageError> + Unpin,
 {
-    pub fn new(
+    pub(crate) fn new(
         tx: &'a mut Tx,
         rx: &'a mut Rx,
         version: &'a Version,
@@ -48,11 +48,11 @@ where
 }
 
 #[allow(clippy::module_name_repetitions)]
-pub type KexResult = Result<KexReturn, KexError>;
+pub(crate) type KexResult = Result<KexReturn, KexError>;
 
 #[derive(Debug)]
 #[allow(clippy::module_name_repetitions)]
-pub enum KexError {
+pub(crate) enum KexError {
     ProtocolError,
     MessageError(MessageError),
 }
@@ -65,7 +65,7 @@ impl From<MessageError> for KexError {
 
 #[derive(Debug)]
 #[allow(clippy::module_name_repetitions)]
-pub struct KexReturn {
+pub(crate) struct KexReturn {
     hash: Bytes,
     key: Bytes,
 }
@@ -76,7 +76,7 @@ impl KexReturn {
     }
 }
 
-pub async fn kex<Tx, Rx>(algorithm: &KexAlgorithm, env: &mut KexEnv<'_, Tx, Rx>) -> KexResult
+pub(crate) async fn kex<Tx, Rx>(algorithm: &KexAlgorithm, env: &mut KexEnv<'_, Tx, Rx>) -> KexResult
 where
     Tx: Sink<Message, Error = MessageError> + Unpin,
     Rx: TryStream<Ok = Message, Error = MessageError> + Unpin,

@@ -20,7 +20,7 @@ impl HostKeys {
         Self { keys }
     }
 
-    pub fn lookup(&self, algorithm: &HostKeyAlgorithm) -> Option<&HostKey> {
+    pub(crate) fn lookup(&self, algorithm: &HostKeyAlgorithm) -> Option<&HostKey> {
         self.keys.iter().find(|k| &k.algorithm() == algorithm)
     }
 }
@@ -93,7 +93,7 @@ impl HostKey {
         })
     }
 
-    pub fn sign(&self, target: &[u8]) -> Bytes {
+    pub(crate) fn sign(&self, target: &[u8]) -> Bytes {
         match self {
             Self::SshEd25519 { pair, .. } => {
                 let pair = pair.as_ref();

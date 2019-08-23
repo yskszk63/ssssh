@@ -6,38 +6,38 @@ use failure::Fail;
 
 use crate::sshbuf::SshBufError;
 use crate::transport::codec::CodecError;
-pub use channel_close::*;
-pub use channel_data::*;
-pub use channel_eof::*;
-pub use channel_extended_data::*;
-pub use channel_failure::*;
-pub use channel_open::*;
-pub use channel_open_confirmation::*;
-pub use channel_open_failure::*;
-pub use channel_request::*;
-pub use channel_success::*;
-pub use channel_window_adjust::*;
-pub use debug::*;
-pub use disconnect::*;
-pub use global_request::*;
-pub use id::*;
-pub use ignore::*;
-pub use kex_ecdh_init::*;
-pub use kex_ecdh_reply::*;
-pub use kexinit::*;
-pub use msg60::*;
-pub use newkeys::*;
-pub use request_failure::*;
-pub use request_success::*;
-pub use service_accept::*;
-pub use service_request::*;
-pub use unimplemented::*;
-pub use userauth_banner::*;
-pub use userauth_failure::*;
-pub use userauth_passwd_changereq::*;
-pub use userauth_pk_ok::*;
-pub use userauth_request::*;
-pub use userauth_success::*;
+pub(crate) use channel_close::*;
+pub(crate) use channel_data::*;
+pub(crate) use channel_eof::*;
+pub(crate) use channel_extended_data::*;
+pub(crate) use channel_failure::*;
+pub(crate) use channel_open::*;
+pub(crate) use channel_open_confirmation::*;
+pub(crate) use channel_open_failure::*;
+pub(crate) use channel_request::*;
+pub(crate) use channel_success::*;
+pub(crate) use channel_window_adjust::*;
+pub(crate) use debug::*;
+pub(crate) use disconnect::*;
+pub(crate) use global_request::*;
+pub(crate) use id::*;
+pub(crate) use ignore::*;
+pub(crate) use kex_ecdh_init::*;
+pub(crate) use kex_ecdh_reply::*;
+pub(crate) use kexinit::*;
+pub(crate) use msg60::*;
+pub(crate) use newkeys::*;
+pub(crate) use request_failure::*;
+pub(crate) use request_success::*;
+pub(crate) use service_accept::*;
+pub(crate) use service_request::*;
+pub(crate) use unimplemented::*;
+pub(crate) use userauth_banner::*;
+pub(crate) use userauth_failure::*;
+pub(crate) use userauth_passwd_changereq::*;
+pub(crate) use userauth_pk_ok::*;
+pub(crate) use userauth_request::*;
+pub(crate) use userauth_success::*;
 
 mod channel_close;
 mod channel_data;
@@ -73,11 +73,11 @@ mod userauth_request;
 mod userauth_success;
 
 #[derive(Debug, Fail)]
-pub enum MessageError {
+pub(crate) enum MessageError {
     #[fail(display = "Unknown Message Id {}", _0)]
     UnknownMessageId(u8),
-    #[fail(display = "Unimplemented Id {:?}", _0)]
-    Unimplemented(MessageId),
+    //#[fail(display = "Unimplemented Id {:?}", _0)]
+    //Unimplemented(MessageId),
     #[fail(display = "Under flow")]
     Underflow,
     #[fail(display = "{}", _0)]
@@ -107,10 +107,10 @@ impl From<CodecError> for MessageError {
     }
 }
 
-pub type MessageResult<T> = Result<T, MessageError>;
+pub(crate) type MessageResult<T> = Result<T, MessageError>;
 
 #[derive(Debug)]
-pub enum Message {
+pub(crate) enum Message {
     Kexinit(Box<Kexinit>),
     KexEcdhInit(KexEcdhInit),
     KexEcdhReply(KexEcdhReply),

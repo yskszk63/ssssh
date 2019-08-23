@@ -5,24 +5,24 @@ use bytes::{Buf as _, Bytes, BytesMut};
 use super::{Message, MessageResult};
 
 #[derive(Debug, Clone)]
-pub struct RequestSuccess {
+pub(crate) struct RequestSuccess {
     data: Bytes,
 }
 
 impl RequestSuccess {
     /*
-    pub fn new() -> Self {
+    pub(crate) fn new() -> Self {
         let data = Bytes::from("");
         Self { data }
     }
     */
 
-    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
+    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         let data = buf.take(usize::max_value()).collect();
         Ok(Self { data })
     }
 
-    pub fn put(&self, buf: &mut BytesMut) {
+    pub(crate) fn put(&self, buf: &mut BytesMut) {
         buf.extend_from_slice(&self.data);
     }
 }

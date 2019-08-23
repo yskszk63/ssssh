@@ -5,14 +5,14 @@ use bytes::{Buf as _, Bytes, BytesMut};
 use super::{Message, MessageResult};
 
 #[derive(Debug, Clone)]
-pub struct Msg60(Bytes);
+pub(crate) struct Msg60(Bytes);
 
 impl Msg60 {
-    pub fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
+    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
         Ok(Self(buf.take(usize::max_value()).iter().collect()))
     }
 
-    pub fn put(&self, buf: &mut BytesMut) {
+    pub(crate) fn put(&self, buf: &mut BytesMut) {
         buf.extend_from_slice(&self.0);
     }
 }
