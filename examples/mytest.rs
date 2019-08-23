@@ -91,6 +91,8 @@ impl Handler for MyHandler {
 
 #[tokio::main(single_thread)]
 async fn main() {
+    env_logger::init();
+
     tokio::executor::spawn(async {
         use tokio_net::process::Command;
         Command::new("ssh")

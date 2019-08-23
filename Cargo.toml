@@ -14,7 +14,9 @@ rand = "0.7"
 openssl = "0.10"
 failure = "0.1"
 ring = "0.16"
+log = "0.4"
 
 [dev-dependencies]
 tokio-test = { git="https://github.com/tokio-rs/tokio" }
 tokio-net = { git="https://github.com/tokio-rs/tokio", features=["process"] }
+env_logger = "0.6"
