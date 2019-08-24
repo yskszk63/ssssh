@@ -11,13 +11,13 @@ pub(crate) struct Unimplemented {
 }
 
 impl Unimplemented {
-    /*
     pub(crate) fn new(packet_sequence_number: u32) -> Self {
         Self {
             packet_sequence_number,
         }
     }
 
+    /*
     pub(crate) fn packet_sequence_number(&self) -> u32 {
         self.packet_sequence_number
     }

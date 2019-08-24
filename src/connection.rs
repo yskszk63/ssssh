@@ -10,6 +10,7 @@ use futures::future::Either;
 use futures::stream::{select, Select, SplitSink, SplitStream};
 use futures::{SinkExt as _, StreamExt as _};
 use tokio::io::{AsyncRead, AsyncWrite};
+use log::debug;
 
 use crate::algorithm::{Algorithm, Preference};
 use crate::handle::{AuthHandle, ChannelHandle, GlobalHandle};
@@ -143,23 +144,26 @@ where
         while let Some(m) = self.rx.next().await {
             match m {
                 Either::Left(m) => match m? {
-                    Kexinit(item) => self.on_kexinit(*item).await?,
-                    ServiceRequest(item) => self.on_service_request(item).await?,
-                    UserauthRequest(item) => self.on_userauth_request(item).await?,
-                    ChannelOpen(item) => self.on_channel_open(item).await?,
-                    ChannelRequest(item) => self.on_channel_request(item).await?,
-                    ChannelData(item) => self.on_channel_data(item).await?,
-                    ChannelEof(item) => self.on_channel_eof(item).await?,
-                    ChannelClose(item) => self.on_channel_close(item).await?,
-                    ChannelWindowAdjust(item) => self.on_channel_window_adjust(item).await?,
-                    GlobalRequest(item) => self.on_global_request(item).await?,
-                    Ignore(..) => {}
-                    Unimplemented(item) => self.on_unimplemented(item).await?,
-                    Disconnect(item) => {
+                    (_seq, Kexinit(item)) => self.on_kexinit(*item).await?,
+                    (_seq, ServiceRequest(item)) => self.on_service_request(item).await?,
+                    (_seq, UserauthRequest(item)) => self.on_userauth_request(item).await?,
+                    (_seq, ChannelOpen(item)) => self.on_channel_open(item).await?,
+                    (_seq, ChannelRequest(item)) => self.on_channel_request(item).await?,
+                    (_seq, ChannelData(item)) => self.on_channel_data(item).await?,
+                    (_seq, ChannelEof(item)) => self.on_channel_eof(item).await?,
+                    (_seq, ChannelClose(item)) => self.on_channel_close(item).await?,
+                    (_seq, ChannelWindowAdjust(item)) => self.on_channel_window_adjust(item).await?,
+                    (_seq, GlobalRequest(item)) => self.on_global_request(item).await?,
+                    (_seq, Ignore(..)) => {}
+                    (_seq, Unimplemented(item)) => self.on_unimplemented(item).await?,
+                    (_seq, Disconnect(item)) => {
                         self.on_disconnect(item).await?;
                         break;
                     }
-                    x => panic!("{:?}", x),
+                    (seq, x) => {
+                        debug!("{:?}", x);
+                        self.send(msg::Unimplemented::new(seq)).await?;
+                    }
                 },
                 Either::Right(m) => {
                     self.send_immediately(m).await?;
@@ -196,7 +200,7 @@ where
             .map_err(|e| ConnectionError::KexError(Box::new(e)))?
             .split();
 
-        if let Some(Either::Left(Ok(Message::Newkeys(..)))) = self.rx.next().await {
+        if let Some(Either::Left(Ok((_, Message::Newkeys(..))))) = self.rx.next().await {
             self.send_immediately(msg::Newkeys).await?;
         } else {
             panic!()

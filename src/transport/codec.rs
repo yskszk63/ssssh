@@ -6,7 +6,7 @@ use failure::Fail;
 use rand::{CryptoRng, RngCore};
 use tokio::codec::{Decoder, Encoder};
 
-use super::State;
+use super::{State, Packet};
 
 const MINIMUM_PAD_SIZE: usize = 4;
 
@@ -116,7 +116,7 @@ impl<R> Decoder for Codec<R>
 where
     R: RngCore + CryptoRng,
 {
-    type Item = Bytes;
+    type Item = Packet;
     type Error = CodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> CodecResult<Option<Self::Item>> {
@@ -176,7 +176,7 @@ where
                     let payload = plain.slice(5, plain.len() - pad);
                     let payload = state.comp_ctos().decompress(&payload).unwrap();
                     self.encrypt_state = EncryptState::Initial;
-                    return Ok(Some(payload));
+                    return Ok(Some(Packet::new(seq, payload)));
                 }
             }
         }
@@ -204,7 +204,7 @@ mod tests {
         let state = Arc::new(Mutex::new(State::new()));
 
         let mut codec = Codec::new(StdRng::seed_from_u64(0), state).framed(&mut mock);
-        let b = codec.try_next().await.unwrap().unwrap();
+        let b = codec.try_next().await.unwrap().unwrap().data();
         assert_eq!(b, Bytes::from(&[0x15][..]));
 
         codec.send(Bytes::from(b)).await.unwrap();

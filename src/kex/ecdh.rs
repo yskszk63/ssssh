@@ -13,9 +13,9 @@ use crate::sshbuf::SshBufMut as _;
 pub(crate) async fn kex_ecdh<Rx, Tx>(env: &mut KexEnv<'_, Tx, Rx>) -> KexResult
 where
     Tx: Sink<Message, Error = MessageError> + Unpin,
-    Rx: TryStream<Ok = Message, Error = MessageError> + Unpin,
+    Rx: TryStream<Ok = (u32, Message), Error = MessageError> + Unpin,
 {
-    let kex_ecdh_init = if let Some(Message::KexEcdhInit(e)) = env.rx.try_next().await? {
+    let kex_ecdh_init = if let Some((_, Message::KexEcdhInit(e))) = env.rx.try_next().await? {
         e
     } else {
         return Err(KexError::ProtocolError);
@@ -70,7 +70,7 @@ fn calculate_hash<Tx, Rx>(
 ) -> Bytes
 where
     Tx: Sink<Message, Error = MessageError> + Unpin,
-    Rx: TryStream<Ok = Message, Error = MessageError> + Unpin,
+    Rx: TryStream<Ok = (u32, Message), Error = MessageError> + Unpin,
 {
     let client_version = env.version.client();
     let server_version = env.version.server();

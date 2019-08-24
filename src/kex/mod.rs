@@ -13,7 +13,7 @@ mod ecdh;
 pub(crate) struct KexEnv<'a, Tx, Rx>
 where
     Tx: Sink<Message, Error = MessageError> + Unpin,
-    Rx: TryStream<Ok = Message, Error = MessageError> + Unpin,
+    Rx: TryStream<Ok = (u32, Message), Error = MessageError> + Unpin,
 {
     tx: &'a mut Tx,
     rx: &'a mut Rx,
@@ -26,7 +26,7 @@ where
 impl<'a, Tx, Rx> KexEnv<'a, Tx, Rx>
 where
     Tx: Sink<Message, Error = MessageError> + Unpin,
-    Rx: TryStream<Ok = Message, Error = MessageError> + Unpin,
+    Rx: TryStream<Ok = (u32, Message), Error = MessageError> + Unpin,
 {
     pub(crate) fn new(
         tx: &'a mut Tx,
@@ -79,7 +79,7 @@ impl KexReturn {
 pub(crate) async fn kex<Tx, Rx>(algorithm: &KexAlgorithm, env: &mut KexEnv<'_, Tx, Rx>) -> KexResult
 where
     Tx: Sink<Message, Error = MessageError> + Unpin,
-    Rx: TryStream<Ok = Message, Error = MessageError> + Unpin,
+    Rx: TryStream<Ok = (u32, Message), Error = MessageError> + Unpin,
 {
     match algorithm {
         KexAlgorithm::Curve25519Sha256 => ecdh::kex_ecdh(env).await,

@@ -5,7 +5,7 @@ use bytes::{Buf as _, BufMut as _, Bytes, BytesMut, IntoBuf as _};
 use failure::Fail;
 
 use crate::sshbuf::SshBufError;
-use crate::transport::codec::CodecError;
+use crate::transport::CodecError;
 pub(crate) use channel_close::*;
 pub(crate) use channel_data::*;
 pub(crate) use channel_eof::*;
