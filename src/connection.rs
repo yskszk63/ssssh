@@ -118,7 +118,7 @@ where
         let io = Transport::new(socket, rbuf, state.clone());
         let (tx, rx) = io.split();
         let rx = select(MapEither::Left(rx), MapEither::Right(message_recieve));
-        let global_handle = GlobalHandle::new(message_send.clone());
+        let global_handle = GlobalHandle::new(message_send.clone(), &remote);
 
         log::debug!("Established.. {:?} version: {:?}", remote, version);
 
