@@ -9,8 +9,8 @@ use futures::channel::mpsc;
 use futures::future::Either;
 use futures::stream::{select, Select, SplitSink, SplitStream};
 use futures::{SinkExt as _, StreamExt as _};
-use tokio::io::{AsyncRead, AsyncWrite};
 use log::debug;
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::algorithm::{Algorithm, Preference};
 use crate::handle::{AuthHandle, ChannelHandle, GlobalHandle};
@@ -152,7 +152,9 @@ where
                     (_seq, ChannelData(item)) => self.on_channel_data(item).await?,
                     (_seq, ChannelEof(item)) => self.on_channel_eof(item).await?,
                     (_seq, ChannelClose(item)) => self.on_channel_close(item).await?,
-                    (_seq, ChannelWindowAdjust(item)) => self.on_channel_window_adjust(item).await?,
+                    (_seq, ChannelWindowAdjust(item)) => {
+                        self.on_channel_window_adjust(item).await?
+                    }
                     (_seq, GlobalRequest(item)) => self.on_global_request(item).await?,
                     (_seq, Ignore(..)) => {}
                     (_seq, Unimplemented(item)) => self.on_unimplemented(item).await?,

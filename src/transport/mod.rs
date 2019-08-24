@@ -12,14 +12,14 @@ use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::msg::{Message, MessageError, MessageResult};
 use codec::Codec;
-pub(crate) use state::State;
 pub(crate) use codec::CodecError;
 pub(crate) use packet::Packet;
+pub(crate) use state::State;
 
 mod codec;
+mod packet;
 mod state;
 pub(crate) mod version;
-mod packet;
 
 #[derive(Debug)]
 pub(crate) struct Transport<IO> {
@@ -47,12 +47,12 @@ where
     type Item = MessageResult<(u32, Message)>;
 
     fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        Pin::new(&mut self.io)
-            .poll_next(cx)
-            .map(|opt| opt.map(|v| {
+        Pin::new(&mut self.io).poll_next(cx).map(|opt| {
+            opt.map(|v| {
                 let v = v?;
                 Message::try_from(v.data()).map(|m| (v.seq(), m))
-            }))
+            })
+        })
     }
 }
 

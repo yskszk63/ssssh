@@ -6,7 +6,7 @@ use failure::Fail;
 use rand::{CryptoRng, RngCore};
 use tokio::codec::{Decoder, Encoder};
 
-use super::{State, Packet};
+use super::{Packet, State};
 
 const MINIMUM_PAD_SIZE: usize = 4;
 
