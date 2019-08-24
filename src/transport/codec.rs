@@ -1,18 +1,12 @@
 use std::io;
+use std::sync::{Arc, Mutex};
 
 use bytes::{Buf as _, BufMut as _, Bytes, BytesMut, IntoBuf as _};
 use failure::Fail;
 use rand::{CryptoRng, RngCore};
-use ring::digest::{Context, SHA256};
 use tokio::codec::{Decoder, Encoder};
 
-use crate::algorithm::{
-    Algorithm, CompressionAlgorithm, EncryptionAlgorithm, KexAlgorithm, MacAlgorithm,
-};
-use crate::compression::{Compression, NoneCompression};
-use crate::encrypt::{Aes256CtrEncrypt, Encrypt, PlainEncrypt};
-use crate::mac::{HmacSha2_256, Mac, NoneMac};
-use crate::sshbuf::SshBufMut as _;
+use super::State;
 
 const MINIMUM_PAD_SIZE: usize = 4;
 
@@ -31,25 +25,6 @@ impl From<io::Error> for CodecError {
 
 #[allow(clippy::module_name_repetitions)]
 pub(crate) type CodecResult<T> = Result<T, CodecError>;
-
-fn calculate_hash(
-    hash: &[u8],
-    key: &[u8],
-    kind: u8,
-    session_id: &[u8],
-    algorithm: &Algorithm,
-    len: usize,
-) -> Bytes {
-    let alg = match algorithm.kex_algorithm() {
-        KexAlgorithm::Curve25519Sha256 => &SHA256,
-    };
-    let mut ctx = Context::new(alg);
-    ctx.put_mpint(key);
-    ctx.update(hash);
-    ctx.update(&[kind]);
-    ctx.update(session_id);
-    Bytes::from(&ctx.finish().as_ref()[..len])
-}
 
 #[derive(Debug)]
 enum EncryptState {
@@ -70,15 +45,7 @@ where
     R: RngCore + CryptoRng,
 {
     rng: R,
-    seq_ctos: u32,
-    seq_stoc: u32,
-    session_id: Option<Bytes>,
-    encrypt_ctos: Box<dyn Encrypt + Send>,
-    encrypt_stoc: Box<dyn Encrypt + Send>,
-    mac_ctos: Box<dyn Mac + Send>,
-    mac_stoc: Box<dyn Mac + Send>,
-    comp_ctos: Box<dyn Compression + Send>,
-    comp_stoc: Box<dyn Compression + Send>,
+    state: Arc<Mutex<State>>,
     encrypt_state: EncryptState,
 }
 
@@ -92,69 +59,12 @@ impl<R> Codec<R>
 where
     R: RngCore + CryptoRng,
 {
-    pub(crate) fn new(rng: R) -> Self {
+    pub(crate) fn new(rng: R, state: Arc<Mutex<State>>) -> Self {
         Self {
             rng,
-            seq_ctos: 0,
-            seq_stoc: 0,
-            session_id: None,
-            encrypt_ctos: Box::new(PlainEncrypt),
-            encrypt_stoc: Box::new(PlainEncrypt),
-            mac_ctos: Box::new(NoneMac),
-            mac_stoc: Box::new(NoneMac),
-            comp_ctos: Box::new(NoneCompression),
-            comp_stoc: Box::new(NoneCompression),
+            state,
             encrypt_state: EncryptState::Initial,
         }
-    }
-
-    pub(crate) fn change_key(&mut self, hash: &Bytes, secret: &Bytes, algorithm: &Algorithm) {
-        match &self.encrypt_state {
-            EncryptState::Initial => {}
-            e => panic!("{:?}", e),
-        }
-
-        let session_id = self.session_id.as_ref().unwrap_or_else(|| &hash);
-
-        let iv_ctos = calculate_hash(&hash, &secret, b'A', session_id, &algorithm, 16);
-        let iv_stoc = calculate_hash(&hash, &secret, b'B', session_id, &algorithm, 16);
-
-        let key_ctos = calculate_hash(&hash, &secret, b'C', session_id, &algorithm, 32);
-        let key_stoc = calculate_hash(&hash, &secret, b'D', session_id, &algorithm, 32);
-
-        let intk_ctos = calculate_hash(&hash, &secret, b'E', session_id, &algorithm, 32);
-        let intk_stoc = calculate_hash(&hash, &secret, b'F', session_id, &algorithm, 32);
-
-        self.encrypt_ctos = match algorithm.encryption_algorithm_client_to_server() {
-            EncryptionAlgorithm::Aes256Ctr => {
-                Box::new(Aes256CtrEncrypt::new_for_decrypt(&key_ctos, &iv_ctos).unwrap())
-                // TODO
-            }
-        };
-
-        self.encrypt_stoc = match algorithm.encryption_algorithm_server_to_client() {
-            EncryptionAlgorithm::Aes256Ctr => {
-                Box::new(Aes256CtrEncrypt::new_for_encrypt(&key_stoc, &iv_stoc).unwrap())
-            }
-        };
-
-        self.mac_ctos = match algorithm.mac_algorithm_client_to_server() {
-            MacAlgorithm::HmacSha2_256 => Box::new(HmacSha2_256::new(&intk_ctos)),
-        };
-
-        self.mac_stoc = match algorithm.mac_algorithm_server_to_client() {
-            MacAlgorithm::HmacSha2_256 => Box::new(HmacSha2_256::new(&intk_stoc)),
-        };
-
-        self.comp_ctos = match algorithm.compression_algorithm_client_to_server() {
-            CompressionAlgorithm::None => Box::new(NoneCompression),
-        };
-
-        self.comp_stoc = match algorithm.compression_algorithm_server_to_client() {
-            CompressionAlgorithm::None => Box::new(NoneCompression),
-        };
-
-        self.session_id = Some(hash.clone());
     }
 }
 
@@ -166,13 +76,12 @@ where
     type Error = CodecError;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> CodecResult<()> {
-        let enc = &mut self.encrypt_stoc;
-        let mac = &self.mac_stoc;
+        let mut state = self.state.lock().unwrap(); // TODO
 
-        let item = self.comp_stoc.compress(&item).unwrap();
+        let item = state.comp_stoc().compress(&item).unwrap();
 
         let len = item.len();
-        let bs = enc.block_size();
+        let bs = state.encrypt_stoc().block_size();
 
         let pad = (1 + len + MINIMUM_PAD_SIZE) % bs;
         let pad = if pad > (bs - MINIMUM_PAD_SIZE) {
@@ -192,10 +101,10 @@ where
         unencrypted_pkt.put_slice(&pad);
         let unencrypted_pkt = unencrypted_pkt.freeze();
 
-        let encrypted = enc.encrypt(&unencrypted_pkt).unwrap();
+        let encrypted = state.encrypt_stoc().encrypt(&unencrypted_pkt).unwrap();
 
-        let sign = mac.sign(self.seq_stoc, &unencrypted_pkt, &encrypted);
-        self.seq_stoc += 1;
+        let seq = state.get_and_inc_seq_stoc();
+        let sign = state.mac_stoc().sign(seq, &unencrypted_pkt, &encrypted);
         dst.reserve(encrypted.len() + sign.len());
         dst.put(encrypted);
         dst.put(sign);
@@ -211,9 +120,8 @@ where
     type Error = CodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> CodecResult<Option<Self::Item>> {
-        let enc = &mut self.encrypt_ctos;
-        let mac = &mut self.mac_ctos;
-        let bs = enc.block_size();
+        let mut state = self.state.lock().unwrap();
+        let bs = state.encrypt_ctos().block_size();
 
         loop {
             match &self.encrypt_state {
@@ -222,7 +130,7 @@ where
                         return Ok(None);
                     }
                     let encrypted_first = src.split_to(bs).freeze();
-                    let first = enc.encrypt(&encrypted_first).unwrap();
+                    let first = state.encrypt_ctos().encrypt(&encrypted_first).unwrap();
                     let len = first.as_ref().into_buf().get_u32_be() as usize;
                     self.encrypt_state = EncryptState::FillBuffer {
                         encrypted_first,
@@ -239,7 +147,7 @@ where
                         return Ok(None);
                     }
                     let encrypted_remaining = src.split_to(len + 4 - bs).freeze();
-                    let remaining = enc.encrypt(&encrypted_remaining).unwrap();
+                    let remaining = state.encrypt_ctos().encrypt(&encrypted_remaining).unwrap();
 
                     let mut encrypted =
                         BytesMut::with_capacity(encrypted_first.len() + encrypted_remaining.len());
@@ -254,19 +162,19 @@ where
                     self.encrypt_state = EncryptState::Sign { encrypted, plain };
                 }
                 EncryptState::Sign { encrypted, plain } => {
-                    if src.len() < mac.size() {
+                    if src.len() < state.mac_ctos().size() {
                         return Ok(None);
                     }
-                    let expect = src.split_to(mac.size());
-                    let sign = mac.sign(self.seq_ctos, &plain, &encrypted);
+                    let expect = src.split_to(state.mac_ctos().size());
+                    let seq = state.get_and_inc_seq_ctos();
+                    let sign = state.mac_ctos().sign(seq, &plain, &encrypted);
                     // TODO verify
                     if !openssl::memcmp::eq(&sign, &expect) {
                         panic!("ERR\n  {:?}\n  {:?}", &sign, &expect,);
                     }
                     let pad = plain[4] as usize;
                     let payload = plain.slice(5, plain.len() - pad);
-                    let payload = self.comp_ctos.decompress(&payload).unwrap();
-                    self.seq_ctos += 1;
+                    let payload = state.comp_ctos().decompress(&payload).unwrap();
                     self.encrypt_state = EncryptState::Initial;
                     return Ok(Some(payload));
                 }
@@ -293,8 +201,9 @@ mod tests {
         ];
 
         let mut mock = Builder::new().read(&pkt).write(&pkt).build();
+        let state = Arc::new(Mutex::new(State::new()));
 
-        let mut codec = Codec::new(StdRng::seed_from_u64(0)).framed(&mut mock);
+        let mut codec = Codec::new(StdRng::seed_from_u64(0), state).framed(&mut mock);
         let b = codec.try_next().await.unwrap().unwrap();
         assert_eq!(b, Bytes::from(&[0x15][..]));
 

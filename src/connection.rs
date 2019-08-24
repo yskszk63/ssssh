@@ -1,19 +1,14 @@
 use std::collections::HashMap;
-use std::convert::TryFrom as _;
 use std::error::Error as StdError;
 use std::fmt::Display;
-use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::sync::{Arc, Mutex};
 
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 use failure::Fail;
 use futures::channel::mpsc;
 use futures::future::Either;
 use futures::stream::{select, Select, SplitSink, SplitStream};
-use futures::{ready, Sink, SinkExt as _, Stream, StreamExt as _};
-use rand::rngs::StdRng;
-use rand::SeedableRng as _;
-use tokio::codec::{Decoder as _, Framed};
+use futures::{SinkExt as _, StreamExt as _};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::algorithm::{Algorithm, Preference};
@@ -22,83 +17,9 @@ use crate::handler::{Auth, Handler, PasswordAuth, PasswordChangeAuth, Unsupporte
 use crate::hostkey::HostKeys;
 use crate::kex::{kex, KexEnv};
 use crate::msg::{self, Message, MessageError, MessageResult};
-use crate::transport::codec::Codec;
 use crate::transport::version::{Version, VersionExchangeResult};
+use crate::transport::{State, Transport};
 use crate::util::MapEither;
-
-#[derive(Debug)]
-struct ChangeKeyRequest {
-    hash: Bytes,
-    key: Bytes,
-    algorithm: Algorithm,
-}
-
-#[derive(Debug)]
-struct Transport<IO> {
-    rx: mpsc::Receiver<ChangeKeyRequest>,
-    io: Framed<IO, Codec<StdRng>>,
-}
-
-impl<IO> Transport<IO> {
-    fn new(io: Framed<IO, Codec<StdRng>>) -> (Self, mpsc::Sender<ChangeKeyRequest>) {
-        let (tx, rx) = mpsc::channel(1);
-        (Self { rx, io }, tx)
-    }
-
-    fn poll_change_key_if_needed(&mut self, cx: &mut Context) {
-        if let Poll::Ready(Some(req)) = Pin::new(&mut self.rx).poll_next(cx) {
-            self.io
-                .codec_mut()
-                .change_key(&req.hash, &req.key, &req.algorithm);
-        };
-    }
-}
-
-impl<IO> Stream for Transport<IO>
-where
-    IO: AsyncRead + Unpin,
-{
-    type Item = MessageResult<Message>;
-
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<Option<Self::Item>> {
-        self.poll_change_key_if_needed(cx);
-
-        Pin::new(&mut self.io)
-            .poll_next(cx)
-            .map(|opt| opt.map(|v| Message::try_from(v?)))
-    }
-}
-
-impl<IO> Sink<Message> for Transport<IO>
-where
-    IO: AsyncWrite + Unpin,
-{
-    type Error = MessageError;
-
-    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<MessageResult<()>> {
-        self.poll_change_key_if_needed(cx);
-
-        Poll::Ready(Ok(ready!(Pin::new(&mut self.io).poll_ready(cx))?))
-    }
-
-    fn start_send(mut self: Pin<&mut Self>, item: Message) -> MessageResult<()> {
-        let mut buf = BytesMut::with_capacity(1024 * 8 * 1024); // TODO
-        item.put(&mut buf)?;
-        Ok(Pin::new(&mut self.io).start_send(buf.freeze())?)
-    }
-
-    fn poll_flush(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<MessageResult<()>> {
-        self.poll_change_key_if_needed(cx);
-
-        Poll::Ready(Ok(ready!(Pin::new(&mut self.io).poll_flush(cx))?))
-    }
-
-    fn poll_close(mut self: Pin<&mut Self>, cx: &mut Context) -> Poll<MessageResult<()>> {
-        self.poll_change_key_if_needed(cx);
-
-        Poll::Ready(Ok(ready!(Pin::new(&mut self.io).poll_close(cx))?))
-    }
-}
 
 #[derive(Debug, Fail)]
 #[fail(display = "Running error")]
@@ -142,10 +63,10 @@ where
     version: Version,
     rx: Select<IncommingOrOutgoing<IO>, IncommingOrOutgoing<IO>>,
     tx: SplitSink<Transport<IO>, Message>,
+    state: Arc<Mutex<State>>,
     remote: Option<String>,
     hostkeys: HostKeys,
     preference: Preference,
-    change_key_send: mpsc::Sender<ChangeKeyRequest>,
     message_send: mpsc::Sender<Message>,
     handler: H,
     global_handle: GlobalHandle,
@@ -170,15 +91,10 @@ where
         R: Display,
     {
         let (version, rbuf) = Version::exchange(&mut socket, server_version).await?;
-
-        let rng = StdRng::from_entropy();
-        let mut parts = Codec::new(rng).framed(socket).into_parts();
-        parts.read_buf = rbuf;
-
         let (message_send, message_recieve) = mpsc::channel(0xFFFF); // TODO
 
-        let io = Framed::from_parts(parts);
-        let (io, change_key_send) = Transport::new(io);
+        let state = Arc::new(Mutex::new(State::new()));
+        let io = Transport::new(socket, rbuf, state.clone());
         let (tx, rx) = io.split();
         let rx = select(MapEither::Left(rx), MapEither::Right(message_recieve));
         let global_handle = GlobalHandle::new(message_send.clone());
@@ -187,11 +103,11 @@ where
             version,
             rx,
             tx,
+            state,
             remote,
             hostkeys,
             preference,
             handler,
-            change_key_send,
             message_send,
             global_handle,
             auth_handle: None,
@@ -277,7 +193,7 @@ where
         );
         let (h, k) = kex(algorithm.kex_algorithm(), &mut env)
             .await
-            .unwrap()
+            .map_err(|e| ConnectionError::KexError(Box::new(e)))?
             .split();
 
         if let Some(Either::Left(Ok(Message::Newkeys(..)))) = self.rx.next().await {
@@ -285,14 +201,8 @@ where
         } else {
             panic!()
         }
-        self.change_key_send
-            .send(ChangeKeyRequest {
-                hash: h,
-                key: k,
-                algorithm,
-            })
-            .await
-            .map_err(|e| ConnectionError::KexError(Box::new(e)))?;
+        let mut state = self.state.lock().unwrap();
+        state.change_key(&h, &k, &algorithm);
 
         Ok(())
     }
