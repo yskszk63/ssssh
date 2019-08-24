@@ -1,8 +1,15 @@
 use bytes::Bytes;
+use failure::Fail;
 use futures::channel::mpsc;
 use futures::SinkExt as _;
 
 use crate::msg::{self, Message};
+
+#[derive(Debug, Fail)]
+#[fail(display = "Failed to send")]
+pub struct SendError;
+
+pub type SendResult = Result<(), SendError>;
 
 #[derive(Debug, Clone)]
 pub enum Signal {
@@ -25,20 +32,20 @@ pub enum Signal {
 impl From<Signal> for msg::Signal {
     fn from(v: Signal) -> Self {
         match v {
-            Signal::Abrt => msg::Signal::Abrt,
-            Signal::Alrm => msg::Signal::Alrm,
-            Signal::Fpe => msg::Signal::Fpe,
-            Signal::Hup => msg::Signal::Hup,
-            Signal::Ill => msg::Signal::Ill,
-            Signal::Int => msg::Signal::Int,
-            Signal::Kill => msg::Signal::Kill,
-            Signal::Pipe => msg::Signal::Pipe,
-            Signal::Quit => msg::Signal::Quit,
-            Signal::Segv => msg::Signal::Segv,
-            Signal::Term => msg::Signal::Term,
-            Signal::Usr1 => msg::Signal::Usr1,
-            Signal::Usr2 => msg::Signal::Usr2,
-            Signal::Unknown(s) => msg::Signal::Unknown(s),
+            Signal::Abrt => Self::Abrt,
+            Signal::Alrm => Self::Alrm,
+            Signal::Fpe => Self::Fpe,
+            Signal::Hup => Self::Hup,
+            Signal::Ill => Self::Ill,
+            Signal::Int => Self::Int,
+            Signal::Kill => Self::Kill,
+            Signal::Pipe => Self::Pipe,
+            Signal::Quit => Self::Quit,
+            Signal::Segv => Self::Segv,
+            Signal::Term => Self::Term,
+            Signal::Usr1 => Self::Usr1,
+            Signal::Usr2 => Self::Usr2,
+            Signal::Unknown(s) => Self::Unknown(s),
         }
     }
 }
@@ -72,17 +79,18 @@ impl GlobalHandle {
         always_display: bool,
         msg: impl Into<String>,
         language_tag: impl Into<String>,
-    ) {
+    ) -> SendResult {
         self.send(msg::Debug::new(
             always_display,
             msg.into(),
             language_tag.into(),
         ))
-        .await;
+        .await
     }
 
-    async fn send(&mut self, msg: impl Into<Message>) {
-        self.tx.send(msg.into()).await.unwrap();
+    async fn send(&mut self, msg: impl Into<Message>) -> SendResult {
+        self.tx.send(msg.into()).await.map_err(|_| SendError)?;
+        Ok(())
     }
 }
 
@@ -98,13 +106,17 @@ impl AuthHandle {
         always_display: bool,
         msg: impl Into<String>,
         language_tag: impl Into<String>,
-    ) {
+    ) -> SendResult {
         self.global
             .send_debug(always_display, msg.into(), language_tag.into())
             .await
     }
 
-    pub async fn send_banner(&mut self, msg: impl Into<String>, language_tag: impl Into<String>) {
+    pub async fn send_banner(
+        &mut self,
+        msg: impl Into<String>,
+        language_tag: impl Into<String>,
+    ) -> SendResult {
         self.global
             .send(msg::UserauthBanner::new(msg.into(), language_tag.into()))
             .await
@@ -128,25 +140,25 @@ impl ChannelHandle {
         always_display: bool,
         msg: impl Into<String>,
         language_tag: impl Into<String>,
-    ) {
+    ) -> SendResult {
         self.global
             .send_debug(always_display, msg.into(), language_tag.into())
             .await
     }
 
-    pub async fn send_data(&mut self, msg: impl Into<Bytes>) {
+    pub async fn send_data(&mut self, msg: impl Into<Bytes>) -> SendResult {
         self.global
             .send(msg::ChannelData::new(self.channel, msg.into()))
             .await
     }
 
-    pub async fn send_extended_data(&mut self, msg: impl Into<Bytes>) {
+    pub async fn send_extended_data(&mut self, msg: impl Into<Bytes>) -> SendResult {
         self.global
             .send(msg::ChannelExtendedData::new(self.channel, msg.into()))
             .await
     }
 
-    pub async fn send_exit_status(&mut self, status: u32) {
+    pub async fn send_exit_status(&mut self, status: u32) -> SendResult {
         self.global
             .send(msg::ChannelRequest::new_exit_status(self.channel, status))
             .await
@@ -158,7 +170,7 @@ impl ChannelHandle {
         coredumped: bool,
         error_message: impl Into<String>,
         language_tag: impl Into<String>,
-    ) {
+    ) -> SendResult {
         self.global
             .send(msg::ChannelRequest::new_exit_signal(
                 self.channel,
@@ -170,11 +182,11 @@ impl ChannelHandle {
             .await
     }
 
-    pub async fn send_eof(&mut self) {
+    pub async fn send_eof(&mut self) -> SendResult {
         self.global.send(msg::ChannelEof::new(self.channel)).await
     }
 
-    pub async fn send_close(&mut self) {
+    pub async fn send_close(&mut self) -> SendResult {
         self.global.send(msg::ChannelClose::new(self.channel)).await
     }
 }

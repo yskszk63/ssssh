@@ -1,7 +1,7 @@
 #![warn(clippy::pedantic)]
 
 pub use connection::{Connection, Error};
-pub use handle::{AuthHandle, ChannelHandle};
+pub use handle::{AuthHandle, ChannelHandle, SendError, SendResult};
 pub use handler::{Auth, Handler, PasswordAuth, PasswordChangeAuth, Unsupported};
 pub use server::{AcceptError, Server, ServerBuilder};
 

@@ -94,7 +94,7 @@ where
             self.socket = Some(TcpListener::bind(&self.addr)?);
         }
 
-        let socket = self.socket.as_mut().unwrap();
+        let socket = self.socket.as_mut().expect("never occurred");
 
         let (socket, remote) = socket.accept().await?;
         Ok(Connection::establish(

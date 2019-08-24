@@ -14,7 +14,7 @@ use crate::msg::{Message, MessageError, MessageResult};
 use codec::Codec;
 pub(crate) use codec::CodecError;
 pub(crate) use packet::Packet;
-pub(crate) use state::State;
+pub(crate) use state::{ChangeKeyError, State};
 
 mod codec;
 mod packet;
@@ -67,7 +67,9 @@ where
     }
 
     fn start_send(mut self: Pin<&mut Self>, item: Message) -> MessageResult<()> {
-        let mut buf = BytesMut::with_capacity(1024 * 8 * 1024); // TODO
+        log::trace!("sending {:?}", item);
+
+        let mut buf = BytesMut::new();
         item.put(&mut buf)?;
         Ok(Pin::new(&mut self.io).start_send(buf.freeze())?)
     }

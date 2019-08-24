@@ -1,4 +1,5 @@
 use bytes::Bytes;
+use failure::Fail;
 use futures::{Sink, TryStream};
 
 use crate::algorithm::KexAlgorithm;
@@ -50,11 +51,15 @@ where
 #[allow(clippy::module_name_repetitions)]
 pub(crate) type KexResult = Result<KexReturn, KexError>;
 
-#[derive(Debug)]
+#[derive(Debug, Fail)]
 #[allow(clippy::module_name_repetitions)]
 pub(crate) enum KexError {
+    #[fail(display = "ProtocolError")]
     ProtocolError,
-    MessageError(MessageError),
+    #[fail(display = "MessageError")]
+    MessageError(#[fail(cause)] MessageError),
+    #[fail(display = "Other Error")]
+    Other,
 }
 
 impl From<MessageError> for KexError {

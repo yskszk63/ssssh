@@ -11,10 +11,10 @@ pub(crate) enum MapEither<L, R> {
 }
 
 impl<L, R> MapEither<L, R> {
-    pub(crate) fn get_left_mut(&mut self) -> Option<&mut L> {
+    pub(crate) fn get_left_mut_unchecked(&mut self) -> &mut L {
         match self {
-            Self::Left(ref mut e) => Some(e),
-            Self::Right(..) => None,
+            Self::Left(ref mut e) => e,
+            Self::Right(..) => panic!(),
         }
     }
     /*

@@ -1,15 +1,28 @@
 use std::fmt;
 
 use bytes::Bytes;
+use failure::Fail;
 use ring::digest::{Context, SHA256};
 
 use crate::algorithm::{
     Algorithm, CompressionAlgorithm, EncryptionAlgorithm, KexAlgorithm, MacAlgorithm,
 };
 use crate::compression::{Compression, NoneCompression};
-use crate::encrypt::{Aes256CtrEncrypt, Encrypt, PlainEncrypt};
+use crate::encrypt::{Aes256CtrEncrypt, Encrypt, EncryptError, PlainEncrypt};
 use crate::mac::{HmacSha2_256, Mac, NoneMac};
 use crate::sshbuf::SshBufMut as _;
+
+#[derive(Debug, Fail)]
+pub(crate) enum ChangeKeyError {
+    #[fail(display = "EncryptError")]
+    EncryptError(#[fail(cause)] EncryptError),
+}
+
+impl From<EncryptError> for ChangeKeyError {
+    fn from(v: EncryptError) -> Self {
+        Self::EncryptError(v)
+    }
+}
 
 fn calculate_hash(
     hash: &[u8],
@@ -99,7 +112,12 @@ impl State {
         &mut self.comp_stoc
     }
 
-    pub(crate) fn change_key(&mut self, hash: &Bytes, secret: &Bytes, algorithm: &Algorithm) {
+    pub(crate) fn change_key(
+        &mut self,
+        hash: &Bytes,
+        secret: &Bytes,
+        algorithm: &Algorithm,
+    ) -> Result<(), ChangeKeyError> {
         let session_id = self.session_id.as_ref().unwrap_or_else(|| &hash);
 
         let iv_ctos = calculate_hash(&hash, &secret, b'A', session_id, &algorithm, 16);
@@ -113,14 +131,14 @@ impl State {
 
         self.encrypt_ctos = match algorithm.encryption_algorithm_client_to_server() {
             EncryptionAlgorithm::Aes256Ctr => {
-                Box::new(Aes256CtrEncrypt::new_for_decrypt(&key_ctos, &iv_ctos).unwrap())
+                Box::new(Aes256CtrEncrypt::new_for_decrypt(&key_ctos, &iv_ctos)?)
                 // TODO
             }
         };
 
         self.encrypt_stoc = match algorithm.encryption_algorithm_server_to_client() {
             EncryptionAlgorithm::Aes256Ctr => {
-                Box::new(Aes256CtrEncrypt::new_for_encrypt(&key_stoc, &iv_stoc).unwrap())
+                Box::new(Aes256CtrEncrypt::new_for_encrypt(&key_stoc, &iv_stoc)?)
             }
         };
 
@@ -141,5 +159,6 @@ impl State {
         };
 
         self.session_id = Some(hash.clone());
+        Ok(())
     }
 }

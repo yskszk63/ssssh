@@ -33,7 +33,7 @@ impl Handler for MyHandler {
         dbg!(password);
         let mut handle = handle.clone();
         async move {
-            handle.send_banner("Allow Logged in", "").await;
+            handle.send_banner("Allow Logged in", "").await.unwrap();
             Ok(PasswordAuth::ChangePasswdreq("password expired".into()))
         }
             .boxed()
@@ -58,16 +58,16 @@ impl Handler for MyHandler {
         let mut handle = handle.clone();
         async move {
             tokio::spawn(async move {
-                handle.send_data("Hello World!").await;
-                handle.send_data("Hello World!").await;
-                handle.send_data("Hello World!").await;
-                handle.send_data("Hello World!").await;
-                handle.send_data("Hello World!").await;
-                handle.send_data("Hello World!").await;
-                handle.send_extended_data("Hello World!").await;
-                handle.send_eof().await;
-                handle.send_exit_status(0).await;
-                handle.send_close().await;
+                handle.send_data("Hello World!").await.unwrap();
+                handle.send_data("Hello World!").await.unwrap();
+                handle.send_data("Hello World!").await.unwrap();
+                handle.send_data("Hello World!").await.unwrap();
+                handle.send_data("Hello World!").await.unwrap();
+                handle.send_data("Hello World!").await.unwrap();
+                handle.send_extended_data("Hello World!").await.unwrap();
+                handle.send_eof().await.unwrap();
+                handle.send_exit_status(0).await.unwrap();
+                handle.send_close().await.unwrap();
             });
             Ok(())
         }
@@ -82,7 +82,7 @@ impl Handler for MyHandler {
         let mut handle = handle.clone();
         let data = bytes::Bytes::from(data);
         async move {
-            handle.send_data(data).await;
+            handle.send_data(data).await.unwrap();
             Ok(())
         }
             .boxed()
@@ -101,8 +101,8 @@ async fn main() {
             .arg("-p2222")
             .arg("-vvv")
             .arg("::1")
-            //.stdout(std::process::Stdio::null())
-            //.stderr(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
             .spawn()
             .unwrap()
             .await

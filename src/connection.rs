@@ -9,7 +9,6 @@ use futures::channel::mpsc;
 use futures::future::Either;
 use futures::stream::{select, Select, SplitSink, SplitStream};
 use futures::{SinkExt as _, StreamExt as _};
-use log::debug;
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::algorithm::{Algorithm, Preference};
@@ -19,7 +18,7 @@ use crate::hostkey::HostKeys;
 use crate::kex::{kex, KexEnv};
 use crate::msg::{self, Message, MessageError, MessageResult};
 use crate::transport::version::{Version, VersionExchangeResult};
-use crate::transport::{State, Transport};
+use crate::transport::{ChangeKeyError, State, Transport};
 use crate::util::MapEither;
 
 #[derive(Debug, Fail)]
@@ -41,6 +40,12 @@ pub(crate) enum ConnectionError {
     Unknown(String),
     #[fail(display = "Unknown Channel Id {}", _0)]
     UnknownChannelId(u32),
+    #[fail(display = "Send error occurred")]
+    SendError(#[fail(cause)] mpsc::SendError),
+    #[fail(display = "Unable to acquire shared state lock")]
+    UnabledToSharedStateLock,
+    #[fail(display = "ChangeKeyError")]
+    ChangeKeyError(#[fail(cause)] ChangeKeyError),
     //#[fail(display = "Io Error {}", _0)]
     //Io(io::Error),
 }
@@ -48,6 +53,18 @@ pub(crate) enum ConnectionError {
 impl From<MessageError> for ConnectionError {
     fn from(v: MessageError) -> Self {
         Self::MessageError(v)
+    }
+}
+
+impl From<mpsc::SendError> for ConnectionError {
+    fn from(v: mpsc::SendError) -> Self {
+        Self::SendError(v)
+    }
+}
+
+impl From<ChangeKeyError> for ConnectionError {
+    fn from(v: ChangeKeyError) -> Self {
+        Self::ChangeKeyError(v)
     }
 }
 
@@ -65,7 +82,7 @@ where
     rx: Select<IncommingOrOutgoing<IO>, IncommingOrOutgoing<IO>>,
     tx: SplitSink<Transport<IO>, Message>,
     state: Arc<Mutex<State>>,
-    remote: Option<String>,
+    remote: String,
     hostkeys: HostKeys,
     preference: Preference,
     message_send: mpsc::Sender<Message>,
@@ -91,6 +108,9 @@ where
     where
         R: Display,
     {
+        let remote = remote.to_string();
+        log::debug!("Connecting.. {:?}", remote);
+
         let (version, rbuf) = Version::exchange(&mut socket, server_version).await?;
         let (message_send, message_recieve) = mpsc::channel(0xFFFF); // TODO
 
@@ -99,7 +119,9 @@ where
         let (tx, rx) = io.split();
         let rx = select(MapEither::Left(rx), MapEither::Right(message_recieve));
         let global_handle = GlobalHandle::new(message_send.clone());
-        let remote = Some(remote.to_string());
+
+        log::debug!("Established.. {:?} version: {:?}", remote, version);
+
         Ok(Self {
             version,
             rx,
@@ -117,24 +139,30 @@ where
     }
 
     pub async fn run(mut self) -> Result<(), Error> {
+        log::debug!("running {:?}", self.remote);
+
         if let Err(e) = self.run0().await {
-            eprintln!("{:?}", e);
+            log::error!("Error occurred {:?}", e);
             self.send_immediately(msg::Disconnect::new(2, "unexpected", ""))
                 .await
                 .ok(); // TODO
             Err(Error(failure::Error::from(e).into()))
         } else {
+            log::debug!("done {:?}", self.remote);
             Ok(())
         }
     }
 
-    async fn send(&mut self, msg: impl Into<Message>) -> MessageResult<()> {
-        self.message_send.send(msg.into()).await.unwrap();
+    async fn send(&mut self, msg: impl Into<Message>) -> ConnectionResult<()> {
+        let msg = msg.into();
+        log::trace!("into sending queue {:?}", msg);
+        self.message_send.send(msg).await?;
         Ok(())
     }
 
     async fn send_immediately(&mut self, msg: impl Into<Message>) -> MessageResult<()> {
-        self.tx.send(msg.into()).await?;
+        let msg = msg.into();
+        self.tx.send(msg).await?;
         Ok(())
     }
 
@@ -142,6 +170,8 @@ where
         use msg::Message::*;
 
         while let Some(m) = self.rx.next().await {
+            log::trace!("processing {:?}", m);
+
             match m {
                 Either::Left(m) => match m? {
                     (_seq, Kexinit(item)) => self.on_kexinit(*item).await?,
@@ -163,7 +193,7 @@ where
                         break;
                     }
                     (seq, x) => {
-                        debug!("{:?}", x);
+                        log::debug!("{:?}", x);
                         self.send(msg::Unimplemented::new(seq)).await?;
                     }
                 },
@@ -176,6 +206,8 @@ where
     }
 
     async fn on_kexinit(&mut self, client_kexinit: msg::Kexinit) -> ConnectionResult<()> {
+        log::debug!("Begin kex {:?}", self.remote);
+
         let server_kexinit = self.preference.to_kexinit();
         self.send_immediately(server_kexinit.clone())
             .await
@@ -183,6 +215,7 @@ where
 
         let algorithm = Algorithm::negotiate(&client_kexinit, &self.preference)
             .map_err(|e| ConnectionError::KexError(Box::new(e)))?;
+        log::debug!("Negotiate {:?} {:?}", self.remote, algorithm);
 
         let hostkey = self
             .hostkeys
@@ -191,7 +224,7 @@ where
 
         let mut env = KexEnv::new(
             &mut self.tx,
-            self.rx.get_mut().0.get_left_mut().unwrap(),
+            self.rx.get_mut().0.get_left_mut_unchecked(),
             &self.version,
             &client_kexinit,
             &server_kexinit,
@@ -201,14 +234,18 @@ where
             .await
             .map_err(|e| ConnectionError::KexError(Box::new(e)))?
             .split();
+        log::debug!("Kex done {:?}", self.remote);
 
         if let Some(Either::Left(Ok((_, Message::Newkeys(..))))) = self.rx.next().await {
             self.send_immediately(msg::Newkeys).await?;
         } else {
             panic!()
         }
-        let mut state = self.state.lock().unwrap();
-        state.change_key(&h, &k, &algorithm);
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| ConnectionError::UnabledToSharedStateLock)?;
+        state.change_key(&h, &k, &algorithm)?;
 
         Ok(())
     }
@@ -231,7 +268,7 @@ where
         if self.auth_handle.is_none() {
             self.auth_handle = Some(self.global_handle.new_auth_handle())
         };
-        let handle = self.auth_handle.as_ref().unwrap();
+        let handle = self.auth_handle.as_ref().expect("never occurred");
 
         match &msg.method() {
             M::None => {
@@ -356,7 +393,10 @@ where
                 let channel_handle = self.global_handle.new_channel_handle(msg.sender_channel());
                 self.channel_handles
                     .insert(channel_handle.channel_id(), channel_handle);
-                let channel_handle = self.channel_handles.get(&msg.sender_channel()).unwrap();
+                let channel_handle = self
+                    .channel_handles
+                    .get(&msg.sender_channel())
+                    .expect("never occurred");
 
                 match self.handler.channel_open_session(channel_handle).await {
                     Ok(..) => msg::ChannelOpenConfirmation::new(
@@ -368,7 +408,7 @@ where
                     .into(),
                     Err(e) => {
                         self.channel_handles.remove(&msg.sender_channel());
-                        println!("{}", e);
+                        log::debug!("Failed to open channel {}", e);
                         msg::ChannelOpenFailure::new(
                             msg.sender_channel(),
                             msg::ChannelOpenFailureReasonCode::ConnectFailed,
@@ -380,7 +420,7 @@ where
                 }
             }
             t => {
-                println!("{:?}", t);
+                log::warn!("Unknown channel type {:?}", t);
                 msg::ChannelOpenFailure::new(
                     msg.sender_channel(),
                     msg::ChannelOpenFailureReasonCode::UnknownChannelType,
@@ -412,7 +452,7 @@ where
             Shell => self.handler.channel_shell_request(handle).await,
             Exec(path) => self.handler.channel_exec_request(path, handle).await,
             x => {
-                dbg!(x);
+                log::warn!("Unknown channel request {:?}", x);
                 Err(Unsupported.into())
             }
         };
@@ -424,7 +464,7 @@ where
                 }
             }
             Err(e) => {
-                dbg!(e);
+                log::debug!("Channel request Failed {}", e);
                 if msg.want_reply() {
                     self.send(msg::ChannelFailure::new(msg.recipient_channel()))
                         .await?;
@@ -473,7 +513,7 @@ where
 
     async fn on_global_request(&mut self, msg: msg::GlobalRequest) -> ConnectionResult<()> {
         // TODO
-        dbg!(&msg);
+        log::warn!("Not implemented {:?}", msg);
         self.send(msg::RequestFailure).await?;
         Ok(())
     }
@@ -487,13 +527,15 @@ where
         Ok(())
     }
 
-    async fn on_disconnect(&mut self, _msg: msg::Disconnect) -> ConnectionResult<()> {
+    async fn on_disconnect(&mut self, msg: msg::Disconnect) -> ConnectionResult<()> {
         // TODO
+        log::warn!("Not implemented {:?}", msg);
         Ok(())
     }
 
     async fn on_unimplemented(&mut self, msg: msg::Unimplemented) -> ConnectionResult<()> {
-        dbg!(msg);
+        // TODO
+        log::warn!("Not implemented {:?}", msg);
         Ok(())
     }
 }

@@ -24,7 +24,7 @@ impl Handler for MyHandler {
         let mut handle = handle.clone();
         async move {
             tokio::spawn(async move {
-                handle.send_data("Hello World!").await;
+                handle.send_data("Hello World!").await.unwrap();
             });
             Ok(())
         }
@@ -39,7 +39,7 @@ impl Handler for MyHandler {
         let mut handle = handle.clone();
         let data = bytes::Bytes::from(data);
         async move {
-            handle.send_data(data).await;
+            handle.send_data(data).await.unwrap();
             Ok(())
         }
             .boxed()
@@ -48,11 +48,13 @@ impl Handler for MyHandler {
 
 #[tokio::main(single_thread)]
 async fn main() {
+    env_logger::init();
+
     let mut server = ServerBuilder::default().build("[::1]:2222".parse().unwrap(), || MyHandler);
     loop {
         match server.accept().await {
             Ok(connection) => {
-                tokio::spawn(async { connection.run().await.unwrap() });
+                tokio::spawn(async { println!("{:?}", connection.run().await) });
             }
             Err(e) => {
                 eprintln!("{}", e);

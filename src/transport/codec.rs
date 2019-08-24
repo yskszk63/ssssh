@@ -7,6 +7,8 @@ use rand::{CryptoRng, RngCore};
 use tokio::codec::{Decoder, Encoder};
 
 use super::{Packet, State};
+use crate::compression::CompressionError;
+use crate::encrypt::EncryptError;
 
 const MINIMUM_PAD_SIZE: usize = 4;
 
@@ -15,11 +17,29 @@ const MINIMUM_PAD_SIZE: usize = 4;
 pub(crate) enum CodecError {
     #[fail(display = "IO Error Ocurred {}", _0)]
     Io(io::Error),
+    #[fail(display = "Unable to acqurie shared state lock.")]
+    UnabledToSharedStateLock,
+    #[fail(display = "CompressionError")]
+    CompressionError(#[fail(cause)] CompressionError),
+    #[fail(display = "EncryptError")]
+    EncryptError(#[fail(cause)] EncryptError),
 }
 
 impl From<io::Error> for CodecError {
     fn from(v: io::Error) -> Self {
         Self::Io(v)
+    }
+}
+
+impl From<CompressionError> for CodecError {
+    fn from(v: CompressionError) -> Self {
+        Self::CompressionError(v)
+    }
+}
+
+impl From<EncryptError> for CodecError {
+    fn from(v: EncryptError) -> Self {
+        Self::EncryptError(v)
     }
 }
 
@@ -76,9 +96,12 @@ where
     type Error = CodecError;
 
     fn encode(&mut self, item: Self::Item, dst: &mut BytesMut) -> CodecResult<()> {
-        let mut state = self.state.lock().unwrap(); // TODO
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| CodecError::UnabledToSharedStateLock)?;
 
-        let item = state.comp_stoc().compress(&item).unwrap();
+        let item = state.comp_stoc().compress(&item)?;
 
         let len = item.len();
         let bs = state.encrypt_stoc().block_size();
@@ -101,7 +124,7 @@ where
         unencrypted_pkt.put_slice(&pad);
         let unencrypted_pkt = unencrypted_pkt.freeze();
 
-        let encrypted = state.encrypt_stoc().encrypt(&unencrypted_pkt).unwrap();
+        let encrypted = state.encrypt_stoc().encrypt(&unencrypted_pkt)?;
 
         let seq = state.get_and_inc_seq_stoc();
         let sign = state.mac_stoc().sign(seq, &unencrypted_pkt, &encrypted);
@@ -120,7 +143,10 @@ where
     type Error = CodecError;
 
     fn decode(&mut self, src: &mut BytesMut) -> CodecResult<Option<Self::Item>> {
-        let mut state = self.state.lock().unwrap();
+        let mut state = self
+            .state
+            .lock()
+            .map_err(|_| CodecError::UnabledToSharedStateLock)?;
         let bs = state.encrypt_ctos().block_size();
 
         loop {
@@ -130,7 +156,7 @@ where
                         return Ok(None);
                     }
                     let encrypted_first = src.split_to(bs).freeze();
-                    let first = state.encrypt_ctos().encrypt(&encrypted_first).unwrap();
+                    let first = state.encrypt_ctos().encrypt(&encrypted_first)?;
                     let len = first.as_ref().into_buf().get_u32_be() as usize;
                     self.encrypt_state = EncryptState::FillBuffer {
                         encrypted_first,
@@ -147,7 +173,7 @@ where
                         return Ok(None);
                     }
                     let encrypted_remaining = src.split_to(len + 4 - bs).freeze();
-                    let remaining = state.encrypt_ctos().encrypt(&encrypted_remaining).unwrap();
+                    let remaining = state.encrypt_ctos().encrypt(&encrypted_remaining)?;
 
                     let mut encrypted =
                         BytesMut::with_capacity(encrypted_first.len() + encrypted_remaining.len());
@@ -174,7 +200,7 @@ where
                     }
                     let pad = plain[4] as usize;
                     let payload = plain.slice(5, plain.len() - pad);
-                    let payload = state.comp_ctos().decompress(&payload).unwrap();
+                    let payload = state.comp_ctos().decompress(&payload)?;
                     self.encrypt_state = EncryptState::Initial;
                     return Ok(Some(Packet::new(seq, payload)));
                 }

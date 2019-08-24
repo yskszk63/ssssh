@@ -31,7 +31,7 @@ where
         Unspecified,
         |e| Ok(Bytes::from(e)),
     )
-    .unwrap();
+    .map_err(|_| KexError::Other)?;
 
     let hash = calculate_hash(
         env,
