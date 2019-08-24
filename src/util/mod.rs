@@ -1,3 +1,3 @@
-pub(crate) use map_either::*;
+pub(crate) use either_stream::*;
 
-mod map_either;
+mod either_stream;

@@ -7,7 +7,7 @@ use bytes::Bytes;
 use failure::Fail;
 use futures::channel::mpsc;
 use futures::future::Either;
-use futures::stream::{select, Select, SplitSink, SplitStream};
+use futures::stream::{SplitSink, SplitStream};
 use futures::{SinkExt as _, StreamExt as _};
 use tokio::io::{AsyncRead, AsyncWrite};
 
@@ -19,7 +19,7 @@ use crate::kex::{kex, KexEnv};
 use crate::msg::{self, Message, MessageError, MessageResult};
 use crate::transport::version::{Version, VersionExchangeResult};
 use crate::transport::{ChangeKeyError, State, Transport};
-use crate::util::MapEither;
+use crate::util::EitherStream;
 
 #[derive(Debug, Fail)]
 #[fail(display = "Running error")]
@@ -71,15 +71,13 @@ impl From<ChangeKeyError> for ConnectionError {
 #[allow(clippy::module_name_repetitions)]
 pub(crate) type ConnectionResult<T> = Result<T, ConnectionError>;
 
-type IncommingOrOutgoing<IO> = MapEither<SplitStream<Transport<IO>>, mpsc::Receiver<Message>>;
-
 #[derive(Debug)]
 pub struct Connection<IO, H>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
     version: Version,
-    rx: Select<IncommingOrOutgoing<IO>, IncommingOrOutgoing<IO>>,
+    rx: EitherStream<SplitStream<Transport<IO>>, mpsc::Receiver<Message>>,
     tx: SplitSink<Transport<IO>, Message>,
     state: Arc<Mutex<State>>,
     remote: String,
@@ -117,7 +115,7 @@ where
         let state = Arc::new(Mutex::new(State::new()));
         let io = Transport::new(socket, rbuf, state.clone());
         let (tx, rx) = io.split();
-        let rx = select(MapEither::Left(rx), MapEither::Right(message_recieve));
+        let rx = EitherStream::new(rx, message_recieve);
         let global_handle = GlobalHandle::new(message_send.clone(), &remote);
 
         log::debug!("Established.. {:?} version: {:?}", remote, version);
@@ -224,7 +222,7 @@ where
 
         let mut env = KexEnv::new(
             &mut self.tx,
-            self.rx.get_mut().0.get_left_mut_unchecked(),
+            self.rx.get_mut().0,
             &self.version,
             &client_kexinit,
             &server_kexinit,
