@@ -7,7 +7,7 @@ This is my hoby project.
 
 simple echo server
 
-~~~
+~~~rust
 use async_trait::async_trait;
 
 use ssssh::{AuthHandle, ChannelHandle, Handler, PasswordAuth, ServerBuilder};
