@@ -2,7 +2,7 @@
 
 pub use connection::{Connection, Error};
 pub use handle::{AuthHandle, ChannelHandle, SendError, SendResult};
-pub use handler::{Auth, Handler, PasswordAuth, PasswordChangeAuth, Unsupported, PtyReq};
+pub use handler::{Auth, Handler, PasswordAuth, PasswordChangeAuth, PtyReq, Unsupported};
 pub use server::{AcceptError, Server, ServerBuilder};
 
 mod algorithm;
