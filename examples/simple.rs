@@ -1,7 +1,6 @@
 use async_trait::async_trait;
 
-use ssssh::ServerBuilder;
-use ssssh::{AuthHandle, ChannelHandle, Handler, PasswordAuth};
+use ssssh::{AuthHandle, ChannelHandle, Handler, PasswordAuth, ServerBuilder};
 
 struct MyHandler;
 
@@ -32,8 +31,7 @@ impl Handler for MyHandler {
         handle: &ChannelHandle,
     ) -> Result<(), Self::Error> {
         let mut handle = handle.clone();
-        let data = bytes::Bytes::from(data);
-        handle.send_data(data).await.unwrap();
+        handle.send_data(data).await?;
         Ok(())
     }
 }
