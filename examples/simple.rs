@@ -1,48 +1,40 @@
-use futures::future::{BoxFuture, FutureExt as _};
+use async_trait::async_trait;
 
 use ssssh::ServerBuilder;
 use ssssh::{AuthHandle, ChannelHandle, Handler, PasswordAuth};
 
 struct MyHandler;
 
+#[async_trait]
 impl Handler for MyHandler {
     type Error = failure::Error;
 
-    fn auth_password(
+    async fn auth_password(
         &mut self,
         _username: &str,
-        _password: &str,
+        _password: &[u8],
         _handle: &AuthHandle,
-    ) -> BoxFuture<Result<PasswordAuth, Self::Error>> {
-        async move { Ok(PasswordAuth::Accept) }.boxed()
+    ) -> Result<PasswordAuth, Self::Error> {
+        Ok(PasswordAuth::Accept)
     }
 
-    fn channel_shell_request(
-        &mut self,
-        handle: &ChannelHandle,
-    ) -> BoxFuture<Result<(), Self::Error>> {
+    async fn channel_shell_request(&mut self, handle: &ChannelHandle) -> Result<(), Self::Error> {
         let mut handle = handle.clone();
-        async move {
-            tokio::spawn(async move {
-                handle.send_data("Hello World!").await.unwrap();
-            });
-            Ok(())
-        }
-            .boxed()
+        tokio::spawn(async move {
+            handle.send_data("Hello World!").await.unwrap();
+        });
+        Ok(())
     }
 
-    fn channel_data(
+    async fn channel_data(
         &mut self,
         data: &[u8],
         handle: &ChannelHandle,
-    ) -> BoxFuture<Result<(), Self::Error>> {
+    ) -> Result<(), Self::Error> {
         let mut handle = handle.clone();
         let data = bytes::Bytes::from(data);
-        async move {
-            handle.send_data(data).await.unwrap();
-            Ok(())
-        }
-            .boxed()
+        handle.send_data(data).await.unwrap();
+        Ok(())
     }
 }
 

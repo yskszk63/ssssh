@@ -1,9 +1,9 @@
 use std::error::Error as StdError;
 use std::fmt;
 
+use async_trait::async_trait;
 use bytes::Bytes;
 use failure::Fail;
-use futures::future::{BoxFuture, FutureExt as _};
 
 use crate::handle::{AuthHandle, ChannelHandle};
 use crate::msg;
@@ -75,91 +75,86 @@ pub enum PasswordChangeAuth {
     ChangePasswdreq(String),
 }
 
-pub trait Handler {
+#[async_trait]
+pub trait Handler: Send {
     type Error: Into<Box<dyn StdError + Send + Sync>>
         + fmt::Display
         + fmt::Debug
         + From<Unsupported>;
 
-    fn auth_none(
+    async fn auth_none(
         &mut self,
         _uesrname: &str,
         _auth_handle: &AuthHandle,
-    ) -> BoxFuture<Result<Auth, Self::Error>> {
-        async { Ok(Auth::Reject) }.boxed()
+    ) -> Result<Auth, Self::Error> {
+        Ok(Auth::Reject)
     }
 
-    fn auth_publickey(
+    async fn auth_publickey(
         &mut self,
         _username: &str,
         _publickey: &[u8],
         _handle: &AuthHandle,
-    ) -> BoxFuture<Result<Auth, Self::Error>> {
-        async { Ok(Auth::Reject) }.boxed()
+    ) -> Result<Auth, Self::Error> {
+        Ok(Auth::Reject)
     }
 
-    fn auth_password(
+    async fn auth_password(
         &mut self,
         _username: &str,
-        _password: &str,
+        _password: &[u8],
         _handle: &AuthHandle,
-    ) -> BoxFuture<Result<PasswordAuth, Self::Error>> {
-        async { Ok(PasswordAuth::Reject) }.boxed()
+    ) -> Result<PasswordAuth, Self::Error> {
+        Ok(PasswordAuth::Reject)
     }
 
-    fn auth_password_change(
+    async fn auth_password_change(
         &mut self,
         _username: &str,
         _oldpassword: &str,
         _newpassword: &str,
         _handle: &AuthHandle,
-    ) -> BoxFuture<Result<PasswordChangeAuth, Self::Error>> {
-        async { Ok(PasswordChangeAuth::Reject) }.boxed()
+    ) -> Result<PasswordChangeAuth, Self::Error> {
+        Ok(PasswordChangeAuth::Reject)
     }
 
-    fn channel_open_session(
+    async fn channel_open_session(&mut self, _handle: &ChannelHandle) -> Result<(), Self::Error> {
+        Ok(())
+    }
+
+    async fn channel_pty_request(
         &mut self,
+        _pty: PtyReq,
         _handle: &ChannelHandle,
-    ) -> BoxFuture<Result<(), Self::Error>> {
-        async { Ok(()) }.boxed()
+    ) -> Result<(), Self::Error> {
+        Err(Unsupported.into())
     }
 
-    fn channel_pty_request(
-        &mut self,
-        _pty: &PtyReq,
-        _handle: &ChannelHandle,
-    ) -> BoxFuture<Result<(), Self::Error>> {
-        async { Err(Unsupported.into()) }.boxed()
+    async fn channel_shell_request(&mut self, _handle: &ChannelHandle) -> Result<(), Self::Error> {
+        Err(Unsupported.into())
     }
 
-    fn channel_shell_request(
-        &mut self,
-        _handle: &ChannelHandle,
-    ) -> BoxFuture<Result<(), Self::Error>> {
-        async { Err(Unsupported.into()) }.boxed()
-    }
-
-    fn channel_exec_request(
+    async fn channel_exec_request(
         &mut self,
         _program: &str,
         _handle: &ChannelHandle,
-    ) -> BoxFuture<Result<(), Self::Error>> {
-        async { Err(Unsupported.into()) }.boxed()
+    ) -> Result<(), Self::Error> {
+        Err(Unsupported.into())
     }
 
-    fn channel_data(
+    async fn channel_data(
         &mut self,
         _data: &[u8],
         _handle: &ChannelHandle,
-    ) -> BoxFuture<Result<(), Self::Error>> {
-        async { Ok(()) }.boxed()
+    ) -> Result<(), Self::Error> {
+        Ok(())
     }
 
-    fn channel_eof(&mut self, _handle: &ChannelHandle) -> BoxFuture<Result<(), Self::Error>> {
-        async { Ok(()) }.boxed()
+    async fn channel_eof(&mut self, _handle: &ChannelHandle) -> Result<(), Self::Error> {
+        Ok(())
     }
 
-    fn channel_close(&mut self, _handle: &ChannelHandle) -> BoxFuture<Result<(), Self::Error>> {
-        async { Ok(()) }.boxed()
+    async fn channel_close(&mut self, _handle: &ChannelHandle) -> Result<(), Self::Error> {
+        Ok(())
     }
 }

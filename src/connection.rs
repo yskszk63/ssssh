@@ -352,7 +352,7 @@ where
                 } else {
                     let result = self
                         .handler
-                        .auth_password(msg.user_name(), item.password(), &handle)
+                        .auth_password(msg.user_name(), item.password().as_bytes(), &handle)
                         .await
                         .map_err(|e| ConnectionError::AuthError(e.into()))?;
                     match result {
@@ -444,7 +444,7 @@ where
         let result = match msg.request_type() {
             PtyReq(item) => {
                 self.handler
-                    .channel_pty_request(&(item.clone().into()), handle)
+                    .channel_pty_request(item.clone().into(), handle)
                     .await
             }
             Shell => self.handler.channel_shell_request(handle).await,
