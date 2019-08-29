@@ -91,7 +91,7 @@ where
 {
     pub async fn accept(&mut self) -> Result<Connection<TcpStream, H>, AcceptError> {
         if self.socket.is_none() {
-            self.socket = Some(TcpListener::bind(&self.addr)?);
+            self.socket = Some(TcpListener::bind(&self.addr).await?);
         }
 
         let socket = self.socket.as_mut().expect("never occurred");
