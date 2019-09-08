@@ -40,7 +40,10 @@ impl Handler for MyHandler {
 async fn main() {
     env_logger::init();
 
-    let mut server = ServerBuilder::default().build("[::1]:2222".parse().unwrap(), || MyHandler);
+    let mut server = ServerBuilder::default()
+        .build("[::1]:2222".parse().unwrap(), || MyHandler)
+        .await
+        .unwrap();
     loop {
         match server.accept().await {
             Ok(connection) => {

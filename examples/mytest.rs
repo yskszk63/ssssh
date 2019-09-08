@@ -40,35 +40,31 @@ impl Handler for MyHandler {
 async fn main() {
     env_logger::init();
 
-    tokio::executor::spawn(async {
-        use tokio_net::process::Command;
-        Command::new("ssh")
-            .arg("-oStrictHostKeyChecking=no")
-            .arg("-oUserKnownHostsFile=/dev/null")
-            .arg("-p2222")
-            .arg("-vvv")
-            .arg("::1")
-            .stdout(std::process::Stdio::null())
-            .stderr(std::process::Stdio::null())
-            .spawn()
-            .unwrap()
-            .await
-            .unwrap();
-        println!("DONE.");
-    });
+    use tokio_net::process::Command;
+    let proc = Command::new("ssh")
+        .arg("-oStrictHostKeyChecking=no")
+        .arg("-oUserKnownHostsFile=/dev/null")
+        .arg("-p2222")
+        .arg("-vvv")
+        .arg("::1")
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .unwrap();
 
     let builder = ServerBuilder::default();
     let mut server = builder
         .timeout(Duration::from_secs(5))
-        .build("[::1]:2222".parse().unwrap(), || MyHandler);
-    loop {
-        match server.accept().await {
-            Ok(connection) => {
-                tokio::spawn(async { connection.run().await.unwrap() });
-            }
-            Err(e) => {
-                eprintln!("{}", e);
-            }
+        .build("[::1]:2222".parse().unwrap(), || MyHandler)
+        .await
+        .unwrap();
+    match server.accept().await {
+        Ok(connection) => {
+            connection.run().await.unwrap();
+        }
+        Err(e) => {
+            eprintln!("{}", e);
         }
     }
+    proc.await.unwrap();
 }

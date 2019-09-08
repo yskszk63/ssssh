@@ -67,8 +67,9 @@ impl ServerBuilder {
         self.timeout = Some(timeout);
         self
     }
-    pub fn build<HF>(self, addr: SocketAddr, handler_factory: HF) -> Server<HF> {
-        Server {
+    pub async fn build<HF>(self, addr: SocketAddr, handler_factory: HF) -> io::Result<Server<HF>> {
+        let socket = TcpListener::bind(addr).await?;
+        Ok(Server {
             version: self.version.unwrap_or_else(|| "SSH-2.0-sssh".into()),
             addr,
             preference: self.preference.unwrap_or_default(),
@@ -76,9 +77,9 @@ impl ServerBuilder {
                 .hostkeys
                 .unwrap_or_else(|| HostKeys::new(vec![HostKey::gen_ssh_ed25519().unwrap()])),
             timeout: self.timeout,
-            socket: None,
+            socket,
             handler_factory,
-        }
+        })
     }
 }
 
@@ -88,7 +89,7 @@ pub struct Server<HF> {
     addr: SocketAddr,
     preference: Preference,
     hostkeys: HostKeys,
-    socket: Option<TcpListener>,
+    socket: TcpListener,
     timeout: Option<Duration>,
     handler_factory: HF,
 }
@@ -99,13 +100,7 @@ where
     HF: Fn() -> H,
 {
     pub async fn accept(&mut self) -> Result<Connection<TcpStream, H>, AcceptError> {
-        if self.socket.is_none() {
-            self.socket = Some(TcpListener::bind(&self.addr).await?);
-        }
-
-        let socket = self.socket.as_mut().expect("never occurred");
-
-        let (socket, remote) = socket.accept().await?;
+        let (socket, remote) = self.socket.accept().await?;
         Ok(Connection::establish(
             socket,
             self.version.clone(),
