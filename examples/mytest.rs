@@ -1,3 +1,5 @@
+use std::time::Duration;
+
 use async_trait::async_trait;
 
 use ssssh::AuthHandle;
@@ -56,7 +58,9 @@ async fn main() {
     });
 
     let builder = ServerBuilder::default();
-    let mut server = builder.build("[::1]:2222".parse().unwrap(), || MyHandler);
+    let mut server = builder
+        .timeout(Duration::from_secs(5))
+        .build("[::1]:2222".parse().unwrap(), || MyHandler);
     loop {
         match server.accept().await {
             Ok(connection) => {

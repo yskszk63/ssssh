@@ -1,5 +1,6 @@
 use std::io;
 use std::net::SocketAddr;
+use std::time::Duration;
 
 use failure::Fail;
 use tokio::net::{TcpListener, TcpStream};
@@ -39,6 +40,7 @@ pub struct ServerBuilder {
     version: Option<String>,
     preference: Option<Preference>,
     hostkeys: Option<HostKeys>,
+    timeout: Option<Duration>,
 }
 
 impl Default for ServerBuilder {
@@ -47,6 +49,7 @@ impl Default for ServerBuilder {
             version: None,
             preference: None,
             hostkeys: None,
+            timeout: None,
         }
     }
 }
@@ -60,6 +63,10 @@ impl ServerBuilder {
         self.preference = Some(v);
         self
     }
+    pub fn timeout(mut self, timeout: Duration) -> Self {
+        self.timeout = Some(timeout);
+        self
+    }
     pub fn build<HF>(self, addr: SocketAddr, handler_factory: HF) -> Server<HF> {
         Server {
             version: self.version.unwrap_or_else(|| "SSH-2.0-sssh".into()),
@@ -68,6 +75,7 @@ impl ServerBuilder {
             hostkeys: self
                 .hostkeys
                 .unwrap_or_else(|| HostKeys::new(vec![HostKey::gen_ssh_ed25519().unwrap()])),
+            timeout: self.timeout,
             socket: None,
             handler_factory,
         }
@@ -81,6 +89,7 @@ pub struct Server<HF> {
     preference: Preference,
     hostkeys: HostKeys,
     socket: Option<TcpListener>,
+    timeout: Option<Duration>,
     handler_factory: HF,
 }
 
@@ -103,6 +112,7 @@ where
             remote,
             self.hostkeys.clone(),
             self.preference.clone(),
+            self.timeout.clone(),
             (self.handler_factory)(),
         )
         .await?)

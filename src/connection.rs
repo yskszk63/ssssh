@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::fmt::Display;
 use std::sync::{Arc, Mutex};
+use std::time::Duration;
 
 use bytes::Bytes;
 use failure::Fail;
@@ -19,7 +20,7 @@ use crate::kex::{kex, KexEnv};
 use crate::msg::{self, Message, MessageError, MessageResult};
 use crate::transport::version::{Version, VersionExchangeResult};
 use crate::transport::{ChangeKeyError, State, Transport};
-use crate::util::EitherStream;
+use crate::util::{EitherStream, Timeout};
 
 #[derive(Debug, Fail)]
 #[fail(display = "Running error")]
@@ -77,7 +78,7 @@ where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
     version: Version,
-    rx: EitherStream<SplitStream<Transport<IO>>, mpsc::Receiver<Message>>,
+    rx: Timeout<EitherStream<SplitStream<Transport<IO>>, mpsc::Receiver<Message>>>,
     tx: SplitSink<Transport<IO>, Message>,
     state: Arc<Mutex<State>>,
     remote: String,
@@ -101,6 +102,7 @@ where
         remote: R,
         hostkeys: HostKeys,
         preference: Preference,
+        timeout: Option<Duration>,
         handler: H,
     ) -> VersionExchangeResult<Self>
     where
@@ -115,7 +117,7 @@ where
         let state = Arc::new(Mutex::new(State::new()));
         let io = Transport::new(socket, rbuf, state.clone());
         let (tx, rx) = io.split();
-        let rx = EitherStream::new(rx, message_recieve);
+        let rx = Timeout::new(EitherStream::new(rx, message_recieve), timeout);
         let global_handle = GlobalHandle::new(message_send.clone(), &remote);
 
         log::debug!("Established.. {:?} version: {:?}", remote, version);
@@ -167,7 +169,7 @@ where
     async fn run0(&mut self) -> ConnectionResult<()> {
         use msg::Message::*;
 
-        while let Some(m) = self.rx.next().await {
+        while let Some(Ok(m)) = self.rx.next().await {
             log::trace!("processing {:?}", m);
 
             match m {
@@ -222,7 +224,7 @@ where
 
         let mut env = KexEnv::new(
             &mut self.tx,
-            self.rx.get_mut().0,
+            self.rx.get_mut().get_mut().0,
             &self.version,
             &client_kexinit,
             &server_kexinit,
@@ -234,7 +236,7 @@ where
             .split();
         log::debug!("Kex done {:?}", self.remote);
 
-        if let Some(Either::Left(Ok((_, Message::Newkeys(..))))) = self.rx.next().await {
+        if let Some(Ok(Either::Left(Ok((_, Message::Newkeys(..)))))) = self.rx.next().await {
             self.send_immediately(msg::Newkeys).await?;
         } else {
             panic!()
