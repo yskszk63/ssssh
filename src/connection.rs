@@ -23,8 +23,8 @@ use crate::transport::{ChangeKeyError, State, Transport};
 use crate::util::{EitherStream, Timeout};
 
 #[derive(Debug, Fail)]
-#[fail(display = "Running error")]
-pub struct Error(Box<dyn StdError + Send + Sync + 'static>);
+#[fail(display = "Running error {}", _0)]
+pub struct Error(#[fail(cause)] ConnectionError);
 
 #[derive(Debug, Fail)]
 #[allow(clippy::module_name_repetitions)]
@@ -146,7 +146,7 @@ where
             self.send_immediately(msg::Disconnect::new(2, "unexpected", ""))
                 .await
                 .ok(); // TODO
-            Err(Error(failure::Error::from(e).into()))
+            Err(Error(e))
         } else {
             log::debug!("done {:?}", self.remote);
             Ok(())
