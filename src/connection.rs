@@ -206,7 +206,7 @@ where
     }
 
     async fn on_kexinit(&mut self, client_kexinit: msg::Kexinit) -> ConnectionResult<()> {
-        log::debug!("Begin kex {:?}", self.remote);
+        log::debug!("Begin kex {:?} {:?}", self.remote, client_kexinit);
 
         let server_kexinit = self.preference.to_kexinit();
         self.send_immediately(server_kexinit.clone())
