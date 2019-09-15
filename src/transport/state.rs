@@ -1,8 +1,8 @@
 use std::fmt;
 
-use bytes::Bytes;
+use bytes::{BufMut as _, Bytes, BytesMut};
 use failure::Fail;
-use ring::digest::{Context, SHA256};
+use ring::digest::{Context, SHA1_FOR_LEGACY_USE_ONLY as SHA1, SHA256};
 
 use crate::algorithm::{
     Algorithm, CompressionAlgorithm, EncryptionAlgorithm, KexAlgorithm, MacAlgorithm,
@@ -34,13 +34,27 @@ fn calculate_hash(
 ) -> Bytes {
     let alg = match algorithm.kex_algorithm() {
         KexAlgorithm::Curve25519Sha256 => &SHA256,
+        KexAlgorithm::DiffieHellmanGroup14Sha1 => &SHA1,
     };
     let mut ctx = Context::new(alg);
     ctx.put_mpint(key);
     ctx.update(hash);
     ctx.update(&[kind]);
     ctx.update(session_id);
-    Bytes::from(&ctx.finish().as_ref()[..len])
+    let mut result = BytesMut::from(ctx.finish().as_ref());
+
+    while result.len() < len {
+        let last = result.clone().freeze();
+        let mut ctx = Context::new(alg);
+        ctx.put_mpint(key);
+        ctx.update(hash);
+        ctx.update(&last);
+        let k = ctx.finish();
+        result.reserve(result.len() + k.as_ref().len());
+        result.put(k.as_ref());
+    }
+
+    result.freeze().slice_to(len)
 }
 
 pub(crate) struct State {

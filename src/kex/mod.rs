@@ -7,6 +7,7 @@ use crate::hostkey::HostKey;
 use crate::msg::{Kexinit, Message, MessageError};
 use crate::transport::version::Version;
 
+mod diffie_hellman_group14_sha1;
 mod ecdh;
 
 #[derive(Debug)]
@@ -88,5 +89,6 @@ where
 {
     match algorithm {
         KexAlgorithm::Curve25519Sha256 => ecdh::kex_ecdh(env).await,
+        KexAlgorithm::DiffieHellmanGroup14Sha1 => diffie_hellman_group14_sha1::kex_dh(env).await,
     }
 }

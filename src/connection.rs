@@ -236,11 +236,14 @@ where
             .split();
         log::debug!("Kex done {:?}", self.remote);
 
-        if let Some(Ok(Either::Left(Ok((_, Message::Newkeys(..)))))) = self.rx.next().await {
-            self.send_immediately(msg::Newkeys).await?;
-        } else {
-            panic!()
+        match self.rx.next().await {
+            Some(Ok(Either::Left(Ok((_, Message::Newkeys(..)))))) => {
+                self.send_immediately(msg::Newkeys).await?;
+            }
+            Some(e) => return Err(ConnectionError::KexError(Box::new(e))),
+            None => return Err(ConnectionError::KexError(Box::new("None"))), // TODO
         }
+
         let mut state = self
             .state
             .lock()

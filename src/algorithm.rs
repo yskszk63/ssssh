@@ -7,12 +7,14 @@ use crate::named::Named;
 #[allow(clippy::module_name_repetitions)]
 pub(crate) enum KexAlgorithm {
     Curve25519Sha256,
+    DiffieHellmanGroup14Sha1,
 }
 
 impl Named for KexAlgorithm {
     fn name(&self) -> &'static str {
         match self {
             Self::Curve25519Sha256 => "curve25519-sha256",
+            Self::DiffieHellmanGroup14Sha1 => "diffie-hellman-group14-sha1",
         }
     }
 }
@@ -123,7 +125,10 @@ impl Preference {
 impl Default for Preference {
     fn default() -> Self {
         Self {
-            kex_algorithms: vec![KexAlgorithm::Curve25519Sha256],
+            kex_algorithms: vec![
+                KexAlgorithm::Curve25519Sha256,
+                KexAlgorithm::DiffieHellmanGroup14Sha1,
+            ],
             server_host_key_algorithms: vec![HostKeyAlgorithm::SshEd25519],
             encryption_algorithms_client_to_server: vec![EncryptionAlgorithm::Aes256Ctr],
             encryption_algorithms_server_to_client: vec![EncryptionAlgorithm::Aes256Ctr],
