@@ -24,12 +24,15 @@ impl Version {
         let mut codec = VersionCodec.framed(connection);
 
         let client_version = if let Some(e) = codec.try_next().await? {
+            if e.is_empty() {
+                return Err(VersionExchangeError::Empty);
+            }
             match &e.get(..8) {
                 Some(b"SSH-2.0-") => e,
                 _ => return Err(VersionExchangeError::InvalidFormat),
             }
         } else {
-            return Err(VersionExchangeError::InvalidFormat);
+            return Err(VersionExchangeError::Empty);
         };
 
         let server_version = server_version.into();
@@ -55,9 +58,11 @@ impl Version {
 #[derive(Debug, Fail)]
 #[allow(clippy::module_name_repetitions)]
 pub enum VersionExchangeError {
+    #[fail(display = "Empty Version")]
+    Empty,
     #[fail(display = "Invalid SSH identification string")]
     InvalidFormat,
-    #[fail(display = "IO Error")]
+    #[fail(display = "IO Error {}", _0)]
     Io(#[fail(cause)] io::Error),
 }
 

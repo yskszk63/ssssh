@@ -1,3 +1,4 @@
+use std::fmt::{Debug, Display};
 use std::io;
 use std::net::SocketAddr;
 use std::time::Duration;
@@ -12,24 +13,26 @@ use crate::hostkey::{HostKey, HostKeys};
 use crate::transport::version::VersionExchangeError;
 
 #[derive(Debug, Fail)]
-pub enum AcceptError {
-    #[fail(display = "Invalid SSH identification string")]
-    InvalidFormat,
-    #[fail(display = "Io Error")]
-    Io(#[fail(cause)] io::Error),
+pub enum AcceptError<R>
+where
+    R: Debug + Display + Sync + Send + 'static,
+{
+    #[fail(display = "Empty Version {}", _0)]
+    Empty(R),
+    #[fail(display = "Invalid SSH identification string {}", _0)]
+    InvalidFormat(R),
+    #[fail(display = "Io Error {}", _1)]
+    Io(Option<R>, #[fail(cause)] io::Error),
 }
 
-impl From<io::Error> for AcceptError {
-    fn from(v: io::Error) -> Self {
-        Self::Io(v)
-    }
-}
-
-impl From<VersionExchangeError> for AcceptError {
-    fn from(v: VersionExchangeError) -> Self {
-        match v {
-            VersionExchangeError::InvalidFormat => Self::InvalidFormat,
-            VersionExchangeError::Io(e) => e.into(),
+impl<R> AcceptError<R>
+where
+    R: Debug + Display + Sync + Send + 'static,
+{
+    pub fn remote(&self) -> Option<&R> {
+        match self {
+            Self::Empty(r) | Self::InvalidFormat(r) | Self::Io(Some(r), ..) => Some(r),
+            Self::Io(None, ..) => None,
         }
     }
 }
@@ -99,9 +102,13 @@ where
     H: Handler,
     HF: Fn() -> H,
 {
-    pub async fn accept(&mut self) -> Result<Connection<TcpStream, H>, AcceptError> {
-        let (socket, remote) = self.socket.accept().await?;
-        Ok(Connection::establish(
+    pub async fn accept(&mut self) -> Result<Connection<TcpStream, H>, AcceptError<SocketAddr>> {
+        let (socket, remote) = self
+            .socket
+            .accept()
+            .await
+            .map_err(|e| AcceptError::Io(None, e))?;
+        let result = Connection::establish(
             socket,
             self.version.clone(),
             remote,
@@ -110,6 +117,13 @@ where
             self.timeout.clone(),
             (self.handler_factory)(),
         )
-        .await?)
+        .await
+        .map_err(move |e| match e {
+            VersionExchangeError::Io(e) => AcceptError::Io(Some(remote), e),
+            VersionExchangeError::Empty => AcceptError::Empty(remote),
+            VersionExchangeError::InvalidFormat => AcceptError::InvalidFormat(remote),
+        })?;
+
+        Ok(result)
     }
 }
