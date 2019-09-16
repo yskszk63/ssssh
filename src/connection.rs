@@ -138,6 +138,10 @@ where
         })
     }
 
+    pub fn handler(&self) -> &H {
+        &self.handler
+    }
+
     pub async fn run(mut self) -> Result<(), Error> {
         log::debug!("running {:?}", self.remote);
 
