@@ -55,7 +55,7 @@ async fn main() {
     let builder = ServerBuilder::default();
     let mut server = builder
         .timeout(Duration::from_secs(5))
-        .build("[::1]:2222".parse().unwrap(), || MyHandler)
+        .build("[::1]:2222".parse().unwrap(), |_| MyHandler)
         .await
         .unwrap();
     match server.accept().await {

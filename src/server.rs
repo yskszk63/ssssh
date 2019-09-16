@@ -21,7 +21,7 @@ where
     Empty(R),
     #[fail(display = "Invalid SSH identification string")]
     InvalidFormat(R),
-    #[fail(display = "Io Error")]
+    #[fail(display = "Io Error {}", _1)]
     Io(Option<R>, #[fail(cause)] io::Error),
 }
 
@@ -103,9 +103,11 @@ pub struct Server<HF> {
 impl<HF, H> Server<HF>
 where
     H: Handler,
-    HF: Fn() -> H,
+    HF: Fn(SocketAddr) -> H,
 {
-    pub async fn accept(&mut self) -> Result<Connection<TcpStream, H>, AcceptError<SocketAddr>> {
+    pub async fn accept(
+        &mut self,
+    ) -> Result<Connection<TcpStream, H, SocketAddr>, AcceptError<SocketAddr>> {
         let (socket, remote) = self
             .socket
             .accept()
@@ -118,7 +120,7 @@ where
             self.hostkeys.clone(),
             self.preference.clone(),
             self.timeout.clone(),
-            (self.handler_factory)(),
+            (self.handler_factory)(remote),
         )
         .await
         .map_err(move |e| match e {

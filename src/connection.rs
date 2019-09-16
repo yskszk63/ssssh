@@ -73,7 +73,7 @@ impl From<ChangeKeyError> for ConnectionError {
 pub(crate) type ConnectionResult<T> = Result<T, ConnectionError>;
 
 #[derive(Debug)]
-pub struct Connection<IO, H>
+pub struct Connection<IO, H, R>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
@@ -81,7 +81,7 @@ where
     rx: Timeout<EitherStream<SplitStream<Transport<IO>>, mpsc::Receiver<Message>>>,
     tx: SplitSink<Transport<IO>, Message>,
     state: Arc<Mutex<State>>,
-    remote: String,
+    remote: R,
     hostkeys: HostKeys,
     preference: Preference,
     message_send: mpsc::Sender<Message>,
@@ -91,12 +91,13 @@ where
     channel_handles: HashMap<u32, ChannelHandle>,
 }
 
-impl<IO, H> Connection<IO, H>
+impl<IO, H, R> Connection<IO, H, R>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
     H: Handler,
+    R: Display,
 {
-    pub async fn establish<R>(
+    pub async fn establish(
         mut socket: IO,
         server_version: impl Into<Bytes>,
         remote: R,
@@ -104,12 +105,8 @@ where
         preference: Preference,
         timeout: Option<Duration>,
         handler: H,
-    ) -> VersionExchangeResult<Self>
-    where
-        R: Display,
-    {
-        let remote = remote.to_string();
-        log::debug!("Connecting.. {:?}", remote);
+    ) -> VersionExchangeResult<Self> {
+        log::debug!("Connecting.. {}", remote);
 
         let (version, rbuf) = Version::exchange(&mut socket, server_version).await?;
         let (message_send, message_recieve) = mpsc::channel(0xFFFF); // TODO
@@ -118,9 +115,9 @@ where
         let io = Transport::new(socket, rbuf, state.clone());
         let (tx, rx) = io.split();
         let rx = Timeout::new(EitherStream::new(rx, message_recieve), timeout);
-        let global_handle = GlobalHandle::new(message_send.clone(), &remote);
+        let global_handle = GlobalHandle::new(message_send.clone());
 
-        log::debug!("Established.. {:?} version: {:?}", remote, version);
+        log::debug!("Established.. {} version: {:?}", remote, version);
 
         Ok(Self {
             version,
@@ -142,8 +139,12 @@ where
         &self.handler
     }
 
+    pub fn remote(&self) -> &R {
+        &self.remote
+    }
+
     pub async fn run(mut self) -> Result<(), Error> {
-        log::debug!("running {:?}", self.remote);
+        log::debug!("running {}", self.remote);
 
         if let Err(e) = self.run0().await {
             log::error!("Error occurred {:?}", e);
@@ -152,7 +153,7 @@ where
                 .ok(); // TODO
             Err(Error(e))
         } else {
-            log::debug!("done {:?}", self.remote);
+            log::debug!("done {}", self.remote);
             Ok(())
         }
     }
@@ -210,7 +211,7 @@ where
     }
 
     async fn on_kexinit(&mut self, client_kexinit: msg::Kexinit) -> ConnectionResult<()> {
-        log::debug!("Begin kex {:?} {:?}", self.remote, client_kexinit);
+        log::debug!("Begin kex {} {:?}", self.remote, client_kexinit);
 
         let server_kexinit = self.preference.to_kexinit();
         self.send_immediately(server_kexinit.clone())
@@ -219,7 +220,7 @@ where
 
         let algorithm = Algorithm::negotiate(&client_kexinit, &self.preference)
             .map_err(|e| ConnectionError::KexError(Box::new(e)))?;
-        log::debug!("Negotiate {:?} {:?}", self.remote, algorithm);
+        log::debug!("Negotiate {} {:?}", self.remote, algorithm);
 
         let hostkey = self
             .hostkeys
@@ -238,7 +239,7 @@ where
             .await
             .map_err(|e| ConnectionError::KexError(Box::new(e)))?
             .split();
-        log::debug!("Kex done {:?}", self.remote);
+        log::debug!("Kex done {}", self.remote);
 
         match self.rx.next().await {
             Some(Ok(Either::Left(Ok((_, Message::Newkeys(..)))))) => {

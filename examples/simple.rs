@@ -41,7 +41,7 @@ async fn main() {
     env_logger::init();
 
     let mut server = ServerBuilder::default()
-        .build("[::1]:2222".parse().unwrap(), || MyHandler)
+        .build("[::1]:2222".parse().unwrap(), |_| MyHandler)
         .await
         .unwrap();
     loop {

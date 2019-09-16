@@ -54,17 +54,11 @@ impl From<Signal> for msg::Signal {
 #[allow(clippy::module_name_repetitions)]
 pub struct GlobalHandle {
     tx: mpsc::Sender<Message>,
-    remote: String,
 }
 
 impl GlobalHandle {
-    pub(crate) fn new(tx: mpsc::Sender<Message>, remote: &str) -> Self {
-        let remote = remote.into();
-        Self { tx, remote }
-    }
-
-    pub(crate) fn remote(&self) -> &str {
-        &self.remote
+    pub(crate) fn new(tx: mpsc::Sender<Message>) -> Self {
+        Self { tx }
     }
 
     pub(crate) fn new_channel_handle(&self, channel: u32) -> ChannelHandle {
@@ -118,10 +112,6 @@ impl AuthHandle {
             .await
     }
 
-    pub fn remote(&self) -> &str {
-        self.global.remote()
-    }
-
     pub async fn send_banner(
         &mut self,
         msg: impl Into<String>,
@@ -143,10 +133,6 @@ pub struct ChannelHandle {
 impl ChannelHandle {
     pub fn channel_id(&self) -> u32 {
         self.channel
-    }
-
-    pub fn remote(&self) -> &str {
-        self.global.remote()
     }
 
     pub async fn send_debug(
