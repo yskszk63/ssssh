@@ -17,11 +17,11 @@ pub enum AcceptError<R>
 where
     R: Debug + Display + Sync + Send + 'static,
 {
-    #[fail(display = "Empty Version {}", _0)]
+    #[fail(display = "Empty Version")]
     Empty(R),
-    #[fail(display = "Invalid SSH identification string {}", _0)]
+    #[fail(display = "Invalid SSH identification string")]
     InvalidFormat(R),
-    #[fail(display = "Io Error {}", _1)]
+    #[fail(display = "Io Error")]
     Io(Option<R>, #[fail(cause)] io::Error),
 }
 
