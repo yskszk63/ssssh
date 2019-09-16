@@ -142,7 +142,8 @@ impl Default for Preference {
 
 #[derive(Debug, Fail)]
 pub enum NegotiateError {
-    #[fail(display = "No such algorithm")]
+    #[fail(display = "Negotiation mismatch kex: {:?} host: {:?} enc: {:?}{:?} mac: {:?}{:?} comp: {:?}{:?}",
+    kex, server_host, encryption_c2s, encryption_s2c, mac_c2s, mac_s2c, compression_c2s, compression_s2c)]
     Missing {
         kex: Vec<String>,
         server_host: Vec<String>,
