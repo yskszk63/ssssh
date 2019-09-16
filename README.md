@@ -1,7 +1,7 @@
 # ssssh
 
 SSH Server library by Rust.
-This is my hoby project.
+This is my hobby project.
 
 ## example
 
