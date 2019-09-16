@@ -1,11 +1,11 @@
 use bytes::Bytes;
 
-use super::Mac;
+use super::MacType;
 
 #[allow(clippy::module_name_repetitions)]
 pub(crate) struct NoneMac;
 
-impl Mac for NoneMac {
+impl MacType for NoneMac {
     fn size(&self) -> usize {
         0
     }

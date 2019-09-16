@@ -52,12 +52,14 @@ impl Named for EncryptionAlgorithm {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[allow(clippy::module_name_repetitions)]
 pub(crate) enum MacAlgorithm {
+    HmacSha1,
     HmacSha2_256,
 }
 
 impl Named for MacAlgorithm {
     fn name(&self) -> &'static str {
         match self {
+            Self::HmacSha1 => "hmac-sha1",
             Self::HmacSha2_256 => "hmac-sha2-256",
         }
     }
@@ -137,8 +139,14 @@ impl Default for Preference {
             ],
             encryption_algorithms_client_to_server: vec![EncryptionAlgorithm::Aes256Ctr],
             encryption_algorithms_server_to_client: vec![EncryptionAlgorithm::Aes256Ctr],
-            mac_algorithms_client_to_server: vec![MacAlgorithm::HmacSha2_256],
-            mac_algorithms_server_to_client: vec![MacAlgorithm::HmacSha2_256],
+            mac_algorithms_client_to_server: vec![
+                MacAlgorithm::HmacSha2_256,
+                MacAlgorithm::HmacSha1,
+            ],
+            mac_algorithms_server_to_client: vec![
+                MacAlgorithm::HmacSha2_256,
+                MacAlgorithm::HmacSha1,
+            ],
             compression_algorithms_client_to_server: vec![CompressionAlgorithm::None],
             compression_algorithms_server_to_client: vec![CompressionAlgorithm::None],
         }

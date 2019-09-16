@@ -4,12 +4,10 @@ use bytes::{BufMut as _, Bytes, BytesMut};
 use failure::Fail;
 use ring::digest::{Context, SHA1_FOR_LEGACY_USE_ONLY as SHA1, SHA256};
 
-use crate::algorithm::{
-    Algorithm, CompressionAlgorithm, EncryptionAlgorithm, KexAlgorithm, MacAlgorithm,
-};
+use crate::algorithm::{Algorithm, CompressionAlgorithm, EncryptionAlgorithm, KexAlgorithm};
 use crate::compression::{Compression, NoneCompression};
 use crate::encrypt::{Aes256CtrEncrypt, Encrypt, EncryptError, PlainEncrypt};
-use crate::mac::{HmacSha2_256, Mac, NoneMac};
+use crate::mac::Mac;
 use crate::sshbuf::SshBufMut as _;
 
 #[derive(Debug, Fail)]
@@ -63,8 +61,8 @@ pub(crate) struct State {
     session_id: Option<Bytes>,
     encrypt_ctos: Box<dyn Encrypt + Send>,
     encrypt_stoc: Box<dyn Encrypt + Send>,
-    mac_ctos: Box<dyn Mac + Send>,
-    mac_stoc: Box<dyn Mac + Send>,
+    mac_ctos: Mac,
+    mac_stoc: Mac,
     comp_ctos: Box<dyn Compression + Send>,
     comp_stoc: Box<dyn Compression + Send>,
 }
@@ -83,8 +81,8 @@ impl State {
             session_id: None,
             encrypt_ctos: Box::new(PlainEncrypt),
             encrypt_stoc: Box::new(PlainEncrypt),
-            mac_ctos: Box::new(NoneMac),
-            mac_stoc: Box::new(NoneMac),
+            mac_ctos: Mac::new_none(),
+            mac_stoc: Mac::new_none(),
             comp_ctos: Box::new(NoneCompression),
             comp_stoc: Box::new(NoneCompression),
         }
@@ -110,11 +108,11 @@ impl State {
         &mut self.encrypt_stoc
     }
 
-    pub(crate) fn mac_ctos(&mut self) -> &mut Box<dyn Mac + Send> {
+    pub(crate) fn mac_ctos(&mut self) -> &mut Mac {
         &mut self.mac_ctos
     }
 
-    pub(crate) fn mac_stoc(&mut self) -> &mut Box<dyn Mac + Send> {
+    pub(crate) fn mac_stoc(&mut self) -> &mut Mac {
         &mut self.mac_stoc
     }
 
@@ -156,13 +154,8 @@ impl State {
             }
         };
 
-        self.mac_ctos = match algorithm.mac_algorithm_client_to_server() {
-            MacAlgorithm::HmacSha2_256 => Box::new(HmacSha2_256::new(&intk_ctos)),
-        };
-
-        self.mac_stoc = match algorithm.mac_algorithm_server_to_client() {
-            MacAlgorithm::HmacSha2_256 => Box::new(HmacSha2_256::new(&intk_stoc)),
-        };
+        self.mac_ctos = Mac::new(&algorithm.mac_algorithm_client_to_server(), &intk_ctos);
+        self.mac_stoc = Mac::new(&algorithm.mac_algorithm_server_to_client(), &intk_stoc);
 
         self.comp_ctos = match algorithm.compression_algorithm_client_to_server() {
             CompressionAlgorithm::None => Box::new(NoneCompression),
