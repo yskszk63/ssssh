@@ -143,7 +143,16 @@ impl Default for Preference {
 #[derive(Debug, Fail)]
 pub enum NegotiateError {
     #[fail(display = "No such algorithm")]
-    Missing,
+    Missing {
+        kex: Vec<String>,
+        server_host: Vec<String>,
+        encryption_c2s: Vec<String>,
+        encryption_s2c: Vec<String>,
+        mac_c2s: Vec<String>,
+        mac_s2c: Vec<String>,
+        compression_c2s: Vec<String>,
+        compression_s2c: Vec<String>,
+    },
 }
 
 #[derive(Debug)]
@@ -163,9 +172,7 @@ impl Algorithm {
         let kex_algorithm = client
             .kex_algorithms()
             .flat_map(|e| server.kex_algorithms.iter().filter(move |s| e == s.name()))
-            .next()
-            .ok_or_else(|| NegotiateError::Missing)?
-            .clone();
+            .next();
 
         let server_host_key_algorithm = client
             .server_host_key_algorithms()
@@ -175,9 +182,7 @@ impl Algorithm {
                     .iter()
                     .filter(move |s| e == s.name())
             })
-            .next()
-            .ok_or_else(|| NegotiateError::Missing)?
-            .clone();
+            .next();
 
         let encryption_algorithm_client_to_server = client
             .encryption_algorithms_client_to_server()
@@ -187,9 +192,7 @@ impl Algorithm {
                     .iter()
                     .filter(move |s| e == s.name())
             })
-            .next()
-            .ok_or_else(|| NegotiateError::Missing)?
-            .clone();
+            .next();
 
         let encryption_algorithm_server_to_client = client
             .encryption_algorithms_server_to_client()
@@ -199,9 +202,7 @@ impl Algorithm {
                     .iter()
                     .filter(move |s| e == s.name())
             })
-            .next()
-            .ok_or_else(|| NegotiateError::Missing)?
-            .clone();
+            .next();
 
         let mac_algorithm_client_to_server = client
             .mac_algorithms_client_to_server()
@@ -211,9 +212,7 @@ impl Algorithm {
                     .iter()
                     .filter(move |s| e == s.name())
             })
-            .next()
-            .ok_or_else(|| NegotiateError::Missing)?
-            .clone();
+            .next();
 
         let mac_algorithm_server_to_client = client
             .mac_algorithms_server_to_client()
@@ -223,9 +222,7 @@ impl Algorithm {
                     .iter()
                     .filter(move |s| e == s.name())
             })
-            .next()
-            .ok_or_else(|| NegotiateError::Missing)?
-            .clone();
+            .next();
 
         let compression_algorithm_client_to_server = client
             .compression_algorithms_client_to_server()
@@ -235,9 +232,7 @@ impl Algorithm {
                     .iter()
                     .filter(move |s| e == s.name())
             })
-            .next()
-            .ok_or_else(|| NegotiateError::Missing)?
-            .clone();
+            .next();
 
         let compression_algorithm_server_to_client = client
             .compression_algorithms_server_to_client()
@@ -247,11 +242,9 @@ impl Algorithm {
                     .iter()
                     .filter(move |s| e == s.name())
             })
-            .next()
-            .ok_or_else(|| NegotiateError::Missing)?
-            .clone();
+            .next();
 
-        Ok(Self {
+        match (
             kex_algorithm,
             server_host_key_algorithm,
             encryption_algorithm_client_to_server,
@@ -260,7 +253,69 @@ impl Algorithm {
             mac_algorithm_server_to_client,
             compression_algorithm_client_to_server,
             compression_algorithm_server_to_client,
-        })
+        ) {
+            (
+                Some(kex_algorithm),
+                Some(server_host_key_algorithm),
+                Some(encryption_algorithm_client_to_server),
+                Some(encryption_algorithm_server_to_client),
+                Some(mac_algorithm_client_to_server),
+                Some(mac_algorithm_server_to_client),
+                Some(compression_algorithm_client_to_server),
+                Some(compression_algorithm_server_to_client),
+            ) => Ok(Self {
+                kex_algorithm: kex_algorithm.clone(),
+                server_host_key_algorithm: server_host_key_algorithm.clone(),
+                encryption_algorithm_server_to_client: encryption_algorithm_client_to_server
+                    .clone(),
+                encryption_algorithm_client_to_server: encryption_algorithm_server_to_client
+                    .clone(),
+                mac_algorithm_client_to_server: mac_algorithm_client_to_server.clone(),
+                mac_algorithm_server_to_client: mac_algorithm_server_to_client.clone(),
+                compression_algorithm_client_to_server: compression_algorithm_client_to_server
+                    .clone(),
+                compression_algorithm_server_to_client: compression_algorithm_server_to_client
+                    .clone(),
+            }),
+            _ => Err(NegotiateError::Missing {
+                kex: client.kex_algorithms().into_iter().cloned().collect(),
+                server_host: client
+                    .server_host_key_algorithms()
+                    .into_iter()
+                    .cloned()
+                    .collect(),
+                encryption_c2s: client
+                    .encryption_algorithms_client_to_server()
+                    .into_iter()
+                    .cloned()
+                    .collect(),
+                encryption_s2c: client
+                    .encryption_algorithms_server_to_client()
+                    .into_iter()
+                    .cloned()
+                    .collect(),
+                mac_c2s: client
+                    .mac_algorithms_client_to_server()
+                    .into_iter()
+                    .cloned()
+                    .collect(),
+                mac_s2c: client
+                    .mac_algorithms_server_to_client()
+                    .into_iter()
+                    .cloned()
+                    .collect(),
+                compression_c2s: client
+                    .compression_algorithms_client_to_server()
+                    .into_iter()
+                    .cloned()
+                    .collect(),
+                compression_s2c: client
+                    .compression_algorithms_server_to_client()
+                    .into_iter()
+                    .cloned()
+                    .collect(),
+            }),
+        }
     }
 
     pub(crate) fn kex_algorithm(&self) -> &KexAlgorithm {
