@@ -44,7 +44,7 @@ where
     let signature = env.hostkey.sign(&h);
 
     env.tx
-        .send(KexEcdhReply::new(env.hostkey.publickey(), f.to_vec().as_ref(), &signature).into())
+        .send(KexEcdhReply::new(env.hostkey.clone(), f.to_vec().as_ref(), signature).into())
         .await?;
 
     Ok(KexReturn {

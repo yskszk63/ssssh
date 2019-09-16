@@ -44,9 +44,9 @@ where
     env.tx
         .send(
             KexEcdhReply::new(
-                env.hostkey.publickey(),
+                env.hostkey.clone(),
                 server_ephemeral_public.as_ref(),
-                &signature,
+                signature,
             )
             .into(),
         )

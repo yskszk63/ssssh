@@ -245,7 +245,7 @@ where
                 self.send_immediately(msg::Newkeys).await?;
             }
             Some(e) => return Err(ConnectionError::KexError(Box::new(e))),
-            None => return Err(ConnectionError::KexError(Box::new("None"))), // TODO
+            None => return Err(ConnectionError::KexError(Box::new("No packet recieved"))), // TODO
         }
 
         let mut state = self

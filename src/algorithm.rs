@@ -23,12 +23,14 @@ impl Named for KexAlgorithm {
 #[allow(clippy::module_name_repetitions)]
 pub enum HostKeyAlgorithm {
     SshEd25519,
+    SshRsa,
 }
 
 impl Named for HostKeyAlgorithm {
     fn name(&self) -> &'static str {
         match self {
             Self::SshEd25519 => "ssh-ed25519",
+            Self::SshRsa => "ssh-rsa",
         }
     }
 }
@@ -129,7 +131,10 @@ impl Default for Preference {
                 KexAlgorithm::Curve25519Sha256,
                 KexAlgorithm::DiffieHellmanGroup14Sha1,
             ],
-            server_host_key_algorithms: vec![HostKeyAlgorithm::SshEd25519],
+            server_host_key_algorithms: vec![
+                HostKeyAlgorithm::SshEd25519,
+                HostKeyAlgorithm::SshRsa,
+            ],
             encryption_algorithms_client_to_server: vec![EncryptionAlgorithm::Aes256Ctr],
             encryption_algorithms_server_to_client: vec![EncryptionAlgorithm::Aes256Ctr],
             mac_algorithms_client_to_server: vec![MacAlgorithm::HmacSha2_256],
@@ -142,8 +147,17 @@ impl Default for Preference {
 
 #[derive(Debug, Fail)]
 pub enum NegotiateError {
-    #[fail(display = "Negotiation mismatch kex: {:?} host: {:?} enc: {:?}{:?} mac: {:?}{:?} comp: {:?}{:?}",
-    kex, server_host, encryption_c2s, encryption_s2c, mac_c2s, mac_s2c, compression_c2s, compression_s2c)]
+    #[fail(
+        display = "Negotiation mismatch kex: {:?} host: {:?} enc: {:?}{:?} mac: {:?}{:?} comp: {:?}{:?}",
+        kex,
+        server_host,
+        encryption_c2s,
+        encryption_s2c,
+        mac_c2s,
+        mac_s2c,
+        compression_c2s,
+        compression_s2c
+    )]
     Missing {
         kex: Vec<String>,
         server_host: Vec<String>,

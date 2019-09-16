@@ -76,9 +76,12 @@ impl ServerBuilder {
             version: self.version.unwrap_or_else(|| "SSH-2.0-sssh".into()),
             addr,
             preference: self.preference.unwrap_or_default(),
-            hostkeys: self
-                .hostkeys
-                .unwrap_or_else(|| HostKeys::new(vec![HostKey::gen_ssh_ed25519().unwrap()])),
+            hostkeys: self.hostkeys.unwrap_or_else(|| {
+                HostKeys::new(vec![
+                    HostKey::gen_ssh_ed25519().unwrap(),
+                    HostKey::gen_ssh_rsa(2048).unwrap(),
+                ])
+            }),
             timeout: self.timeout,
             socket,
             handler_factory,
