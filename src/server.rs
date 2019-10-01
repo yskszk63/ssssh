@@ -113,6 +113,7 @@ where
             .accept()
             .await
             .map_err(|e| AcceptError::Io(None, e))?;
+        socket.set_keepalive(self.timeout.clone()).map_err(|e| AcceptError::Io(None, e))?;
         let result = Connection::establish(
             socket,
             self.version.clone(),
