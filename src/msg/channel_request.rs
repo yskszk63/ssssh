@@ -323,7 +323,7 @@ impl ChannelRequest {
             }),
             name => ChannelRequestType::Unknown {
                 name: name.to_string(),
-                data: buf.take(usize::max_value()).iter().collect(),
+                data: buf.to_bytes(),
             },
         };
 

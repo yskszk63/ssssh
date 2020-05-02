@@ -1,11 +1,11 @@
 use std::cmp;
 use std::io::{self, BufRead as _};
 
-use bytes::{Bytes, BytesMut};
+use bytes::{Buf as _, Bytes, BytesMut};
 use failure::Fail;
 use futures::{SinkExt as _, TryStreamExt as _};
-use tokio::codec::{Decoder, Encoder, FramedParts};
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio_util::codec::{Decoder, Encoder, FramedParts};
 
 #[derive(Debug)]
 pub(crate) struct Version {

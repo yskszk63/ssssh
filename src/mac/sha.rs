@@ -25,7 +25,7 @@ impl MacType for HmacSha2_256 {
         let mut ctx = Context::with_key(&self.key);
         ctx.update(&seq.to_be_bytes());
         ctx.update(&plain);
-        Bytes::from(ctx.sign().as_ref())
+        Bytes::copy_from_slice(ctx.sign().as_ref())
     }
 }
 
@@ -35,7 +35,7 @@ pub(crate) struct HmacSha1 {
 
 impl HmacSha1 {
     pub fn new(key: &Bytes) -> Self {
-        let key = Key::new(HMAC_SHA1, &key.slice_to(20)); // TODO
+        let key = Key::new(HMAC_SHA1, &key.clone().split_to(20)); // TODO
         Self { key }
     }
 }
@@ -51,6 +51,6 @@ impl MacType for HmacSha1 {
         let mut ctx = Context::with_key(&self.key);
         ctx.update(&seq.to_be_bytes());
         ctx.update(&plain);
-        Bytes::from(ctx.sign().as_ref())
+        Bytes::copy_from_slice(ctx.sign().as_ref())
     }
 }

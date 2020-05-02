@@ -1,4 +1,7 @@
+use std::time::Duration;
+
 use async_trait::async_trait;
+use bytes::buf::Buf as _;
 
 use ssssh::{AuthHandle, ChannelHandle, Handler, PasswordAuth, ServerBuilder};
 
@@ -27,20 +30,22 @@ impl Handler for MyHandler {
 
     async fn channel_data(
         &mut self,
-        data: &[u8],
+        mut data: &[u8],
         handle: &ChannelHandle,
     ) -> Result<(), Self::Error> {
         let mut handle = handle.clone();
-        handle.send_data(data).await?;
+        let data = data.to_bytes();
+        handle.send_data(data.clone()).await?;
         Ok(())
     }
 }
 
-#[tokio::main(single_thread)]
+#[tokio::main(basic_scheduler)]
 async fn main() {
     env_logger::init();
 
     let mut server = ServerBuilder::default()
+        .timeout(Duration::from_secs(5))
         .build("[::1]:2222".parse().unwrap(), |_| MyHandler)
         .await
         .unwrap();

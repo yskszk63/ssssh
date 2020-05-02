@@ -53,7 +53,7 @@ impl GlobalRequest {
             }
             u => GlobalRequestType::Unknown(
                 u.to_string(),
-                buf.take(usize::max_value()).iter().collect(),
+                buf.to_bytes(),
             ),
         };
 

@@ -36,7 +36,7 @@ impl ChannelOpenConfirmation {
         let sender_channel = buf.get_uint32()?;
         let initial_window_size = buf.get_uint32()?;
         let maximum_packet_size = buf.get_uint32()?;
-        let data = buf.take(usize::max_value()).collect();
+        let data = buf.to_bytes();
         Ok(Self {
             recipient_channel,
             sender_channel,

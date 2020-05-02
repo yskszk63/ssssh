@@ -29,7 +29,7 @@ where
         server_ephemeral_secret,
         &client_ephemeral_public,
         Unspecified,
-        |e| Ok(Bytes::from(e)),
+        |e| Ok(Bytes::copy_from_slice(e)),
     )
     .map_err(|_| KexError::Other)?;
 
@@ -88,5 +88,5 @@ where
     ctx.put_binary_string(server_ephemeral_public);
     ctx.put_mpint(shared_key);
     let hash = ctx.finish();
-    Bytes::from(hash.as_ref())
+    Bytes::copy_from_slice(hash.as_ref())
 }

@@ -52,7 +52,7 @@ fn calculate_hash(
         result.put(k.as_ref());
     }
 
-    result.freeze().slice_to(len)
+    result.freeze().split_to(len)
 }
 
 pub(crate) struct State {

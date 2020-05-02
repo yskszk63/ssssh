@@ -18,7 +18,7 @@ impl RequestSuccess {
     */
 
     pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let data = buf.take(usize::max_value()).collect();
+        let data = buf.to_bytes();
         Ok(Self { data })
     }
 

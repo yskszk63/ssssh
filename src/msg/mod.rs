@@ -1,7 +1,8 @@
 use std::convert::TryFrom;
+use std::io::Cursor;
 use std::string::FromUtf8Error;
 
-use bytes::{Buf as _, BufMut as _, Bytes, BytesMut, IntoBuf as _};
+use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
 use failure::Fail;
 
 use crate::sshbuf::SshBufError;
@@ -224,7 +225,7 @@ impl TryFrom<Bytes> for Message {
     type Error = MessageError;
 
     fn try_from(v: Bytes) -> MessageResult<Self> {
-        let buf = &mut v.into_buf();
+        let buf = &mut Cursor::new(v);
         let message_id = MessageId::try_from(buf.get_u8())?;
         Ok(match message_id {
             MessageId::Kexinit => Kexinit::from(buf)?.into(),

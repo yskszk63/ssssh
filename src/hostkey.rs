@@ -77,7 +77,7 @@ impl HostKey {
     pub fn gen_ssh_ed25519() -> GenResult<Self> {
         let pkcs8 = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new())?;
         let pair = Ed25519KeyPair::from_pkcs8(pkcs8.as_ref())?;
-        let public = Bytes::from(pair.public_key().as_ref());
+        let public = Bytes::copy_from_slice(pair.public_key().as_ref());
         Ok(Self::SshEd25519 {
             pair: Arc::new(pair),
             public,
@@ -131,7 +131,7 @@ impl HostKey {
             Self::SshEd25519 { pair, .. } => {
                 let pair = pair.as_ref();
                 let sign = pair.sign(target);
-                Signature::SshEd25519(Bytes::from(sign.as_ref()))
+                Signature::SshEd25519(Bytes::copy_from_slice(sign.as_ref()))
             }
             Self::SshRsa { pair, .. } => {
                 let pair = pair.as_ref();

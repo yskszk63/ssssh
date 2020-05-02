@@ -1,10 +1,10 @@
 use std::io;
 use std::sync::{Arc, Mutex};
 
-use bytes::{Buf as _, BufMut as _, Bytes, BytesMut, IntoBuf as _};
+use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
 use failure::Fail;
 use rand::{CryptoRng, RngCore};
-use tokio::codec::{Decoder, Encoder};
+use tokio_util::codec::{Decoder, Encoder};
 
 use super::{Packet, State};
 use crate::compression::CompressionError;
@@ -118,7 +118,7 @@ where
         self.rng.fill_bytes(&mut pad);
 
         let mut unencrypted_pkt = BytesMut::with_capacity(len + 4);
-        unencrypted_pkt.put_u32_be(len as u32);
+        unencrypted_pkt.put_u32(len as u32);
         unencrypted_pkt.put_u8(pad.len() as u8);
         unencrypted_pkt.put_slice(&item);
         unencrypted_pkt.put_slice(&pad);
@@ -157,7 +157,7 @@ where
                     }
                     let encrypted_first = src.split_to(bs).freeze();
                     let first = state.encrypt_ctos().encrypt(&encrypted_first)?;
-                    let len = first.as_ref().into_buf().get_u32_be() as usize;
+                    let len = first.clone().get_u32() as usize;
                     self.encrypt_state = EncryptState::FillBuffer {
                         encrypted_first,
                         first,
@@ -177,12 +177,12 @@ where
 
                     let mut encrypted =
                         BytesMut::with_capacity(encrypted_first.len() + encrypted_remaining.len());
-                    encrypted.put(encrypted_first);
+                    encrypted.put(encrypted_first.as_ref());
                     encrypted.put(encrypted_remaining);
                     let encrypted = encrypted.freeze();
 
                     let mut plain = BytesMut::with_capacity(first.len() + remaining.len());
-                    plain.put(first);
+                    plain.put(first.as_ref());
                     plain.put(remaining);
                     let plain = plain.freeze();
                     self.encrypt_state = EncryptState::Sign { encrypted, plain };
@@ -199,7 +199,7 @@ where
                         panic!("ERR\n  {:?}\n  {:?}", &sign, &expect,);
                     }
                     let pad = plain[4] as usize;
-                    let payload = plain.slice(5, plain.len() - pad);
+                    let payload = plain.clone().split_off(5).split_to(plain.len() - pad);
                     let payload = state.comp_ctos().decompress(&payload)?;
                     self.encrypt_state = EncryptState::Initial;
                     return Ok(Some(Packet::new(seq, payload)));

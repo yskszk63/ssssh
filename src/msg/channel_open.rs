@@ -1,5 +1,6 @@
 use std::io::Cursor;
 
+use bytes::buf::BufExt as _;
 use bytes::{Buf as _, Bytes, BytesMut};
 
 use super::{Message, MessageResult};
@@ -101,7 +102,7 @@ impl ChannelOpen {
             }),
             u => ChannelOpenChannelType::Unknown(
                 u.to_string(),
-                buf.take(usize::max_value()).iter().collect(),
+                buf.take(usize::max_value()).to_bytes(),
             ),
         };
 

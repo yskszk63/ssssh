@@ -7,8 +7,8 @@ use bytes::BytesMut;
 use futures::{ready, Sink, Stream};
 use rand::rngs::StdRng;
 use rand::SeedableRng as _;
-use tokio::codec::Framed;
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio_util::codec::Framed;
 
 use crate::msg::{Message, MessageError, MessageResult};
 use codec::Codec;

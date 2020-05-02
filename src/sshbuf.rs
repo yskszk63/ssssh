@@ -38,7 +38,7 @@ pub(crate) trait SshBuf: Buf {
             return Err(SshBufError::Underflow);
         }
 
-        Ok(self.get_u32_be())
+        Ok(self.get_u32())
     }
 
     fn get_uint64(&mut self) -> SshBufResult<u64> {
@@ -46,7 +46,7 @@ pub(crate) trait SshBuf: Buf {
             return Err(SshBufError::Underflow);
         }
 
-        Ok(self.get_u64_be())
+        Ok(self.get_u64())
     }
 
     fn get_string(&mut self) -> SshBufResult<String> {

@@ -7,10 +7,10 @@ use std::time::Duration;
 use bytes::Bytes;
 use failure::Fail;
 use futures::channel::mpsc;
-use futures::future::Either;
 use futures::stream::{SplitSink, SplitStream};
-use futures::{SinkExt as _, StreamExt as _};
+use futures::{SinkExt as _, /*StreamExt as _*/};
 use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::stream::{Stream, StreamExt as _};
 
 use crate::algorithm::{Algorithm, Preference};
 use crate::handle::{AuthHandle, ChannelHandle, GlobalHandle};
@@ -20,7 +20,6 @@ use crate::kex::{kex, KexEnv};
 use crate::msg::{self, Message, MessageError, MessageResult};
 use crate::transport::version::{Version, VersionExchangeResult};
 use crate::transport::{ChangeKeyError, State, Transport};
-use crate::util::{EitherStream, Timeout};
 
 #[derive(Debug, Fail)]
 #[fail(display = "Running error {}", _0)]
@@ -47,6 +46,8 @@ pub(crate) enum ConnectionError {
     UnabledToSharedStateLock,
     #[fail(display = "ChangeKeyError")]
     ChangeKeyError(#[fail(cause)] ChangeKeyError),
+    #[fail(display = "Timeout")]
+    Timeout(#[fail(cause)] tokio::time::Elapsed),
     //#[fail(display = "Io Error {}", _0)]
     //Io(io::Error),
 }
@@ -69,6 +70,12 @@ impl From<ChangeKeyError> for ConnectionError {
     }
 }
 
+impl From<tokio::time::Elapsed> for ConnectionError {
+    fn from(v: tokio::time::Elapsed) -> Self {
+        Self::Timeout(v)
+    }
+}
+
 #[allow(clippy::module_name_repetitions)]
 pub(crate) type ConnectionResult<T> = Result<T, ConnectionError>;
 
@@ -78,7 +85,8 @@ where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
     version: Version,
-    rx: Timeout<EitherStream<SplitStream<Transport<IO>>, mpsc::Receiver<Message>>>,
+    rx: Option<SplitStream<Transport<IO>>>,
+    message_receive: Option<mpsc::Receiver<Message>>,
     tx: SplitSink<Transport<IO>, Message>,
     state: Arc<Mutex<State>>,
     remote: R,
@@ -89,6 +97,7 @@ where
     global_handle: GlobalHandle,
     auth_handle: Option<AuthHandle>,
     channel_handles: HashMap<u32, ChannelHandle>,
+    timeout: Option<Duration>,
 }
 
 impl<IO, H, R> Connection<IO, H, R>
@@ -109,14 +118,15 @@ where
         log::debug!("Connecting.. {}", remote);
 
         let (version, rbuf) = Version::exchange(&mut socket, server_version).await?;
-        let (message_send, message_recieve) = mpsc::channel(0xFFFF); // TODO
+        let (message_send, message_receive) = mpsc::channel(0xFFFF); // TODO
 
         let state = Arc::new(Mutex::new(State::new()));
         let io = Transport::new(socket, rbuf, state.clone());
-        let (tx, rx) = io.split();
-        let rx = Timeout::new(EitherStream::new(rx, message_recieve), timeout);
+        let (tx, rx) = futures::stream::StreamExt::split(io);
         let global_handle = GlobalHandle::new(message_send.clone());
 
+        let rx = Some(rx);
+        let message_receive = Some(message_receive);
         log::debug!("Established.. {} version: {:?}", remote, version);
 
         Ok(Self {
@@ -128,10 +138,12 @@ where
             hostkeys,
             preference,
             handler,
+            message_receive,
             message_send,
             global_handle,
             auth_handle: None,
             channel_handles: HashMap::new(),
+            timeout,
         })
     }
 
@@ -174,12 +186,14 @@ where
     async fn run0(&mut self) -> ConnectionResult<()> {
         use msg::Message::*;
 
-        while let Some(Ok(m)) = self.rx.next().await {
-            log::trace!("processing {:?}", m);
-
-            match m {
-                Either::Left(m) => match m? {
-                    (_seq, Kexinit(item)) => self.on_kexinit(*item).await?,
+        let mut rx = self.rx.take().unwrap().timeout(self.timeout.unwrap());
+        let mut message_receive = self.message_receive.take().unwrap();
+        loop {
+            tokio::select! {
+                Some(m) = rx.next() => {
+                    log::trace!("processing {:?}", m);
+                    match m?? {
+                    (_seq, Kexinit(item)) => self.on_kexinit(*item, &mut (&mut rx).map(|e| e.unwrap())).await?,
                     (_seq, ServiceRequest(item)) => self.on_service_request(item).await?,
                     (_seq, UserauthRequest(item)) => self.on_userauth_request(item).await?,
                     (_seq, ChannelOpen(item)) => self.on_channel_open(item).await?,
@@ -201,16 +215,19 @@ where
                         log::debug!("{:?}", x);
                         self.send(msg::Unimplemented::new(seq)).await?;
                     }
-                },
-                Either::Right(m) => {
+                    }
+                }
+                Some(m) = message_receive.next() => {
+                    log::trace!("processing {:?}", m);
                     self.send_immediately(m).await?;
                 }
+                else => break
             }
         }
         Ok(())
     }
 
-    async fn on_kexinit(&mut self, client_kexinit: msg::Kexinit) -> ConnectionResult<()> {
+    async fn on_kexinit(&mut self, client_kexinit: msg::Kexinit, rx: &mut (impl Stream<Item=Result<(u32, msg::Message), msg::MessageError>> + Unpin)) -> ConnectionResult<()> {
         log::debug!("Begin kex {} {:?}", self.remote, client_kexinit);
 
         let server_kexinit = self.preference.to_kexinit();
@@ -229,7 +246,7 @@ where
 
         let mut env = KexEnv::new(
             &mut self.tx,
-            self.rx.get_mut().get_mut().0,
+            rx,
             &self.version,
             &client_kexinit,
             &server_kexinit,
@@ -241,8 +258,8 @@ where
             .split();
         log::debug!("Kex done {}", self.remote);
 
-        match self.rx.next().await {
-            Some(Ok(Either::Left(Ok((_, Message::Newkeys(..)))))) => {
+        match rx.next().await {
+            Some(Ok((_, Message::Newkeys(..)))) => {
                 self.send_immediately(msg::Newkeys).await?;
             }
             Some(e) => return Err(ConnectionError::KexError(Box::new(e))),

@@ -36,11 +36,11 @@ impl Handler for MyHandler {
     }
 }
 
-#[tokio::main(single_thread)]
+#[tokio::main(basic_scheduler)]
 async fn main() {
     env_logger::init();
 
-    use tokio_net::process::Command;
+    use tokio::process::Command;
     let proc = Command::new("ssh")
         .arg("-oStrictHostKeyChecking=no")
         .arg("-oUserKnownHostsFile=/dev/null")

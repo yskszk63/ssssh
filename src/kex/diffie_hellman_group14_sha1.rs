@@ -88,5 +88,5 @@ where
     ctx.put_binary_string(f);
     ctx.put_mpint(k);
     let hash = ctx.finish();
-    Bytes::from(hash.as_ref())
+    Bytes::copy_from_slice(hash.as_ref())
 }

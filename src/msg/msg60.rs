@@ -9,7 +9,7 @@ pub(crate) struct Msg60(Bytes);
 
 impl Msg60 {
     pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        Ok(Self(buf.take(usize::max_value()).iter().collect()))
+        Ok(Self(buf.to_bytes()))
     }
 
     pub(crate) fn put(&self, buf: &mut BytesMut) {

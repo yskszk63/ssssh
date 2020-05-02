@@ -3,7 +3,7 @@ use std::task::{Context, Poll};
 use std::time::Duration;
 
 use futures::{ready, Stream};
-use tokio::timer::timeout::{Elapsed, Timeout as TokioTimeout};
+use tokio::time::{Elapsed, Timeout as TokioTimeout};
 
 #[derive(Debug)]
 pub(crate) enum Timeout<F>
