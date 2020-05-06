@@ -5,27 +5,21 @@ authors = ["yskszk63 <yskszk63@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-tokio = { version="0.2", features=["tcp", "time", "stream", "macros", "io-util"] }
-tokio-util = { version="0.2", features=["codec"] }
+tokio = { version="0.2", features=["tcp", "time", "stream", "macros", "io-util", "sync"] }
 futures = "0.3"
 bytes = "0.5"
-rand = "0.7"
-openssl = "0.10"
-failure = "0.1"
-ring = "0.16"
+openssl = { version = "0.10", features = ["vendored"] }
+thiserror = "1.0"
+ring = { version="0.16", features = ["std"] }
 log = "0.4"
 async-trait = "0.1"
+getset = "0.1.0"
+derive-new = "0.5.8"
+derive_builder = "0.9.0"
+linked-hash-map = "0.5.3"
+anyhow = "1.0"
 
 [dev-dependencies]
-tokio = { version="0.2", features=["rt-threaded", "process"] }
+tokio = { version="0.2", features=["rt-threaded", "process", "dns", "fs"] }
 env_logger = "0.6"
-bencher = "0.1"
-
-[[bench]]
-name = "bench"
-harness = false
-
-#[workspace]
-#members = [
-#    "ssssh-msg"
-#]
+anyhow = "1.0"

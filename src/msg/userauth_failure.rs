@@ -1,47 +1,38 @@
-use std::io::Cursor;
+use derive_new::new;
 
-use bytes::{Bytes, BytesMut};
+use super::*;
+use crate::pack::NameList;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug, Clone)]
+#[derive(Debug, new)]
 pub(crate) struct UserauthFailure {
-    authentications_that_can_continue: Vec<String>,
-    parital_success: bool,
+    authentications: NameList,
+    partial_success: bool,
 }
 
-impl UserauthFailure {
-    pub(crate) fn new(
-        authentications_that_can_continue: impl IntoIterator<Item = impl Into<String>>,
-        parital_success: bool,
-    ) -> Self {
-        let authentications_that_can_continue = authentications_that_can_continue
-            .into_iter()
-            .map(Into::into)
-            .collect();
-        Self {
-            authentications_that_can_continue,
-            parital_success,
-        }
-    }
+impl MsgItem for UserauthFailure {
+    const ID: u8 = 51;
+}
 
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let authentications_that_can_continue = buf.get_name_list()?;
-        let parital_success = buf.get_boolean()?;
+impl Pack for UserauthFailure {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.authentications.pack(buf);
+        self.partial_success.pack(buf);
+    }
+}
+
+impl Unpack for UserauthFailure {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let authentications = Unpack::unpack(buf)?;
+        let partial_success = Unpack::unpack(buf)?;
+
         Ok(Self {
-            authentications_that_can_continue,
-            parital_success,
+            authentications,
+            partial_success,
         })
     }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_name_list(&self.authentications_that_can_continue);
-        buf.put_boolean(self.parital_success);
-    }
 }
 
-impl From<UserauthFailure> for Message {
+impl From<UserauthFailure> for Msg {
     fn from(v: UserauthFailure) -> Self {
         Self::UserauthFailure(v)
     }

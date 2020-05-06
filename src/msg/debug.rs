@@ -1,51 +1,41 @@
-use std::io::Cursor;
+use derive_new::new;
 
-use bytes::{Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug, Clone)]
+#[derive(Debug, new)]
 pub(crate) struct Debug {
     always_display: bool,
     message: String,
     language_tag: String,
 }
 
-impl Debug {
-    pub(crate) fn new(
-        always_display: bool,
-        message: impl Into<String>,
-        language_tag: impl Into<String>,
-    ) -> Self {
-        let message = message.into();
-        let language_tag = language_tag.into();
-        Self {
-            always_display,
-            message,
-            language_tag,
-        }
-    }
+impl MsgItem for Debug {
+    const ID: u8 = 4;
+}
 
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let always_display = buf.get_boolean()?;
-        let message = buf.get_string()?;
-        let language_tag = buf.get_string()?;
+impl Pack for Debug {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.always_display.pack(buf);
+        self.message.pack(buf);
+        self.language_tag.pack(buf);
+    }
+}
+
+impl Unpack for Debug {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let always_display = Unpack::unpack(buf)?;
+        let message = Unpack::unpack(buf)?;
+        let language_tag = Unpack::unpack(buf)?;
+
         Ok(Self {
             always_display,
             message,
             language_tag,
         })
     }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_boolean(self.always_display);
-        buf.put_string(&self.message);
-        buf.put_string(&self.language_tag);
-    }
 }
 
-impl From<Debug> for Message {
+impl From<Debug> for Msg {
     fn from(v: Debug) -> Self {
         Self::Debug(v)
     }

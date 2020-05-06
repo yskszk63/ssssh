@@ -1,61 +1,48 @@
-use std::io::Cursor;
+use derive_new::new;
 
-use bytes::{Buf as _, Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug, Clone)]
+#[derive(Debug, new)]
 pub(crate) struct ChannelOpenConfirmation {
     recipient_channel: u32,
     sender_channel: u32,
     initial_window_size: u32,
     maximum_packet_size: u32,
-    data: Bytes,
+    additional_data: Bytes,
 }
 
-impl ChannelOpenConfirmation {
-    pub(crate) fn new(
-        recipient_channel: u32,
-        sender_channel: u32,
-        initial_window_size: u32,
-        maximum_packet_size: u32,
-    ) -> Self {
-        let data = Bytes::from("");
-        Self {
-            recipient_channel,
-            sender_channel,
-            initial_window_size,
-            maximum_packet_size,
-            data,
-        }
-    }
+impl MsgItem for ChannelOpenConfirmation {
+    const ID: u8 = 91;
+}
 
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let recipient_channel = buf.get_uint32()?;
-        let sender_channel = buf.get_uint32()?;
-        let initial_window_size = buf.get_uint32()?;
-        let maximum_packet_size = buf.get_uint32()?;
-        let data = buf.to_bytes();
+impl Pack for ChannelOpenConfirmation {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.recipient_channel.pack(buf);
+        self.sender_channel.pack(buf);
+        self.initial_window_size.pack(buf);
+        self.maximum_packet_size.pack(buf);
+        buf.put(&*self.additional_data);
+    }
+}
+
+impl Unpack for ChannelOpenConfirmation {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let recipient_channel = Unpack::unpack(buf)?;
+        let sender_channel = Unpack::unpack(buf)?;
+        let initial_window_size = Unpack::unpack(buf)?;
+        let maximum_packet_size = Unpack::unpack(buf)?;
+        let additional_data = buf.to_bytes();
         Ok(Self {
             recipient_channel,
             sender_channel,
             initial_window_size,
             maximum_packet_size,
-            data,
+            additional_data,
         })
-    }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_uint32(self.recipient_channel);
-        buf.put_uint32(self.sender_channel);
-        buf.put_uint32(self.initial_window_size);
-        buf.put_uint32(self.maximum_packet_size);
-        buf.extend_from_slice(&self.data);
     }
 }
 
-impl From<ChannelOpenConfirmation> for Message {
+impl From<ChannelOpenConfirmation> for Msg {
     fn from(v: ChannelOpenConfirmation) -> Self {
         Self::ChannelOpenConfirmation(v)
     }

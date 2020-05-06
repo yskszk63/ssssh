@@ -9,57 +9,65 @@ simple echo server
 
 ~~~rust
 use async_trait::async_trait;
+use futures::future::{BoxFuture, FutureExt as _, TryFutureExt as _};
+use futures::stream::TryStreamExt as _;
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt as _};
 
-use ssssh::{AuthHandle, ChannelHandle, Handler, PasswordAuth, ServerBuilder};
+use ssssh::{Handlers, PasswordResult, ServerBuilder};
 
 struct MyHandler;
 
 #[async_trait]
-impl Handler for MyHandler {
-    type Error = failure::Error;
+impl Handlers for MyHandler {
+    type Err = anyhow::Error;
 
-    async fn auth_password(
+    async fn handle_auth_password(
         &mut self,
         _username: &str,
-        _password: &[u8],
-        _handle: &AuthHandle,
-    ) -> Result<PasswordAuth, Self::Error> {
-        Ok(PasswordAuth::Accept)
+        _password: &str,
+    ) -> Result<PasswordResult, Self::Err> {
+        Ok(PasswordResult::Ok)
     }
 
-    async fn channel_shell_request(&mut self, handle: &ChannelHandle) -> Result<(), Self::Error> {
-        let mut handle = handle.clone();
-        tokio::spawn(async move {
-            handle.send_data("Hello World!").await.unwrap();
-        });
-        Ok(())
-    }
-
-    async fn channel_data(
+    fn handle_channel_shell<I, O, E>(
         &mut self,
-        data: &[u8],
-        handle: &ChannelHandle,
-    ) -> Result<(), Self::Error> {
-        let mut handle = handle.clone();
-        handle.send_data(data).await?;
-        Ok(())
+        mut stdin: I,
+        mut stdout: O,
+        _stderr: E,
+    ) -> BoxFuture<'static, Result<u32, Self::Err>>
+    where
+        I: AsyncRead + Send + Unpin + 'static,
+        O: AsyncWrite + Send + Unpin + 'static,
+        E: AsyncWrite + Send + Unpin + 'static,
+    {
+        async move {
+            tokio::io::copy(&mut stdin, &mut stdout).await?;
+            Ok(0)
+        }
+        .boxed()
     }
 }
 
-#[tokio::main(single_thread)]
-async fn main() {
+#[tokio::main(basic_scheduler)]
+async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    let mut server = ServerBuilder::default().build("[::1]:2222".parse().unwrap(), |_| MyHandler);
-    loop {
-        match server.accept().await {
-            Ok(connection) => {
-                tokio::spawn(async { println!("{:?}", connection.run().await) });
+    let mut server = ServerBuilder::default()
+        //.timeout(Duration::from_secs(5))
+        .build("[::1]:2222")
+        .await
+        .unwrap();
+    while let Some(conn) = server.try_next().await? {
+        tokio::spawn(
+            async move {
+                let conn = conn.await?;
+                //conn.run(MyHandler).await?;
+                conn.run(MyHandler).await.unwrap();
+                Ok::<_, anyhow::Error>(())
             }
-            Err(e) => {
-                eprintln!("{}", e);
-            }
-        }
+            .map_err(|e| println!("{}", e)),
+        );
     }
+    Ok(())
 }
 ~~~

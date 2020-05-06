@@ -1,35 +1,33 @@
-use std::io::Cursor;
+use derive_new::new;
+use getset::Getters;
 
-use bytes::{Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug, Clone)]
+#[derive(Debug, new, Getters)]
 pub(crate) struct ChannelEof {
+    #[get = "pub(crate)"]
     recipient_channel: u32,
 }
 
-impl ChannelEof {
-    pub(crate) fn new(recipient_channel: u32) -> Self {
-        Self { recipient_channel }
-    }
+impl MsgItem for ChannelEof {
+    const ID: u8 = 96;
+}
 
-    pub(crate) fn recipient_channel(&self) -> u32 {
-        self.recipient_channel
-    }
-
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let recipient_channel = buf.get_uint32()?;
-        Ok(Self { recipient_channel })
-    }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_uint32(self.recipient_channel);
+impl Pack for ChannelEof {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.recipient_channel.pack(buf);
     }
 }
 
-impl From<ChannelEof> for Message {
+impl Unpack for ChannelEof {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let recipient_channel = Unpack::unpack(buf)?;
+
+        Ok(Self { recipient_channel })
+    }
+}
+
+impl From<ChannelEof> for Msg {
     fn from(v: ChannelEof) -> Self {
         Self::ChannelEof(v)
     }

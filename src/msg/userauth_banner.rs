@@ -1,42 +1,37 @@
-use std::io::Cursor;
+use derive_new::new;
 
-use bytes::{Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug, Clone)]
+#[derive(Debug, new)]
 pub(crate) struct UserauthBanner {
     message: String,
     language_tag: String,
 }
 
-impl UserauthBanner {
-    pub(crate) fn new(message: impl Into<String>, language_tag: impl Into<String>) -> Self {
-        let message = message.into();
-        let language_tag = language_tag.into();
-        Self {
-            message,
-            language_tag,
-        }
-    }
+impl MsgItem for UserauthBanner {
+    const ID: u8 = 53;
+}
 
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let message = buf.get_string()?;
-        let language_tag = buf.get_string()?;
+impl Pack for UserauthBanner {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.message.pack(buf);
+        self.language_tag.pack(buf);
+    }
+}
+
+impl Unpack for UserauthBanner {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let message = Unpack::unpack(buf)?;
+        let language_tag = Unpack::unpack(buf)?;
+
         Ok(Self {
             message,
             language_tag,
         })
     }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_string(&self.message);
-        buf.put_string(&self.language_tag);
-    }
 }
 
-impl From<UserauthBanner> for Message {
+impl From<UserauthBanner> for Msg {
     fn from(v: UserauthBanner) -> Self {
         Self::UserauthBanner(v)
     }

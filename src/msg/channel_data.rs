@@ -1,48 +1,40 @@
-use std::io::Cursor;
+use derive_new::new;
+use getset::Getters;
 
-use bytes::{Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug, Clone)]
+#[derive(Debug, new, Getters)]
 pub(crate) struct ChannelData {
+    #[get = "pub(crate)"]
     recipient_channel: u32,
+    #[get = "pub(crate)"]
     data: Bytes,
 }
 
-impl ChannelData {
-    pub(crate) fn new(recipient_channel: u32, data: Bytes) -> Self {
-        Self {
-            recipient_channel,
-            data,
-        }
-    }
+impl MsgItem for ChannelData {
+    const ID: u8 = 94;
+}
 
-    pub(crate) fn recipient_channel(&self) -> u32 {
-        self.recipient_channel
+impl Pack for ChannelData {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.recipient_channel.pack(buf);
+        self.data.pack(buf);
     }
+}
 
-    pub(crate) fn data(&self) -> &Bytes {
-        &self.data
-    }
+impl Unpack for ChannelData {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let recipient_channel = Unpack::unpack(buf)?;
+        let data = Unpack::unpack(buf)?;
 
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let recipient_channel = buf.get_uint32()?;
-        let data = buf.get_binary_string()?.into();
         Ok(Self {
             recipient_channel,
             data,
         })
     }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_uint32(self.recipient_channel);
-        buf.put_binary_string(&self.data);
-    }
 }
 
-impl From<ChannelData> for Message {
+impl From<ChannelData> for Msg {
     fn from(v: ChannelData) -> Self {
         Self::ChannelData(v)
     }

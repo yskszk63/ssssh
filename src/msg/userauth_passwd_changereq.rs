@@ -1,52 +1,37 @@
-use std::io::Cursor;
+use derive_new::new;
 
-use bytes::{Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug, Clone)]
+#[derive(Debug, new)]
 pub(crate) struct UserauthPasswdChangereq {
     prompt: String,
     language_tag: String,
 }
 
-impl UserauthPasswdChangereq {
-    pub(crate) fn new(prompt: impl Into<String>, language_tag: impl Into<String>) -> Self {
-        Self {
-            prompt: prompt.into(),
-            language_tag: language_tag.into(),
-        }
-    }
+impl MsgItem for UserauthPasswdChangereq {
+    const ID: u8 = 60;
+}
 
-    /*
-    pub(crate) fn prompt(&self) -> &str {
-        &self.prompt
+impl Pack for UserauthPasswdChangereq {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.prompt.pack(buf);
+        self.language_tag.pack(buf);
     }
-    */
+}
 
-    /*
-    pub(crate) fn language_tag(&self) -> &str {
-        &self.language_tag
-    }
-    */
+impl Unpack for UserauthPasswdChangereq {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let prompt = Unpack::unpack(buf)?;
+        let language_tag = Unpack::unpack(buf)?;
 
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let prompt = buf.get_string()?;
-        let language_tag = buf.get_string()?;
         Ok(Self {
             prompt,
             language_tag,
         })
     }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_string(&self.prompt);
-        buf.put_string(&self.language_tag);
-    }
 }
 
-impl From<UserauthPasswdChangereq> for Message {
+impl From<UserauthPasswdChangereq> for Msg {
     fn from(v: UserauthPasswdChangereq) -> Self {
         Self::UserauthPasswdChangereq(v)
     }

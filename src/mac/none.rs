@@ -1,18 +1,33 @@
-use bytes::Bytes;
+use super::*;
 
-use super::MacType;
+#[derive(Debug)]
+pub(crate) struct None {}
 
-#[allow(clippy::module_name_repetitions)]
-pub(crate) struct NoneMac;
+impl MacTrait for None {
+    const NAME: &'static str = "none";
+    const LEN: usize = 0;
 
-impl MacType for NoneMac {
-    fn size(&self) -> usize {
-        0
+    fn new(_key: &[u8]) -> Self {
+        Self {}
     }
-    fn name(&self) -> &'static str {
-        "none"
+
+    fn sign(&self, _seq: u32, _plain: &[u8], _encrypted: &[u8]) -> Result<Bytes, MacError> {
+        Ok(Bytes::new())
     }
-    fn sign(&self, _seq: u32, _plain: &Bytes, _encrypted: &Bytes) -> Bytes {
-        Bytes::new()
+
+    fn verify(
+        &self,
+        _seq: u32,
+        _plain: &[u8],
+        _encrypted: &[u8],
+        _tag: &[u8],
+    ) -> Result<(), MacError> {
+        Ok(())
+    }
+}
+
+impl From<None> for Mac {
+    fn from(v: None) -> Self {
+        Self::None(v)
     }
 }

@@ -1,85 +1,111 @@
-use std::io::Cursor;
+use getset::Getters;
 
-use bytes::{Buf as _, Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
+#[derive(Debug, Getters)]
+pub(crate) struct TcpipForward {
+    address_to_bind: String,
+    port_number_to_bind: u32,
+}
 
-#[derive(Debug, Clone)]
-#[allow(clippy::module_name_repetitions)]
-pub(crate) enum GlobalRequestType {
-    TcpipForward(String, u32),
-    CancelTcpipForward(String, u32),
+impl Pack for TcpipForward {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.address_to_bind.pack(buf);
+        self.port_number_to_bind.pack(buf);
+    }
+}
+
+impl Unpack for TcpipForward {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let address_to_bind = Unpack::unpack(buf)?;
+        let port_number_to_bind = Unpack::unpack(buf)?;
+
+        Ok(Self {
+            address_to_bind,
+            port_number_to_bind,
+        })
+    }
+}
+
+#[derive(Debug, Getters)]
+pub(crate) struct CancelTcpipForward {
+    address_to_bind: String,
+    port_number_to_bind: u32,
+}
+
+impl Pack for CancelTcpipForward {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.address_to_bind.pack(buf);
+        self.port_number_to_bind.pack(buf);
+    }
+}
+
+impl Unpack for CancelTcpipForward {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let address_to_bind = Unpack::unpack(buf)?;
+        let port_number_to_bind = Unpack::unpack(buf)?;
+
+        Ok(Self {
+            address_to_bind,
+            port_number_to_bind,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum Type {
+    TcpipForward(TcpipForward),
+    CancelTcpipForward(CancelTcpipForward),
     Unknown(String, Bytes),
 }
 
-impl AsRef<str> for GlobalRequestType {
-    fn as_ref(&self) -> &str {
-        match self {
-            Self::TcpipForward(..) => "tcpip-forward",
-            Self::CancelTcpipForward(..) => "cancel-tcpip-forward",
-            Self::Unknown(name, ..) => name,
+#[derive(Debug, Getters)]
+pub(crate) struct GlobalRequest {
+    #[get = "pub(crate)"]
+    want_reply: bool,
+
+    #[get = "pub(crate)"]
+    typ: Type,
+}
+
+impl MsgItem for GlobalRequest {
+    const ID: u8 = 80;
+}
+
+impl Pack for GlobalRequest {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        match &self.typ {
+            Type::TcpipForward(..) => "tcpip-forward",
+            Type::CancelTcpipForward(..) => "cancel-tcpip-forward",
+            Type::Unknown(t, ..) => &*t,
+        }
+        .pack(buf);
+
+        self.want_reply.pack(buf);
+
+        match &self.typ {
+            Type::TcpipForward(x) => x.pack(buf),
+            Type::CancelTcpipForward(x) => x.pack(buf),
+            Type::Unknown(_, x) => buf.put(&x),
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct GlobalRequest {
-    request_type: GlobalRequestType,
-    want_reply: bool,
-}
-
-impl GlobalRequest {
-    /*
-    pub(crate) fn request_type(&self) -> &str {
-        &self.request_type
-    }
-
-    pub(crate) fn want_reply(&self) -> bool {
-        self.want_reply
-    }
-    */
-
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let request_type = buf.get_string()?;
-        let want_reply = buf.get_boolean()?;
-
-        let request_type = match request_type.as_ref() {
-            "tcpip-forward" => {
-                GlobalRequestType::TcpipForward(buf.get_string()?, buf.get_uint32()?)
-            }
-            "cancel-tcpip-forward" => {
-                GlobalRequestType::CancelTcpipForward(buf.get_string()?, buf.get_uint32()?)
-            }
-            u => GlobalRequestType::Unknown(
-                u.to_string(),
-                buf.to_bytes(),
-            ),
+impl Unpack for GlobalRequest {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let typ = String::unpack(buf)?;
+        let want_reply = Unpack::unpack(buf)?;
+        let typ = match &*typ {
+            "tcpip-forward" => Type::TcpipForward(Unpack::unpack(buf)?),
+            "cancel-tcpip-forward" => Type::CancelTcpipForward(Unpack::unpack(buf)?),
+            x => Type::Unknown(x.to_string(), buf.to_bytes()),
         };
 
-        Ok(Self {
-            request_type,
-            want_reply,
-        })
-    }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_string(self.request_type.as_ref());
-        buf.put_boolean(self.want_reply);
-        match &self.request_type {
-            GlobalRequestType::TcpipForward(addr, port)
-            | GlobalRequestType::CancelTcpipForward(addr, port) => {
-                buf.put_string(addr);
-                buf.put_uint32(*port);
-            }
-            GlobalRequestType::Unknown(_, data) => {
-                buf.extend_from_slice(data);
-            }
-        }
+        Ok(Self { want_reply, typ })
     }
 }
 
-impl From<GlobalRequest> for Message {
+impl From<GlobalRequest> for Msg {
     fn from(v: GlobalRequest) -> Self {
         Self::GlobalRequest(v)
     }

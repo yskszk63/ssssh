@@ -1,37 +1,31 @@
-use std::io::Cursor;
+use derive_new::new;
 
-use bytes::{Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug, Clone)]
+#[derive(Debug, new)]
 pub(crate) struct ChannelSuccess {
     recipient_channel: u32,
 }
 
-impl ChannelSuccess {
-    pub(crate) fn new(recipient_channel: u32) -> Self {
-        Self { recipient_channel }
-    }
+impl MsgItem for ChannelSuccess {
+    const ID: u8 = 99;
+}
 
-    /*
-    pub(crate) fn recipient_channel(&self) -> u32 {
-        self.recipient_channel
-    }
-    */
-
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let recipient_channel = buf.get_uint32()?;
-        Ok(Self { recipient_channel })
-    }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_uint32(self.recipient_channel);
+impl Pack for ChannelSuccess {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.recipient_channel.pack(buf);
     }
 }
 
-impl From<ChannelSuccess> for Message {
+impl Unpack for ChannelSuccess {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let recipient_channel = Unpack::unpack(buf)?;
+
+        Ok(Self { recipient_channel })
+    }
+}
+
+impl From<ChannelSuccess> for Msg {
     fn from(v: ChannelSuccess) -> Self {
         Self::ChannelSuccess(v)
     }

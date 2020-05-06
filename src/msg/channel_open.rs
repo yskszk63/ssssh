@@ -1,148 +1,191 @@
-use std::io::Cursor;
+use getset::Getters;
 
-use bytes::buf::BufExt as _;
-use bytes::{Buf as _, Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Getters)]
 pub(crate) struct X11 {
+    #[get = "pub(crate)"]
     originator_address: String,
+
+    #[get = "pub(crate)"]
     originator_port: u32,
 }
 
-#[derive(Debug, Clone)]
+impl Pack for X11 {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.originator_address.pack(buf);
+        self.originator_port.pack(buf);
+    }
+}
+
+impl Unpack for X11 {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let originator_address = Unpack::unpack(buf)?;
+        let originator_port = Unpack::unpack(buf)?;
+        Ok(Self {
+            originator_address,
+            originator_port,
+        })
+    }
+}
+
+#[derive(Debug, Getters)]
 pub(crate) struct ForwardedTcpip {
+    #[get = "pub(crate)"]
     address: String,
+
+    #[get = "pub(crate)"]
     port: u32,
+
+    #[get = "pub(crate)"]
     originator_address: String,
+
+    #[get = "pub(crate)"]
     originator_port: u32,
 }
 
-#[derive(Debug, Clone)]
+impl Pack for ForwardedTcpip {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.address.pack(buf);
+        self.port.pack(buf);
+        self.originator_address.pack(buf);
+        self.originator_port.pack(buf);
+    }
+}
+
+impl Unpack for ForwardedTcpip {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let address = Unpack::unpack(buf)?;
+        let port = Unpack::unpack(buf)?;
+        let originator_address = Unpack::unpack(buf)?;
+        let originator_port = Unpack::unpack(buf)?;
+        Ok(Self {
+            address,
+            port,
+            originator_address,
+            originator_port,
+        })
+    }
+}
+
+#[derive(Debug, Getters)]
 pub(crate) struct DirectTcpip {
+    #[get = "pub(crate)"]
     host: String,
+
+    #[get = "pub(crate)"]
     port: u32,
+
+    #[get = "pub(crate)"]
     originator_address: String,
+
+    #[get = "pub(crate)"]
     originator_port: u32,
 }
 
-#[derive(Debug, Clone)]
-#[allow(clippy::module_name_repetitions)]
-pub(crate) enum ChannelOpenChannelType {
-    Session,
+impl Pack for DirectTcpip {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.host.pack(buf);
+        self.port.pack(buf);
+        self.originator_address.pack(buf);
+        self.originator_port.pack(buf);
+    }
+}
+
+impl Unpack for DirectTcpip {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let host = Unpack::unpack(buf)?;
+        let port = Unpack::unpack(buf)?;
+        let originator_address = Unpack::unpack(buf)?;
+        let originator_port = Unpack::unpack(buf)?;
+        Ok(Self {
+            host,
+            port,
+            originator_address,
+            originator_port,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum Type {
+    Session(()),
     X11(X11),
     ForwardedTcpip(ForwardedTcpip),
     DirectTcpip(DirectTcpip),
     Unknown(String, Bytes),
 }
 
-impl AsRef<str> for ChannelOpenChannelType {
-    fn as_ref(&self) -> &str {
-        use ChannelOpenChannelType::*;
-        match self {
-            Session => "session",
-            X11(..) => "x11",
-            ForwardedTcpip(..) => "forwarded-tcpip",
-            DirectTcpip(..) => "direct-tcpip",
-            Unknown(e, ..) => &e,
+#[derive(Debug, Getters)]
+pub(crate) struct ChannelOpen {
+    #[get = "pub(crate)"]
+    sender_channel: u32,
+
+    #[get = "pub(crate)"]
+    initial_window_size: u32,
+
+    #[get = "pub(crate)"]
+    maximum_packet_size: u32,
+
+    #[get = "pub(crate)"]
+    typ: Type,
+}
+
+impl MsgItem for ChannelOpen {
+    const ID: u8 = 90;
+}
+
+impl Pack for ChannelOpen {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        let typ = match self.typ() {
+            Type::Session(()) => "session",
+            Type::X11(..) => "x11",
+            Type::ForwardedTcpip(..) => "forwarded-tcpip",
+            Type::DirectTcpip(..) => "direct-tcpip",
+            Type::Unknown(name, _) => name.as_str(),
+        };
+
+        typ.pack(buf);
+        self.sender_channel.pack(buf);
+        self.initial_window_size.pack(buf);
+        self.maximum_packet_size.pack(buf);
+
+        match self.typ() {
+            Type::Session(..) => {}
+            Type::X11(item) => item.pack(buf),
+            Type::ForwardedTcpip(item) => item.pack(buf),
+            Type::DirectTcpip(item) => item.pack(buf),
+            Type::Unknown(_, item) => {
+                buf.put(&item);
+            }
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub(crate) struct ChannelOpen {
-    channel_type: ChannelOpenChannelType,
-    sender_channel: u32,
-    initial_window_size: u32,
-    maximum_packet_size: u32,
-}
-
-impl ChannelOpen {
-    pub(crate) fn channel_type(&self) -> &ChannelOpenChannelType {
-        &self.channel_type
-    }
-
-    pub(crate) fn sender_channel(&self) -> u32 {
-        self.sender_channel
-    }
-
-    pub(crate) fn initial_window_size(&self) -> u32 {
-        self.initial_window_size
-    }
-
-    pub(crate) fn maximum_packet_size(&self) -> u32 {
-        self.maximum_packet_size
-    }
-
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let channel_type = buf.get_string()?;
-        let sender_channel = buf.get_uint32()?;
-        let initial_window_size = buf.get_uint32()?;
-        let maximum_packet_size = buf.get_uint32()?;
-
-        let channel_type = match channel_type.as_ref() {
-            "session" => ChannelOpenChannelType::Session,
-            "x11" => ChannelOpenChannelType::X11(X11 {
-                originator_address: buf.get_string()?,
-                originator_port: buf.get_uint32()?,
-            }),
-            "forwarded-tcpip" => ChannelOpenChannelType::ForwardedTcpip(ForwardedTcpip {
-                address: buf.get_string()?,
-                port: buf.get_uint32()?,
-                originator_address: buf.get_string()?,
-                originator_port: buf.get_uint32()?,
-            }),
-            "direct-tcpip" => ChannelOpenChannelType::DirectTcpip(DirectTcpip {
-                host: buf.get_string()?,
-                port: buf.get_uint32()?,
-                originator_address: buf.get_string()?,
-                originator_port: buf.get_uint32()?,
-            }),
-            u => ChannelOpenChannelType::Unknown(
-                u.to_string(),
-                buf.take(usize::max_value()).to_bytes(),
-            ),
+impl Unpack for ChannelOpen {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let typ = String::unpack(buf)?;
+        let sender_channel = Unpack::unpack(buf)?;
+        let initial_window_size = Unpack::unpack(buf)?;
+        let maximum_packet_size = Unpack::unpack(buf)?;
+        let typ = match &*typ {
+            "session" => Type::Session(()),
+            "x11" => Type::X11(Unpack::unpack(buf)?),
+            "forwarded-tcpip" => Type::ForwardedTcpip(Unpack::unpack(buf)?),
+            "direct-tcpip" => Type::DirectTcpip(Unpack::unpack(buf)?),
+            v => Type::Unknown(v.to_string(), buf.to_bytes()),
         };
 
         Ok(Self {
-            channel_type,
             sender_channel,
             initial_window_size,
             maximum_packet_size,
+            typ,
         })
-    }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_string(self.channel_type.as_ref());
-        buf.put_uint32(self.sender_channel);
-        buf.put_uint32(self.initial_window_size);
-        buf.put_uint32(self.maximum_packet_size);
-        match &self.channel_type {
-            ChannelOpenChannelType::Session => {}
-            ChannelOpenChannelType::X11(item) => {
-                buf.put_string(&item.originator_address);
-                buf.put_uint32(item.originator_port);
-            }
-            ChannelOpenChannelType::ForwardedTcpip(item) => {
-                buf.put_string(&item.address);
-                buf.put_uint32(item.port);
-                buf.put_string(&item.originator_address);
-                buf.put_uint32(item.originator_port);
-            }
-            ChannelOpenChannelType::DirectTcpip(item) => {
-                buf.put_string(&item.host);
-                buf.put_uint32(item.port);
-                buf.put_string(&item.originator_address);
-                buf.put_uint32(item.originator_port);
-            }
-            ChannelOpenChannelType::Unknown(_, data) => buf.extend_from_slice(&data),
-        }
     }
 }
 
-impl From<ChannelOpen> for Message {
+impl From<ChannelOpen> for Msg {
     fn from(v: ChannelOpen) -> Self {
         Self::ChannelOpen(v)
     }

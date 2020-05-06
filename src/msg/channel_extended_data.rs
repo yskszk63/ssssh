@@ -1,46 +1,66 @@
-use std::io::Cursor;
+use derive_new::new;
 
-use bytes::{Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
+#[derive(Debug)]
+pub(crate) enum DataTypeCode {
+    Stderr,
+    Unknown(u32),
+}
 
-#[derive(Debug, Clone)]
+impl Pack for DataTypeCode {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        match self {
+            Self::Stderr => 1,
+            Self::Unknown(v) => *v,
+        }
+        .pack(buf)
+    }
+}
+
+impl Unpack for DataTypeCode {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        Ok(match u32::unpack(buf)? {
+            1 => Self::Stderr,
+            v => Self::Unknown(v),
+        })
+    }
+}
+
+#[derive(Debug, new)]
 pub(crate) struct ChannelExtendedData {
     recipient_channel: u32,
-    data_type_code: u32,
+    data_type_code: DataTypeCode,
     data: Bytes,
 }
 
-impl ChannelExtendedData {
-    pub(crate) fn new(recipient_channel: u32, data: Bytes) -> Self {
-        let data_type_code = 1;
-        Self {
-            recipient_channel,
-            data_type_code,
-            data,
-        }
-    }
+impl MsgItem for ChannelExtendedData {
+    const ID: u8 = 95;
+}
 
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let recipient_channel = buf.get_uint32()?;
-        let data_type_code = buf.get_uint32()?;
-        let data = buf.get_binary_string()?.into();
+impl Pack for ChannelExtendedData {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.recipient_channel.pack(buf);
+        self.data_type_code.pack(buf);
+        self.data.pack(buf);
+    }
+}
+
+impl Unpack for ChannelExtendedData {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let recipient_channel = Unpack::unpack(buf)?;
+        let data_type_code = Unpack::unpack(buf)?;
+        let data = Unpack::unpack(buf)?;
+
         Ok(Self {
             recipient_channel,
             data_type_code,
             data,
         })
     }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_uint32(self.recipient_channel);
-        buf.put_uint32(self.data_type_code);
-        buf.put_binary_string(&self.data);
-    }
 }
 
-impl From<ChannelExtendedData> for Message {
+impl From<ChannelExtendedData> for Msg {
     fn from(v: ChannelExtendedData) -> Self {
         Self::ChannelExtendedData(v)
     }

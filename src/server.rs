@@ -1,137 +1,97 @@
-use std::fmt::{Debug, Display};
-use std::io;
-use std::net::SocketAddr;
+use std::marker::PhantomData;
+use std::pin::Pin;
+use std::sync::Arc;
+use std::task::{Context, Poll};
 use std::time::Duration;
 
-use failure::Fail;
-use tokio::net::{TcpListener, TcpStream};
+use futures::ready;
+use thiserror::Error;
+use tokio::io;
+use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
+use tokio::stream::Stream;
 
-use crate::algorithm::Preference;
-use crate::connection::Connection;
-use crate::handler::Handler;
-use crate::hostkey::{HostKey, HostKeys};
-use crate::transport::version::VersionExchangeError;
+use crate::preference::Preference;
+use crate::{Accept, Connection};
 
-#[derive(Debug, Fail)]
-pub enum AcceptError<R>
-where
-    R: Debug + Display + Sync + Send + 'static,
-{
-    #[fail(display = "Empty Version")]
-    Empty(R),
-    #[fail(display = "Invalid SSH identification string")]
-    InvalidFormat(R),
-    #[fail(display = "Io Error {}", _1)]
-    Io(Option<R>, #[fail(cause)] io::Error),
+#[derive(Debug, Error)]
+pub enum BuildError {
+    #[error(transparent)]
+    Io(#[from] io::Error),
+
+    #[error("unresolved")]
+    Unresolved,
 }
 
-impl<R> AcceptError<R>
-where
-    R: Debug + Display + Sync + Send + 'static,
-{
-    pub fn remote(&self) -> Option<&R> {
-        match self {
-            Self::Empty(r) | Self::InvalidFormat(r) | Self::Io(Some(r), ..) => Some(r),
-            Self::Io(None, ..) => None,
-        }
-    }
-}
-
-#[derive(Debug)]
-#[allow(clippy::module_name_repetitions)]
-pub struct ServerBuilder {
-    version: Option<String>,
-    preference: Option<Preference>,
-    hostkeys: Option<HostKeys>,
-    timeout: Option<Duration>,
-}
-
-impl Default for ServerBuilder {
-    fn default() -> Self {
-        Self {
-            version: None,
-            preference: None,
-            hostkeys: None,
-            timeout: None,
-        }
-    }
-}
-
-impl ServerBuilder {
-    pub fn version(mut self, v: impl Into<String>) -> Self {
-        self.version = Some(v.into());
-        self
-    }
-    pub fn preference(mut self, v: Preference) -> Self {
-        self.preference = Some(v);
-        self
-    }
-    pub fn timeout(mut self, timeout: Duration) -> Self {
-        self.timeout = Some(timeout);
-        self
-    }
-    pub async fn build<HF>(self, addr: SocketAddr, handler_factory: HF) -> io::Result<Server<HF>> {
-        let socket = TcpListener::bind(addr).await?;
-        Ok(Server {
-            version: self.version.unwrap_or_else(|| "SSH-2.0-sssh".into()),
-            addr,
-            preference: self.preference.unwrap_or_default(),
-            hostkeys: self.hostkeys.unwrap_or_else(|| {
-                HostKeys::new(vec![
-                    HostKey::gen_ssh_ed25519().unwrap(),
-                    HostKey::gen_ssh_rsa(2048).unwrap(),
-                ])
-            }),
-            timeout: self.timeout,
-            socket,
-            handler_factory,
-        })
-    }
-}
-
-#[derive(Debug)]
-pub struct Server<HF> {
-    version: String,
-    addr: SocketAddr,
+#[derive(Debug, Default)]
+pub struct Builder {
     preference: Preference,
-    hostkeys: HostKeys,
-    socket: TcpListener,
-    timeout: Option<Duration>,
-    handler_factory: HF,
 }
 
-impl<HF, H> Server<HF>
-where
-    H: Handler,
-    HF: Fn(SocketAddr) -> H,
-{
-    pub async fn accept(
-        &mut self,
-    ) -> Result<Connection<TcpStream, H, SocketAddr>, AcceptError<SocketAddr>> {
-        let (socket, remote) = self
-            .socket
-            .accept()
-            .await
-            .map_err(|e| AcceptError::Io(None, e))?;
-        socket
-            .set_keepalive(self.timeout.clone())
-            .map_err(|e| AcceptError::Io(None, e))?;
-        let result = Connection::establish(
-            socket,
-            self.version.clone(),
-            remote,
-            self.hostkeys.clone(),
-            self.preference.clone(),
-            self.timeout.clone(),
-            (self.handler_factory)(remote),
-        )
-        .await
-        .map_err(move |e| match e {
-            VersionExchangeError::Io(e) => AcceptError::Io(Some(remote), e),
-            VersionExchangeError::Empty => AcceptError::Empty(remote),
-            VersionExchangeError::InvalidFormat => AcceptError::InvalidFormat(remote),
-        })?;
+impl Builder {
+    pub fn new() -> Self {
+        Default::default()
+    }
 
-        Ok(result)
+    pub fn timeout(&mut self, timeout: Duration) -> &mut Self {
+        *self.preference.timeout_mut() = Some(timeout);
+        self
+    }
+
+    pub async fn build<A>(mut self, addr: A) -> Result<Server<TcpListener, TcpStream>, BuildError>
+    where
+        A: ToSocketAddrs,
+    {
+        // FIXME
+        (&mut self.preference)
+            .hostkeys_mut()
+            .insert(crate::hostkey::HostKey::gen("ssh-ed25519").unwrap());
+
+        let addr = addr.to_socket_addrs().await?.next();
+        if let Some(addr) = addr {
+            let io = TcpListener::bind(addr).await?;
+            let preference = Arc::new(self.preference);
+            Ok(Server {
+                io,
+                preference,
+                _stream: PhantomData,
+            })
+        } else {
+            Err(BuildError::Unresolved)
+        }
+    }
+}
+
+#[derive(Debug)]
+pub struct Server<L, S> {
+    io: L,
+    preference: Arc<Preference>,
+    _stream: PhantomData<S>,
+}
+
+impl<L, S> Server<L, S>
+where
+    L: Stream<Item = io::Result<S>> + Unpin,
+    S: io::AsyncRead + io::AsyncWrite + Unpin,
+{
+    pub fn builder() -> Builder {
+        Builder::new()
+    }
+}
+
+impl<L, S> Stream for Server<L, S>
+where
+    L: Stream<Item = io::Result<S>> + Unpin,
+    S: io::AsyncRead + io::AsyncWrite + Unpin,
+{
+    type Item = io::Result<Connection<Accept<S>>>;
+
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let this = self.get_mut();
+        let result = ready!(Pin::new(&mut this.io).poll_next(cx));
+        if let Some(stream) = result {
+            Poll::Ready(Some(Ok(Connection::new(stream?, this.preference.clone()))))
+        } else {
+            Poll::Ready(None)
+        }
     }
 }

@@ -1,41 +1,29 @@
-use std::io::Cursor;
+use super::*;
 
-use bytes::{Bytes, BytesMut};
-
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug, Clone)]
+#[derive(Debug)]
 pub(crate) struct Unimplemented {
-    packet_sequence_number: u32,
+    pkt_seq: u32,
 }
 
-impl Unimplemented {
-    pub(crate) fn new(packet_sequence_number: u32) -> Self {
-        Self {
-            packet_sequence_number,
-        }
-    }
+impl MsgItem for Unimplemented {
+    const ID: u8 = 3;
+}
 
-    /*
-    pub(crate) fn packet_sequence_number(&self) -> u32 {
-        self.packet_sequence_number
-    }
-    */
-
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let packet_sequence_number = buf.get_uint32()?;
-        Ok(Self {
-            packet_sequence_number,
-        })
-    }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_uint32(self.packet_sequence_number);
+impl Pack for Unimplemented {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.pkt_seq.pack(buf);
     }
 }
 
-impl From<Unimplemented> for Message {
+impl Unpack for Unimplemented {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let pkt_seq = Unpack::unpack(buf)?;
+
+        Ok(Self { pkt_seq })
+    }
+}
+
+impl From<Unimplemented> for Msg {
     fn from(v: Unimplemented) -> Self {
         Self::Unimplemented(v)
     }

@@ -1,32 +1,31 @@
-use std::io::Cursor;
+use derive_new::new;
 
-use bytes::{Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug, Clone)]
+#[derive(Debug, new)]
 pub(crate) struct ServiceAccept {
-    name: String,
+    service_name: String,
 }
 
-impl ServiceAccept {
-    pub(crate) fn new(name: impl Into<String>) -> Self {
-        let name = name.into();
-        Self { name }
-    }
+impl MsgItem for ServiceAccept {
+    const ID: u8 = 6;
+}
 
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let name = buf.get_string()?;
-        Ok(Self { name })
-    }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_string(&self.name);
+impl Pack for ServiceAccept {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.service_name.pack(buf);
     }
 }
 
-impl From<ServiceAccept> for Message {
+impl Unpack for ServiceAccept {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let service_name = Unpack::unpack(buf)?;
+
+        Ok(Self { service_name })
+    }
+}
+
+impl From<ServiceAccept> for Msg {
     fn from(v: ServiceAccept) -> Self {
         Self::ServiceAccept(v)
     }

@@ -1,22 +1,18 @@
-#![warn(clippy::pedantic)]
+pub use connection::{Accept, AcceptError, Connection, Established};
+pub use handlers::*;
+pub use server::{Builder as ServerBuilder, Server};
 
-pub use connection::{Connection, Error};
-pub use handle::{AuthHandle, ChannelHandle, SendError, SendResult};
-pub use handler::{Auth, Handler, PasswordAuth, PasswordChangeAuth, PtyReq, Unsupported};
-pub use server::{AcceptError, Server, ServerBuilder};
-
-mod algorithm;
-mod compression;
+mod comp;
 mod connection;
 mod encrypt;
-mod handle;
-mod handler;
+mod handlers;
 mod hostkey;
 mod kex;
 mod mac;
 mod msg;
-mod named;
+mod negotiate;
+mod pack;
+mod preference;
 mod server;
-mod sshbuf;
-mod transport;
-mod util;
+mod state;
+mod stream;

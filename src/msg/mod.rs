@@ -1,264 +1,122 @@
-use std::convert::TryFrom;
-use std::io::Cursor;
-use std::string::FromUtf8Error;
+use bytes::{Buf, Bytes};
 
-use bytes::{Buf as _, BufMut as _, Bytes, BytesMut};
-use failure::Fail;
+use crate::pack::NameList;
+use crate::pack::{Pack, Put, Unpack, UnpackError};
 
-use crate::sshbuf::SshBufError;
-use crate::transport::CodecError;
-pub(crate) use channel_close::*;
-pub(crate) use channel_data::*;
-pub(crate) use channel_eof::*;
-pub(crate) use channel_extended_data::*;
-pub(crate) use channel_failure::*;
-pub(crate) use channel_open::*;
-pub(crate) use channel_open_confirmation::*;
-pub(crate) use channel_open_failure::*;
-pub(crate) use channel_request::*;
-pub(crate) use channel_success::*;
-pub(crate) use channel_window_adjust::*;
-pub(crate) use debug::*;
-pub(crate) use disconnect::*;
-pub(crate) use global_request::*;
-pub(crate) use id::*;
-pub(crate) use ignore::*;
-pub(crate) use kex_ecdh_init::*;
-pub(crate) use kex_ecdh_reply::*;
-pub(crate) use kexinit::*;
-pub(crate) use msg60::*;
-pub(crate) use newkeys::*;
-pub(crate) use request_failure::*;
-pub(crate) use request_success::*;
-pub(crate) use service_accept::*;
-pub(crate) use service_request::*;
-pub(crate) use unimplemented::*;
-pub(crate) use userauth_banner::*;
-pub(crate) use userauth_failure::*;
-pub(crate) use userauth_passwd_changereq::*;
-pub(crate) use userauth_pk_ok::*;
-pub(crate) use userauth_request::*;
-pub(crate) use userauth_success::*;
+pub(crate) mod channel_close;
+pub(crate) mod channel_data;
+pub(crate) mod channel_eof;
+pub(crate) mod channel_extended_data;
+pub(crate) mod channel_failure;
+pub(crate) mod channel_open;
+pub(crate) mod channel_open_confirmation;
+pub(crate) mod channel_open_failure;
+pub(crate) mod channel_request;
+pub(crate) mod channel_success;
+pub(crate) mod channel_window_adjust;
+pub(crate) mod debug;
+pub(crate) mod disconnect;
+pub(crate) mod global_request;
+pub(crate) mod ignore;
+pub(crate) mod kex_ecdh_init;
+pub(crate) mod kex_ecdh_reply;
+pub(crate) mod kexinit;
+pub(crate) mod new_keys;
+pub(crate) mod request_failure;
+pub(crate) mod request_success;
+pub(crate) mod service_accept;
+pub(crate) mod service_request;
+pub(crate) mod unimplemented;
+pub(crate) mod unknown;
+pub(crate) mod userauth_banner;
+pub(crate) mod userauth_failure;
+pub(crate) mod userauth_passwd_changereq;
+pub(crate) mod userauth_request;
+pub(crate) mod userauth_success;
 
-mod channel_close;
-mod channel_data;
-mod channel_eof;
-mod channel_extended_data;
-mod channel_failure;
-mod channel_open;
-mod channel_open_confirmation;
-mod channel_open_failure;
-mod channel_request;
-mod channel_success;
-mod channel_window_adjust;
-mod debug;
-mod disconnect;
-mod global_request;
-mod id;
-mod ignore;
-mod kex_ecdh_init;
-mod kex_ecdh_reply;
-mod kexinit;
-mod msg60;
-mod newkeys;
-mod request_failure;
-mod request_success;
-mod service_accept;
-mod service_request;
-mod unimplemented;
-mod userauth_banner;
-mod userauth_failure;
-mod userauth_passwd_changereq;
-mod userauth_pk_ok;
-mod userauth_request;
-mod userauth_success;
+trait MsgItem: Pack + Unpack + Into<Msg> {
+    const ID: u8;
 
-#[derive(Debug, Fail)]
-pub(crate) enum MessageError {
-    #[fail(display = "Unknown Message Id {}", _0)]
-    UnknownMessageId(u8),
-    //#[fail(display = "Unimplemented Id {:?}", _0)]
-    //Unimplemented(MessageId),
-    #[fail(display = "Under flow")]
-    Underflow,
-    #[fail(display = "{}", _0)]
-    FromUtf8Error(FromUtf8Error),
-    #[fail(display = "codec error {:?}", _0)]
-    Codec(CodecError),
-}
-
-impl From<UnknownMessageId> for MessageError {
-    fn from(v: UnknownMessageId) -> Self {
-        Self::UnknownMessageId(v.id())
+    fn pack_with_id<P: Put>(&self, buf: &mut P) {
+        Self::ID.pack(buf);
+        self.pack(buf);
     }
 }
 
-impl From<SshBufError> for MessageError {
-    fn from(v: SshBufError) -> Self {
-        match v {
-            SshBufError::FromUtf8Error(e) => Self::FromUtf8Error(e),
-            SshBufError::Underflow => Self::Underflow,
+macro_rules! Msg {
+    (
+        $($name:ident ( $type:path ), )+
+    ) => {
+        #[derive(Debug)]
+        pub(crate) enum Msg {
+            $($name($type),)+
+            Unknown(u8, unknown::Unknown),
+        }
+
+        impl Pack for Msg {
+            fn pack<P: Put>(&self, buf: &mut P) {
+                match self {
+                    $(Self::$name(item) => item.pack_with_id(buf),)+
+                    Self::Unknown(id, item) => {
+                        id.pack(buf);
+                        item.pack(buf);
+                    }
+                }
+            }
+        }
+
+        impl Unpack for Msg {
+            fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+                let result = match u8::unpack(buf)? {
+                    $(<$type as MsgItem>::ID => <$type as Unpack>::unpack(buf)?.into(),)+
+                    v => Self::Unknown(v, Unpack::unpack(buf)?),
+                };
+                Ok(result)
+            }
         }
     }
 }
 
-impl From<CodecError> for MessageError {
-    fn from(v: CodecError) -> Self {
-        Self::Codec(v)
-    }
+Msg! {
+    Disconnect(disconnect::Disconnect),
+    Ignore(ignore::Ignore),
+    Unimplemented(unimplemented::Unimplemented),
+    Debug(debug::Debug),
+    ServiceRequest(service_request::ServiceRequest),
+    ServiceAccept(service_accept::ServiceAccept),
+    Kexinit(kexinit::BoxKexinit),
+    NewKeys(new_keys::NewKeys),
+    KexEcdhInit(kex_ecdh_init::KexEcdhInit),
+    KexEcdhReply(kex_ecdh_reply::KexEcdhReply),
+    UserauthRequest(userauth_request::UserauthRequest),
+    UserauthFailure(userauth_failure::UserauthFailure),
+    UserauthSuccess(userauth_success::UserauthSuccess),
+    UserauthBanner(userauth_banner::UserauthBanner),
+    UserauthPasswdChangereq(userauth_passwd_changereq::UserauthPasswdChangereq),
+    GlobalRequest(global_request::GlobalRequest),
+    RequestSuccess(request_success::RequestSuccess),
+    RequestFailure(request_failure::RequestFailure),
+    ChannelOpen(channel_open::ChannelOpen),
+    ChannelOpenConfirmation(channel_open_confirmation::ChannelOpenConfirmation),
+    ChannelOpenFailure(channel_open_failure::ChannelOpenFailure),
+    ChannelWindowAdjust(channel_window_adjust::ChannelWindowAdjust),
+    ChannelData(channel_data::ChannelData),
+    ChannelExtendedData(channel_extended_data::ChannelExtendedData),
+    ChannelEof(channel_eof::ChannelEof),
+    ChannelClose(channel_close::ChannelClose),
+    ChannelRequest(channel_request::ChannelRequest),
+    ChannelSuccess(channel_success::ChannelSuccess),
+    ChannelFailure(channel_failure::ChannelFailure),
 }
 
-pub(crate) type MessageResult<T> = Result<T, MessageError>;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-#[derive(Debug)]
-pub(crate) enum Message {
-    Kexinit(Box<Kexinit>),
-    KexEcdhInit(KexEcdhInit),
-    KexEcdhReply(KexEcdhReply),
-    Newkeys(Newkeys),
-    ServiceRequest(ServiceRequest),
-    ServiceAccept(ServiceAccept),
-    UserauthRequest(UserauthRequest),
-    UserauthFailure(UserauthFailure),
-    UserauthSuccess(UserauthSuccess),
-    ChannelOpen(ChannelOpen),
-    ChannelOpenConfirmation(ChannelOpenConfirmation),
-    ChannelRequest(ChannelRequest),
-    ChannelFailure(ChannelFailure),
-    ChannelSuccess(ChannelSuccess),
-    ChannelData(ChannelData),
-    ChannelEof(ChannelEof),
-    ChannelClose(ChannelClose),
-    Disconnect(Disconnect),
-    Ignore(Ignore),
-    Debug(Debug),
-    Unimplemented(Unimplemented),
-    UserauthBanner(UserauthBanner),
-    GlobalRequest(GlobalRequest),
-    RequestSuccess(RequestSuccess),
-    RequestFailure(RequestFailure),
-    ChannelOpenFailure(ChannelOpenFailure),
-    ChannelWindowAdjust(ChannelWindowAdjust),
-    ChannelExtendedData(ChannelExtendedData),
-    UserauthPkOk(UserauthPkOk),
-    UserauthPasswdChangereq(UserauthPasswdChangereq),
-    Msg60(Msg60),
-}
+    #[test]
+    fn test_send() {
+        fn assert<T: Send + Sync + 'static>() {}
 
-impl Message {
-    fn id(&self) -> MessageId {
-        match self {
-            Self::Kexinit(..) => MessageId::Kexinit,
-            Self::KexEcdhInit(..) => MessageId::KexEcdhInit,
-            Self::KexEcdhReply(..) => MessageId::KexEcdhReply,
-            Self::Newkeys(..) => MessageId::Newkeys,
-            Self::ServiceRequest(..) => MessageId::ServiceRequest,
-            Self::ServiceAccept(..) => MessageId::ServiceAccept,
-            Self::UserauthRequest(..) => MessageId::UserauthRequest,
-            Self::UserauthFailure(..) => MessageId::UserauthFailure,
-            Self::UserauthSuccess(..) => MessageId::UserauthSuccess,
-            Self::ChannelOpen(..) => MessageId::ChannelOpen,
-            Self::ChannelOpenConfirmation(..) => MessageId::ChannelOpenConfirmation,
-            Self::ChannelRequest(..) => MessageId::ChannelRequest,
-            Self::ChannelFailure(..) => MessageId::ChannelFailure,
-            Self::ChannelSuccess(..) => MessageId::ChannelSuccess,
-            Self::ChannelData(..) => MessageId::ChannelData,
-            Self::ChannelEof(..) => MessageId::ChannelEof,
-            Self::ChannelClose(..) => MessageId::ChannelClose,
-            Self::Disconnect(..) => MessageId::Disconnect,
-            Self::Ignore(..) => MessageId::Ignore,
-            Self::Debug(..) => MessageId::Debug,
-            Self::Unimplemented(..) => MessageId::Unimplemented,
-            Self::UserauthBanner(..) => MessageId::UserauthBanner,
-            Self::GlobalRequest(..) => MessageId::GlobalRequest,
-            Self::RequestSuccess(..) => MessageId::RequestSuccess,
-            Self::RequestFailure(..) => MessageId::RequestFailure,
-            Self::ChannelOpenFailure(..) => MessageId::ChannelOpenFailure,
-            Self::ChannelWindowAdjust(..) => MessageId::ChannelWindowAdjust,
-            Self::ChannelExtendedData(..) => MessageId::ChannelExtendedData,
-            Self::UserauthPkOk(..) => MessageId::UserauthPkOk,
-            Self::UserauthPasswdChangereq(..) => MessageId::UserauthPasswdChangereq,
-            Self::Msg60(..) => MessageId::Msg60,
-        }
-    }
-
-    pub fn put(&self, buf: &mut BytesMut) -> MessageResult<()> {
-        buf.put_u8(self.id().into());
-        match self {
-            Self::Kexinit(v) => v.put(buf),
-            Self::KexEcdhInit(v) => v.put(buf),
-            Self::KexEcdhReply(v) => v.put(buf),
-            Self::Newkeys(v) => v.put(buf),
-            Self::ServiceRequest(v) => v.put(buf),
-            Self::ServiceAccept(v) => v.put(buf),
-            Self::UserauthRequest(v) => v.put(buf),
-            Self::UserauthFailure(v) => v.put(buf),
-            Self::UserauthSuccess(v) => v.put(buf),
-            Self::ChannelOpen(v) => v.put(buf),
-            Self::ChannelOpenConfirmation(v) => v.put(buf),
-            Self::ChannelRequest(v) => v.put(buf),
-            Self::ChannelFailure(v) => v.put(buf),
-            Self::ChannelSuccess(v) => v.put(buf),
-            Self::ChannelData(v) => v.put(buf),
-            Self::ChannelEof(v) => v.put(buf),
-            Self::ChannelClose(v) => v.put(buf),
-            Self::Disconnect(v) => v.put(buf),
-            Self::Ignore(v) => v.put(buf),
-            Self::Debug(v) => v.put(buf),
-            Self::Unimplemented(v) => v.put(buf),
-            Self::UserauthBanner(v) => v.put(buf),
-            Self::GlobalRequest(v) => v.put(buf),
-            Self::RequestSuccess(v) => v.put(buf),
-            Self::RequestFailure(v) => v.put(buf),
-            Self::ChannelOpenFailure(v) => v.put(buf),
-            Self::ChannelWindowAdjust(v) => v.put(buf),
-            Self::ChannelExtendedData(v) => v.put(buf),
-            Self::UserauthPkOk(v) => v.put(buf),
-            Self::UserauthPasswdChangereq(v) => v.put(buf),
-            Self::Msg60(v) => v.put(buf),
-        };
-        Ok(())
-    }
-}
-
-impl TryFrom<Bytes> for Message {
-    type Error = MessageError;
-
-    fn try_from(v: Bytes) -> MessageResult<Self> {
-        let buf = &mut Cursor::new(v);
-        let message_id = MessageId::try_from(buf.get_u8())?;
-        Ok(match message_id {
-            MessageId::Kexinit => Kexinit::from(buf)?.into(),
-            MessageId::KexEcdhInit => KexEcdhInit::from(buf)?.into(),
-            MessageId::KexEcdhReply => KexEcdhReply::from(buf)?.into(),
-            MessageId::Newkeys => Newkeys::from(buf)?.into(),
-            MessageId::ServiceRequest => ServiceRequest::from(buf)?.into(),
-            MessageId::ServiceAccept => ServiceAccept::from(buf)?.into(),
-            MessageId::UserauthRequest => UserauthRequest::from(buf)?.into(),
-            MessageId::UserauthFailure => UserauthFailure::from(buf)?.into(),
-            MessageId::UserauthSuccess => UserauthSuccess::from(buf)?.into(),
-            MessageId::ChannelOpen => ChannelOpen::from(buf)?.into(),
-            MessageId::ChannelOpenConfirmation => ChannelOpenConfirmation::from(buf)?.into(),
-            MessageId::ChannelRequest => ChannelRequest::from(buf)?.into(),
-            MessageId::ChannelFailure => ChannelFailure::from(buf)?.into(),
-            MessageId::ChannelSuccess => ChannelSuccess::from(buf)?.into(),
-            MessageId::ChannelData => ChannelData::from(buf)?.into(),
-            MessageId::ChannelEof => ChannelEof::from(buf)?.into(),
-            MessageId::ChannelClose => ChannelClose::from(buf)?.into(),
-            MessageId::Disconnect => Disconnect::from(buf)?.into(),
-            MessageId::Ignore => Ignore::from(buf)?.into(),
-            MessageId::Debug => Debug::from(buf)?.into(),
-            MessageId::Unimplemented => Unimplemented::from(buf)?.into(),
-            MessageId::UserauthBanner => UserauthBanner::from(buf)?.into(),
-            MessageId::GlobalRequest => GlobalRequest::from(buf)?.into(),
-            MessageId::RequestSuccess => RequestSuccess::from(buf)?.into(),
-            MessageId::RequestFailure => RequestFailure::from(buf)?.into(),
-            MessageId::ChannelOpenFailure => ChannelOpenFailure::from(buf)?.into(),
-            MessageId::ChannelWindowAdjust => ChannelWindowAdjust::from(buf)?.into(),
-            MessageId::ChannelExtendedData => ChannelExtendedData::from(buf)?.into(),
-            MessageId::UserauthPkOk => UserauthPkOk::from(buf)?.into(),
-            MessageId::UserauthPasswdChangereq => UserauthPasswdChangereq::from(buf)?.into(),
-            MessageId::Msg60 => Msg60::from(buf)?.into(),
-        })
+        assert::<Msg>();
     }
 }

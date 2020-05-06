@@ -1,47 +1,52 @@
-use bytes::{BufMut, Bytes, BytesMut};
+//! `aes256-ctr` encrypt algorithm
+use std::fmt;
+
+use bytes::BytesMut;
 use openssl::symm::{Cipher, Crypter, Mode};
 
-use super::{Encrypt, EncryptResult};
+use super::*;
 
-#[allow(clippy::module_name_repetitions)]
-pub(crate) struct Aes256CtrEncrypt {
-    encrypter: openssl::symm::Crypter,
+/// `aes256-ctr` encrypt algorithm
+pub(crate) struct Aes256Ctr {
+    crypter: Crypter,
 }
 
-impl Aes256CtrEncrypt {
-    pub(crate) fn new_for_encrypt(key: &Bytes, iv: &Bytes) -> EncryptResult<Self> {
-        Self::new(key, iv, Mode::Encrypt)
-    }
-
-    pub(crate) fn new_for_decrypt(key: &Bytes, iv: &Bytes) -> EncryptResult<Self> {
-        Self::new(key, iv, Mode::Decrypt)
-    }
-
-    fn new(key: &Bytes, iv: &Bytes, mode: Mode) -> EncryptResult<Self> {
-        let encrypter = Crypter::new(Cipher::aes_256_ctr(), mode, &key, Some(&iv))?;
-        Ok(Self { encrypter })
+impl fmt::Debug for Aes256Ctr {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Aes256Ctr")
     }
 }
 
-impl Encrypt for Aes256CtrEncrypt {
-    fn name(&self) -> &'static str {
-        "aes_256_ctr"
-    }
-    fn block_size(&self) -> usize {
-        //openssl::symm::Cipher::aes_256_ctr().block_size()
-        16
-    }
-    fn encrypt(&mut self, pkt: &Bytes) -> EncryptResult<Bytes> {
-        let bs = self.block_size();
+impl EncryptTrait for Aes256Ctr {
+    const NAME: &'static str = "aes256-ctr";
+    const BLOCK_SIZE: usize = 16;
+    const KEY_LENGTH: usize = 32;
 
-        let mut pkt = pkt.clone();
-        let mut r = BytesMut::with_capacity(pkt.len());
-        let mut b = vec![0; bs];
+    fn new_for_encrypt(key: &[u8], iv: &[u8]) -> Result<Self, EncryptError> {
+        let crypter = Crypter::new(Cipher::aes_256_ctr(), Mode::Encrypt, key, Some(&iv))
+            .map_err(|e| Box::new(e) as Box<dyn StdError + Sync + Send + 'static>)?;
+        Ok(Self { crypter })
+    }
 
-        while !pkt.is_empty() {
-            let c = self.encrypter.update(&pkt.split_to(bs), &mut b)?;
-            r.put_slice(&b[..c]);
-        }
-        Ok(r.freeze())
+    fn new_for_decrypt(key: &[u8], iv: &[u8]) -> Result<Self, EncryptError> {
+        let crypter = Crypter::new(Cipher::aes_256_ctr(), Mode::Decrypt, key, Some(&iv))
+            .map_err(|e| Box::new(e) as Box<dyn StdError + Sync + Send + 'static>)?;
+        Ok(Self { crypter })
+    }
+
+    fn update(&mut self, src: &[u8], dst: &mut BytesMut) -> Result<(), EncryptError> {
+        let mut tail = dst.split_off(dst.len());
+        tail.extend_from_slice(&vec![0; src.len()]);
+        self.crypter
+            .update(src, &mut tail)
+            .map_err(|e| Box::new(e) as Box<dyn StdError + Sync + Send + 'static>)?;
+        dst.unsplit(tail);
+        Ok(())
+    }
+}
+
+impl From<Aes256Ctr> for Encrypt {
+    fn from(v: Aes256Ctr) -> Self {
+        Self::Aes256Ctr(v)
     }
 }

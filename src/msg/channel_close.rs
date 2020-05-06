@@ -1,35 +1,33 @@
-use std::io::Cursor;
+use derive_new::new;
+use getset::Getters;
 
-use bytes::{Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug, Clone)]
+#[derive(Debug, new, Getters)]
 pub(crate) struct ChannelClose {
+    #[get = "pub(crate)"]
     recipient_channel: u32,
 }
 
-impl ChannelClose {
-    pub(crate) fn new(recipient_channel: u32) -> Self {
-        Self { recipient_channel }
-    }
+impl MsgItem for ChannelClose {
+    const ID: u8 = 97;
+}
 
-    pub(crate) fn recipient_channel(&self) -> u32 {
-        self.recipient_channel
-    }
-
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let recipient_channel = buf.get_uint32()?;
-        Ok(Self { recipient_channel })
-    }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_uint32(self.recipient_channel);
+impl Pack for ChannelClose {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.recipient_channel.pack(buf);
     }
 }
 
-impl From<ChannelClose> for Message {
+impl Unpack for ChannelClose {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let recipient_channel = Unpack::unpack(buf)?;
+
+        Ok(Self { recipient_channel })
+    }
+}
+
+impl From<ChannelClose> for Msg {
     fn from(v: ChannelClose) -> Self {
         Self::ChannelClose(v)
     }

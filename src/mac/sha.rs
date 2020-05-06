@@ -1,56 +1,88 @@
-use bytes::Bytes;
-use ring::hmac::{Context, Key, HMAC_SHA1_FOR_LEGACY_USE_ONLY as HMAC_SHA1, HMAC_SHA256};
+use bytes::{Buf, BytesMut};
 
-use super::MacType;
+use super::*;
+use ring::hmac::{self, Context, Key, HMAC_SHA1_FOR_LEGACY_USE_ONLY as HMAC_SHA1, HMAC_SHA256};
 
-pub(crate) struct HmacSha2_256 {
+#[derive(Debug)]
+pub(crate) struct HmacSha256 {
     key: Key,
 }
 
-impl HmacSha2_256 {
-    pub fn new(key: &Bytes) -> Self {
+impl MacTrait for HmacSha256 {
+    const NAME: &'static str = "hmac-sha2-256";
+    const LEN: usize = 32;
+
+    fn new(key: &[u8]) -> Self {
         let key = Key::new(HMAC_SHA256, &key);
         Self { key }
     }
+
+    fn sign(&self, seq: u32, plain: &[u8], _encrypted: &[u8]) -> Result<Bytes, MacError> {
+        let mut cx = Context::with_key(&self.key);
+        cx.update(&seq.to_be_bytes());
+        cx.update(&plain);
+        Ok(cx.sign().as_ref().to_bytes())
+    }
+
+    fn verify(
+        &self,
+        seq: u32,
+        plain: &[u8],
+        _encrypted: &[u8],
+        tag: &[u8],
+    ) -> Result<(), MacError> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(&seq.to_be_bytes());
+        buf.extend_from_slice(&plain);
+        hmac::verify(&self.key, &buf, tag).map_err(|e| MacError::VerifyError(Box::new(e)))?;
+        Ok(())
+    }
 }
 
-impl MacType for HmacSha2_256 {
-    fn size(&self) -> usize {
-        32
-    }
-    fn name(&self) -> &'static str {
-        "hmac-sha2-256"
-    }
-    fn sign(&self, seq: u32, plain: &Bytes, _encrypted: &Bytes) -> Bytes {
-        let mut ctx = Context::with_key(&self.key);
-        ctx.update(&seq.to_be_bytes());
-        ctx.update(&plain);
-        Bytes::copy_from_slice(ctx.sign().as_ref())
+impl From<HmacSha256> for Mac {
+    fn from(v: HmacSha256) -> Self {
+        Self::HmacSha256(v)
     }
 }
 
+#[derive(Debug)]
 pub(crate) struct HmacSha1 {
     key: Key,
 }
 
-impl HmacSha1 {
-    pub fn new(key: &Bytes) -> Self {
-        let key = Key::new(HMAC_SHA1, &key.clone().split_to(20)); // TODO
+impl MacTrait for HmacSha1 {
+    const NAME: &'static str = "hmac-sha1";
+    const LEN: usize = 20;
+
+    fn new(key: &[u8]) -> Self {
+        let key = Key::new(HMAC_SHA1, &key);
         Self { key }
+    }
+
+    fn sign(&self, seq: u32, plain: &[u8], _encrypted: &[u8]) -> Result<Bytes, MacError> {
+        let mut cx = Context::with_key(&self.key);
+        cx.update(&seq.to_be_bytes());
+        cx.update(&plain);
+        Ok(cx.sign().as_ref().to_bytes())
+    }
+
+    fn verify(
+        &self,
+        seq: u32,
+        plain: &[u8],
+        _encrypted: &[u8],
+        tag: &[u8],
+    ) -> Result<(), MacError> {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(&seq.to_be_bytes());
+        buf.extend_from_slice(&plain);
+        hmac::verify(&self.key, &buf, tag).map_err(|e| MacError::VerifyError(Box::new(e)))?;
+        Ok(())
     }
 }
 
-impl MacType for HmacSha1 {
-    fn size(&self) -> usize {
-        20
-    }
-    fn name(&self) -> &'static str {
-        "hmac-sha1"
-    }
-    fn sign(&self, seq: u32, plain: &Bytes, _encrypted: &Bytes) -> Bytes {
-        let mut ctx = Context::with_key(&self.key);
-        ctx.update(&seq.to_be_bytes());
-        ctx.update(&plain);
-        Bytes::copy_from_slice(ctx.sign().as_ref())
+impl From<HmacSha1> for Mac {
+    fn from(v: HmacSha1) -> Self {
+        Self::HmacSha1(v)
     }
 }

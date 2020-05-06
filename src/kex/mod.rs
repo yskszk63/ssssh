@@ -1,94 +1,170 @@
-use bytes::Bytes;
-use failure::Fail;
-use futures::{Sink, TryStream};
+use async_trait::async_trait;
+use bytes::{Buf, Bytes, BytesMut};
+use thiserror::Error;
+use tokio::io::{AsyncRead, AsyncWrite};
 
-use crate::algorithm::KexAlgorithm;
 use crate::hostkey::HostKey;
-use crate::msg::{Kexinit, Message, MessageError};
-use crate::transport::version::Version;
+use crate::msg::kexinit::Kexinit;
+use crate::msg::Msg;
+use crate::pack::Pack;
+use crate::stream::msg::{MsgStream, RecvError, SendError};
 
-mod diffie_hellman_group14_sha1;
-mod ecdh;
+mod curve25519;
+mod diffie_hellman;
 
 #[derive(Debug)]
-#[allow(clippy::module_name_repetitions)]
-pub(crate) struct KexEnv<'a, Tx, Rx>
-where
-    Tx: Sink<Message, Error = MessageError> + Unpin,
-    Rx: TryStream<Ok = (u32, Message), Error = MessageError> + Unpin,
-{
-    tx: &'a mut Tx,
-    rx: &'a mut Rx,
-    version: &'a Version,
-    client_kexinit: &'a Kexinit,
-    server_kexinit: &'a Kexinit,
+struct Env<'a> {
+    c_version: &'a str,
+    s_version: &'a str,
+    c_kexinit: &'a Bytes,
+    s_kexinit: &'a Bytes,
     hostkey: &'a HostKey,
 }
 
-impl<'a, Tx, Rx> KexEnv<'a, Tx, Rx>
-where
-    Tx: Sink<Message, Error = MessageError> + Unpin,
-    Rx: TryStream<Ok = (u32, Message), Error = MessageError> + Unpin,
-{
-    pub(crate) fn new(
-        tx: &'a mut Tx,
-        rx: &'a mut Rx,
-        version: &'a Version,
-        client_kexinit: &'a Kexinit,
-        server_kexinit: &'a Kexinit,
-        hostkey: &'a HostKey,
-    ) -> Self {
-        Self {
-            tx,
-            rx,
-            version,
-            client_kexinit,
-            server_kexinit,
-            hostkey,
-        }
-    }
+#[derive(Debug, Error)]
+pub enum KexError {
+    #[error("unexpected msg {0:}")]
+    UnexpectedMsg(String),
+
+    #[error("unexpected eof")]
+    UnexpectedEof,
+
+    #[error("unknown kex algorithm {0}")]
+    UnknownKexAlgorithm(String),
+
+    #[error(transparent)]
+    RecvError(#[from] RecvError),
+
+    #[error(transparent)]
+    SendError(#[from] SendError),
+
+    #[error("{0:?}")]
+    Any(String),
 }
 
-#[allow(clippy::module_name_repetitions)]
-pub(crate) type KexResult = Result<KexReturn, KexError>;
+#[async_trait]
+trait KexTrait: Sized + Into<Kex> {
+    const NAME: &'static str;
 
-#[derive(Debug, Fail)]
-#[allow(clippy::module_name_repetitions)]
-pub(crate) enum KexError {
-    #[fail(display = "ProtocolError")]
-    ProtocolError,
-    #[fail(display = "MessageError")]
-    MessageError(#[fail(cause)] MessageError),
-    #[fail(display = "Other Error")]
-    Other,
+    fn new() -> Self;
+
+    fn hash<B: Buf>(buf: &B) -> Bytes;
+
+    async fn kex<IO>(
+        &self,
+        io: &mut MsgStream<IO>,
+        env: Env<'_>,
+    ) -> Result<(Bytes, Bytes), KexError>
+    where
+        IO: AsyncRead + AsyncWrite + Unpin + Send;
 }
 
-impl From<MessageError> for KexError {
-    fn from(v: MessageError) -> Self {
-        Self::MessageError(v)
-    }
+fn to_msg_bytes(kexinit: &Kexinit) -> Bytes {
+    let msg = Msg::from(kexinit.clone());
+    let mut b = BytesMut::new();
+    msg.pack(&mut b);
+    b.freeze()
 }
 
 #[derive(Debug)]
-#[allow(clippy::module_name_repetitions)]
-pub(crate) struct KexReturn {
-    hash: Bytes,
-    key: Bytes,
+pub(crate) enum Kex {
+    Curve25519Sha256(curve25519::Curve25519Sha256),
+    DiffieHellmanGroup14Sha1(diffie_hellman::DiffieHellmanGroup14Sha1),
 }
 
-impl KexReturn {
-    pub fn split(self) -> (Bytes, Bytes) {
-        (self.hash, self.key)
+impl Kex {
+    pub(crate) fn defaults() -> Vec<String> {
+        vec![
+            curve25519::Curve25519Sha256::NAME.to_string(),
+            diffie_hellman::DiffieHellmanGroup14Sha1::NAME.to_string(),
+        ]
+    }
+
+    pub(crate) fn hash<B: Buf>(&self, buf: &B) -> Bytes {
+        match self {
+            Self::Curve25519Sha256(..) => curve25519::Curve25519Sha256::hash(buf),
+            Self::DiffieHellmanGroup14Sha1(..) => {
+                diffie_hellman::DiffieHellmanGroup14Sha1::hash(buf)
+            }
+        }
+    }
+
+    pub(crate) fn new(name: &str) -> Result<Self, KexError> {
+        Ok(match name {
+            curve25519::Curve25519Sha256::NAME => curve25519::Curve25519Sha256::new().into(),
+            diffie_hellman::DiffieHellmanGroup14Sha1::NAME => {
+                diffie_hellman::DiffieHellmanGroup14Sha1::new().into()
+            }
+            v => return Err(KexError::UnknownKexAlgorithm(v.to_string())),
+        })
+    }
+
+    pub(crate) async fn kex<IO>(
+        &self,
+        io: &mut MsgStream<IO>,
+        c_version: &str,
+        s_version: &str,
+        c_kexinit: &Kexinit,
+        s_kexinit: &Kexinit,
+        hostkey: &HostKey,
+    ) -> Result<(Bytes, Bytes), KexError>
+    where
+        IO: AsyncRead + AsyncWrite + Unpin + Send,
+    {
+        let c_kexinit = to_msg_bytes(c_kexinit);
+        let s_kexinit = to_msg_bytes(s_kexinit);
+        let env = Env {
+            c_version,
+            s_version,
+            c_kexinit: &c_kexinit,
+            s_kexinit: &s_kexinit,
+            hostkey,
+        };
+
+        Ok(match self {
+            Self::Curve25519Sha256(item) => item.kex(io, env).await?,
+            Self::DiffieHellmanGroup14Sha1(item) => item.kex(io, env).await?,
+        })
     }
 }
 
-pub(crate) async fn kex<Tx, Rx>(algorithm: &KexAlgorithm, env: &mut KexEnv<'_, Tx, Rx>) -> KexResult
-where
-    Tx: Sink<Message, Error = MessageError> + Unpin,
-    Rx: TryStream<Ok = (u32, Message), Error = MessageError> + Unpin,
-{
-    match algorithm {
-        KexAlgorithm::Curve25519Sha256 => ecdh::kex_ecdh(env).await,
-        KexAlgorithm::DiffieHellmanGroup14Sha1 => diffie_hellman_group14_sha1::kex_dh(env).await,
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    trait AssertSendSync: Send + Sync + 'static {}
+    impl AssertSendSync for Kex {}
+    impl AssertSendSync for KexError {}
+
+    #[test]
+    fn test_send() {
+        fn assert<T: Send + Sync + 'static>() {}
+
+        assert::<Kex>();
+        assert::<KexError>();
+    }
+
+    #[tokio::test]
+    async fn test_kex_send() {
+        fn assert<T: Send>(t: T) -> T {
+            t
+        }
+
+        let io = tokio::fs::OpenOptions::new()
+            .read(true)
+            .write(true)
+            .open("/dev/null")
+            .await
+            .unwrap();
+        let io = tokio::io::BufStream::new(io);
+        let mut io = crate::stream::msg::MsgStream::new(io);
+
+        let hostkey = crate::hostkey::HostKey::gen("ssh-rsa").unwrap();
+
+        let c_kexinit = crate::preference::Preference::default().to_kexinit(0);
+        let s_kexinit = crate::preference::Preference::default().to_kexinit(0);
+
+        let kex = assert(Kex::new("curve25519-sha256")).unwrap();
+        let _ = assert(kex.kex(&mut io, "", "", &c_kexinit, &s_kexinit, &hostkey));
     }
 }

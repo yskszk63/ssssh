@@ -1,32 +1,195 @@
-use bytes::Bytes;
+//! Encrypt
+//!
+//! [rfc4253](https://tools.ietf.org/html/rfc4253)
 
-use failure::Fail;
-use openssl::error::ErrorStack;
+use std::error::Error as StdError;
 
-pub(crate) use aes::*;
-pub(crate) use plain::*;
+use bytes::{Bytes, BytesMut};
+use thiserror::Error;
 
 mod aes;
-mod plain;
+mod none;
 
-#[allow(clippy::module_name_repetitions)]
-#[derive(Debug, Fail)]
-pub(crate) enum EncryptError {
-    #[fail(display = "OpenSSL Error")]
-    OpenSsl(ErrorStack),
+/// Encrypt error
+#[derive(Debug, Error)]
+pub enum EncryptError {
+    /// Unknown encrypt algorithm
+    #[error("unknown encrypt {0:}")]
+    UnknownEncrypt(String),
+
+    /// Encrypt error
+    #[error(transparent)]
+    Err(#[from] Box<dyn StdError + Send + Sync + 'static>),
 }
 
-impl From<ErrorStack> for EncryptError {
-    fn from(v: ErrorStack) -> Self {
-        Self::OpenSsl(v)
+/// Encrypt algorithm trait
+trait EncryptTrait: Into<Encrypt> + Sized {
+    /// Encrypt algorithm name
+    const NAME: &'static str;
+
+    /// Encrypt block size
+    const BLOCK_SIZE: usize;
+
+    /// Encrypt key length
+    const KEY_LENGTH: usize;
+
+    /// Create new instance for encrypt
+    fn new_for_encrypt(key: &[u8], iv: &[u8]) -> Result<Self, EncryptError>;
+
+    /// Create new instance for dncrypt
+    fn new_for_decrypt(key: &[u8], iv: &[u8]) -> Result<Self, EncryptError>;
+
+    /// Update encrypt or decrypt block
+    fn update(&mut self, src: &[u8], dst: &mut BytesMut) -> Result<(), EncryptError>;
+}
+
+/// Encrypt algorithms
+#[derive(Debug)]
+pub(crate) enum Encrypt {
+    /// `none` algorithm
+    None(none::None),
+
+    /// `aes256-ctr` algorithm
+    Aes256Ctr(aes::Aes256Ctr),
+}
+
+impl Encrypt {
+    /// Supported encrypt algorithms
+    pub(crate) fn defaults() -> Vec<String> {
+        vec![aes::Aes256Ctr::NAME.to_string()]
+    }
+
+    /// Create `none` instance
+    pub(crate) fn new_none() -> Self {
+        Encrypt::None(none::None::new())
+    }
+
+    /// Create new instance for encrypt by name
+    pub(crate) fn new_for_encrypt(
+        name: &str,
+        key: &Bytes,
+        iv: &Bytes,
+    ) -> Result<Self, EncryptError> {
+        Ok(match name {
+            none::None::NAME => none::None::new_for_encrypt(key, iv)?.into(),
+            aes::Aes256Ctr::NAME => aes::Aes256Ctr::new_for_encrypt(key, iv)?.into(),
+            v => return Err(EncryptError::UnknownEncrypt(v.to_string())),
+        })
+    }
+
+    /// Create new instance for decrypt by name
+    pub(crate) fn new_for_decrypt(
+        name: &str,
+        key: &Bytes,
+        iv: &Bytes,
+    ) -> Result<Self, EncryptError> {
+        Ok(match name {
+            none::None::NAME => none::None::new_for_decrypt(key, iv)?.into(),
+            aes::Aes256Ctr::NAME => aes::Aes256Ctr::new_for_decrypt(key, iv)?.into(),
+            v => return Err(EncryptError::UnknownEncrypt(v.to_string())),
+        })
+    }
+
+    /// Get block size by name
+    pub(crate) fn block_size_by_name(name: &str) -> Result<usize, EncryptError> {
+        Ok(match name {
+            none::None::NAME => none::None::BLOCK_SIZE,
+            aes::Aes256Ctr::NAME => aes::Aes256Ctr::BLOCK_SIZE,
+            x => return Err(EncryptError::UnknownEncrypt(x.into())),
+        })
+    }
+
+    /// Get key length by name
+    pub(crate) fn key_length_by_name(name: &str) -> Result<usize, EncryptError> {
+        Ok(match name {
+            none::None::NAME => none::None::KEY_LENGTH,
+            aes::Aes256Ctr::NAME => aes::Aes256Ctr::KEY_LENGTH,
+            x => return Err(EncryptError::UnknownEncrypt(x.into())),
+        })
+    }
+
+    /// Get block size
+    pub(crate) fn block_size(&self) -> usize {
+        match self {
+            Self::None(..) => none::None::BLOCK_SIZE,
+            Self::Aes256Ctr(..) => aes::Aes256Ctr::BLOCK_SIZE,
+        }
+    }
+
+    /// Update encrypt or decrypt block
+    pub(crate) fn update(&mut self, src: &[u8], dst: &mut BytesMut) -> Result<(), EncryptError> {
+        match self {
+            Self::None(item) => item.update(src, dst),
+            Self::Aes256Ctr(item) => item.update(src, dst),
+        }
     }
 }
 
-#[allow(clippy::module_name_repetitions)]
-pub(crate) type EncryptResult<T> = Result<T, EncryptError>;
+#[cfg(test)]
+mod tests {
+    use super::*;
 
-pub(crate) trait Encrypt {
-    fn name(&self) -> &'static str;
-    fn block_size(&self) -> usize;
-    fn encrypt(&mut self, pkt: &Bytes) -> EncryptResult<Bytes>;
+    #[test]
+    fn test_send() {
+        fn assert<T: Send + Sync + 'static>() {}
+
+        assert::<Encrypt>();
+        assert::<EncryptError>();
+    }
+
+    #[test]
+    fn test_unknown() {
+        let k = Bytes::from("");
+        let iv = Bytes::from("");
+        Encrypt::new_for_encrypt("-", &k, &iv).unwrap_err();
+        Encrypt::new_for_decrypt("-", &k, &iv).unwrap_err();
+    }
+
+    #[test]
+    fn test_none() {
+        let name = "none";
+
+        let k = Bytes::from(vec![0; Encrypt::key_length_by_name(name).unwrap()]);
+        let iv = Bytes::from(vec![0; Encrypt::block_size_by_name(name).unwrap()]);
+
+        let src = BytesMut::from("Hello, world!");
+        let mut dst = BytesMut::new();
+        let mut result = BytesMut::new();
+
+        Encrypt::new_for_encrypt(name, &k, &iv)
+            .unwrap()
+            .update(&src, &mut dst)
+            .unwrap();
+        Encrypt::new_for_decrypt(name, &k, &iv)
+            .unwrap()
+            .update(&dst, &mut result)
+            .unwrap();
+
+        assert_eq!(&src, &result);
+
+        Encrypt::new_none();
+    }
+
+    #[test]
+    fn test_aes256ctr() {
+        let name = "aes256-ctr";
+
+        let k = Bytes::from(vec![0; Encrypt::key_length_by_name(name).unwrap()]);
+        let iv = Bytes::from(vec![0; Encrypt::block_size_by_name(name).unwrap()]);
+
+        let src = BytesMut::from("Hello, world!");
+        let mut dst = BytesMut::new();
+        let mut result = BytesMut::new();
+
+        Encrypt::new_for_encrypt(name, &k, &iv)
+            .unwrap()
+            .update(&src, &mut dst)
+            .unwrap();
+        Encrypt::new_for_decrypt(name, &k, &iv)
+            .unwrap()
+            .update(&dst, &mut result)
+            .unwrap();
+
+        assert_eq!(&src, &result);
+    }
 }

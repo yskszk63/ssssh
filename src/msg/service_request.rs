@@ -1,31 +1,35 @@
-use std::io::Cursor;
+use getset::Getters;
 
-use bytes::{Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
+pub(crate) const SSH_USERAUTH: &str = "ssh-userauth";
+pub(crate) const SSH_CONNECTION: &str = "ssh-connection";
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Getters)]
 pub(crate) struct ServiceRequest {
-    name: String,
+    #[get = "pub(crate)"]
+    service_name: String,
 }
 
-impl ServiceRequest {
-    pub(crate) fn name(&self) -> &str {
-        &self.name
-    }
+impl MsgItem for ServiceRequest {
+    const ID: u8 = 5;
+}
 
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let name = buf.get_string()?;
-        Ok(Self { name })
-    }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_string(&self.name);
+impl Pack for ServiceRequest {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.service_name.pack(buf);
     }
 }
 
-impl From<ServiceRequest> for Message {
+impl Unpack for ServiceRequest {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let service_name = Unpack::unpack(buf)?;
+
+        Ok(Self { service_name })
+    }
+}
+
+impl From<ServiceRequest> for Msg {
     fn from(v: ServiceRequest) -> Self {
         Self::ServiceRequest(v)
     }

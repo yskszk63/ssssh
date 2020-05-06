@@ -1,21 +1,25 @@
-use std::io::Cursor;
+use derive_new::new;
 
-use bytes::{Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
+#[derive(Debug, new)]
+pub(crate) struct UserauthSuccess {}
 
-#[derive(Debug, Clone)]
-pub(crate) struct UserauthSuccess;
-
-impl UserauthSuccess {
-    pub(crate) fn from(_buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        Ok(Self)
-    }
-
-    pub(crate) fn put(&self, _buf: &mut BytesMut) {}
+impl MsgItem for UserauthSuccess {
+    const ID: u8 = 52;
 }
 
-impl From<UserauthSuccess> for Message {
+impl Pack for UserauthSuccess {
+    fn pack<P: Put>(&self, _buf: &mut P) {}
+}
+
+impl Unpack for UserauthSuccess {
+    fn unpack<B: Buf>(_buf: &mut B) -> Result<Self, UnpackError> {
+        Ok(Self {})
+    }
+}
+
+impl From<UserauthSuccess> for Msg {
     fn from(v: UserauthSuccess) -> Self {
         Self::UserauthSuccess(v)
     }

@@ -1,21 +1,25 @@
-use std::io::Cursor;
+use derive_new::new;
 
-use bytes::{Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
+#[derive(Debug, new)]
+pub(crate) struct RequestFailure {}
 
-#[derive(Debug, Clone)]
-pub(crate) struct RequestFailure;
-
-impl RequestFailure {
-    pub(crate) fn from(_buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        Ok(Self)
-    }
-
-    pub(crate) fn put(&self, _buf: &mut BytesMut) {}
+impl MsgItem for RequestFailure {
+    const ID: u8 = 82;
 }
 
-impl From<RequestFailure> for Message {
+impl Pack for RequestFailure {
+    fn pack<P: Put>(&self, _buf: &mut P) {}
+}
+
+impl Unpack for RequestFailure {
+    fn unpack<B: Buf>(_buf: &mut B) -> Result<Self, UnpackError> {
+        Ok(Self {})
+    }
+}
+
+impl From<RequestFailure> for Msg {
     fn from(v: RequestFailure) -> Self {
         Self::RequestFailure(v)
     }

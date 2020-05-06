@@ -1,397 +1,289 @@
-use std::io::Cursor;
+use derive_new::new;
+use getset::Getters;
 
-use bytes::{Buf as _, Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Getters, new)]
 pub(crate) struct PtyReq {
-    term_name: String,
-    terminal_width: u32,
-    terminal_height: u32,
-    terminal_width_px: u32,
-    terminal_height_px: u32,
-    terminal_modes: Bytes,
+    #[get = "pub(crate)"]
+    term: String,
+    #[get = "pub(crate)"]
+    width: u32,
+    #[get = "pub(crate)"]
+    height: u32,
+    #[get = "pub(crate)"]
+    width_px: u32,
+    #[get = "pub(crate)"]
+    height_px: u32,
+    #[get = "pub(crate)"]
+    modes: Bytes,
 }
 
-impl PtyReq {
-    pub(crate) fn new(
-        term_name: String,
-        terminal_width: u32,
-        terminal_height: u32,
-        terminal_width_px: u32,
-        terminal_height_px: u32,
-        terminal_modes: Bytes,
-    ) -> Self {
-        Self {
-            term_name,
-            terminal_width,
-            terminal_height,
-            terminal_width_px,
-            terminal_height_px,
-            terminal_modes,
-        }
-    }
-
-    pub(crate) fn term_name(&self) -> &str {
-        &self.term_name
-    }
-
-    pub(crate) fn terminal_width(&self) -> u32 {
-        self.terminal_width
-    }
-
-    pub(crate) fn terminal_height(&self) -> u32 {
-        self.terminal_height
-    }
-
-    pub(crate) fn terminal_width_px(&self) -> u32 {
-        self.terminal_width_px
-    }
-
-    pub(crate) fn terminal_height_px(&self) -> u32 {
-        self.terminal_height_px
-    }
-
-    pub(crate) fn terminal_modes(&self) -> &Bytes {
-        &self.terminal_modes
+impl Pack for PtyReq {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.term.pack(buf);
+        self.width.pack(buf);
+        self.height.pack(buf);
+        self.width_px.pack(buf);
+        self.height_px.pack(buf);
+        self.modes.pack(buf);
     }
 }
 
-#[derive(Debug, Clone)]
+impl Unpack for PtyReq {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let term = Unpack::unpack(buf)?;
+        let width = Unpack::unpack(buf)?;
+        let height = Unpack::unpack(buf)?;
+        let width_px = Unpack::unpack(buf)?;
+        let height_px = Unpack::unpack(buf)?;
+        let modes = Unpack::unpack(buf)?;
+
+        Ok(Self {
+            term,
+            width,
+            height,
+            width_px,
+            height_px,
+            modes,
+        })
+    }
+}
+
+#[derive(Debug, Getters, new)]
 pub(crate) struct X11Req {
-    signle_connection: bool,
-    x11_authentication_protocol: String,
-    x11_authentication_cookie: Bytes,
+    #[get = "pub(crate)"]
+    single_connection: bool,
+    #[get = "pub(crate)"]
+    x11_auth_protocol: String,
+    #[get = "pub(crate)"]
+    x11_auth_cookie: Bytes,
+    #[get = "pub(crate)"]
     x11_screen_number: u32,
 }
 
-impl X11Req {
-    pub(crate) fn signle_connection(&self) -> bool {
-        self.signle_connection
-    }
-
-    pub(crate) fn x11_authentication_protocol(&self) -> &str {
-        &self.x11_authentication_protocol
-    }
-
-    pub(crate) fn x11_authentication_cookie(&self) -> &Bytes {
-        &self.x11_authentication_cookie
-    }
-
-    pub(crate) fn x11_screen_number(&self) -> u32 {
-        self.x11_screen_number
+impl Pack for X11Req {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.single_connection.pack(buf);
+        self.x11_auth_protocol.pack(buf);
+        self.x11_auth_cookie.pack(buf);
+        self.x11_screen_number.pack(buf);
     }
 }
 
-#[derive(Debug, Clone)]
+impl Unpack for X11Req {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let single_connection = Unpack::unpack(buf)?;
+        let x11_auth_protocol = Unpack::unpack(buf)?;
+        let x11_auth_cookie = Unpack::unpack(buf)?;
+        let x11_screen_number = Unpack::unpack(buf)?;
+
+        Ok(Self {
+            single_connection,
+            x11_auth_protocol,
+            x11_auth_cookie,
+            x11_screen_number,
+        })
+    }
+}
+
+#[derive(Debug, Getters, new)]
+pub(crate) struct Env {
+    #[get = "pub(crate)"]
+    name: String,
+    #[get = "pub(crate)"]
+    value: String,
+}
+
+impl Pack for Env {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.name.pack(buf);
+        self.value.pack(buf);
+    }
+}
+
+impl Unpack for Env {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let name = Unpack::unpack(buf)?;
+        let value = Unpack::unpack(buf)?;
+
+        Ok(Self { name, value })
+    }
+}
+
+#[derive(Debug, Getters, new)]
 pub(crate) struct WindowChange {
-    terminal_width: u32,
-    terminal_height: u32,
-    terminal_width_px: u32,
-    terminal_height_px: u32,
+    #[get = "pub(crate)"]
+    width: u32,
+    #[get = "pub(crate)"]
+    height: u32,
+    #[get = "pub(crate)"]
+    width_px: u32,
+    #[get = "pub(crate)"]
+    height_px: u32,
 }
 
-impl WindowChange {
-    pub(crate) fn terminal_width(&self) -> u32 {
-        self.terminal_width
-    }
-
-    pub(crate) fn terminal_height(&self) -> u32 {
-        self.terminal_height
-    }
-
-    pub(crate) fn terminal_width_px(&self) -> u32 {
-        self.terminal_width_px
-    }
-
-    pub(crate) fn terminal_height_px(&self) -> u32 {
-        self.terminal_height_px
+impl Pack for WindowChange {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.width.pack(buf);
+        self.height.pack(buf);
+        self.width_px.pack(buf);
+        self.height_px.pack(buf);
     }
 }
 
-#[derive(Debug, Clone)]
-pub(crate) enum Signal {
-    Abrt,
-    Alrm,
-    Fpe,
-    Hup,
-    Ill,
-    Int,
-    Kill,
-    Pipe,
-    Quit,
-    Segv,
-    Term,
-    Usr1,
-    Usr2,
-    Unknown(String),
-}
+impl Unpack for WindowChange {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let width = Unpack::unpack(buf)?;
+        let height = Unpack::unpack(buf)?;
+        let width_px = Unpack::unpack(buf)?;
+        let height_px = Unpack::unpack(buf)?;
 
-impl From<String> for Signal {
-    fn from(v: String) -> Self {
-        match v.as_ref() {
-            "ABRT" => Self::Abrt,
-            "ALRM" => Self::Alrm,
-            "FPE" => Self::Fpe,
-            "HUP" => Self::Hup,
-            "ILL" => Self::Ill,
-            "INT" => Self::Int,
-            "KILL" => Self::Kill,
-            "PIPE" => Self::Pipe,
-            "QUIT" => Self::Quit,
-            "SEGV" => Self::Segv,
-            "TERM" => Self::Term,
-            "USR1" => Self::Usr1,
-            "USR2" => Self::Usr2,
-            sig => Self::Unknown(sig.to_string()),
-        }
+        Ok(Self {
+            width,
+            height,
+            width_px,
+            height_px,
+        })
     }
 }
 
-impl AsRef<str> for Signal {
-    fn as_ref(&self) -> &str {
-        match self {
-            Self::Abrt => "ABRT",
-            Self::Alrm => "ALRM",
-            Self::Fpe => "FPE",
-            Self::Hup => "HUP",
-            Self::Ill => "ILL",
-            Self::Int => "INT",
-            Self::Kill => "KILL",
-            Self::Pipe => "PIPE",
-            Self::Quit => "QUIT",
-            Self::Segv => "SEGV",
-            Self::Term => "TERM",
-            Self::Usr1 => "USR1",
-            Self::Usr2 => "USR2",
-            Self::Unknown(v) => &v,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Getters, new)]
 pub(crate) struct ExitSignal {
-    signal: Signal,
-    coredumped: bool,
+    #[get = "pub(crate)"]
+    name: String,
+    #[get = "pub(crate)"]
+    core_dump: bool,
+    #[get = "pub(crate)"]
     error_message: String,
+    #[get = "pub(crate)"]
     language_tag: String,
 }
 
-impl ExitSignal {
-    pub(crate) fn signal(&self) -> &Signal {
-        &self.signal
-    }
-
-    pub(crate) fn coredumped(&self) -> bool {
-        self.coredumped
-    }
-
-    pub(crate) fn error_message(&self) -> &str {
-        &self.error_message
-    }
-
-    pub(crate) fn language_tag(&self) -> &str {
-        &self.language_tag
+impl Pack for ExitSignal {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.name.pack(buf);
+        self.core_dump.pack(buf);
+        self.error_message.pack(buf);
+        self.language_tag.pack(buf);
     }
 }
 
-#[derive(Debug, Clone)]
-#[allow(clippy::module_name_repetitions)]
-pub(crate) enum ChannelRequestType {
+impl Unpack for ExitSignal {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let name = Unpack::unpack(buf)?;
+        let core_dump = Unpack::unpack(buf)?;
+        let error_message = Unpack::unpack(buf)?;
+        let language_tag = Unpack::unpack(buf)?;
+
+        Ok(Self {
+            name,
+            core_dump,
+            error_message,
+            language_tag,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum Type {
     PtyReq(PtyReq),
     X11Req(X11Req),
-    Env(String, String),
-    Shell,
-    Exec(String),
+    Env(Env),
+    Shell(()),
+    Exec(Bytes),
     Subsystem(String),
     WindowChange(WindowChange),
     XonXoff(bool),
-    Signal(Signal),
+    Signal(String),
     ExitStatus(u32),
     ExitSignal(ExitSignal),
-    Unknown { name: String, data: Bytes },
+    Unknown(String, Bytes),
 }
 
-impl ChannelRequestType {
-    fn name(&self) -> &str {
-        use ChannelRequestType::*;
-
-        match self {
-            PtyReq(..) => "pty-req",
-            X11Req(..) => "x11-req",
-            Env(..) => "env",
-            Shell => "shell",
-            Exec(..) => "exec",
-            Subsystem(..) => "subsystem",
-            WindowChange(..) => "window-change",
-            XonXoff(..) => "xon-xoff",
-            Signal(..) => "signal",
-            ExitStatus(..) => "exit-status",
-            ExitSignal(..) => "exit-signal",
-            Unknown { name, .. } => &name,
-        }
-    }
-}
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Getters, new)]
 pub(crate) struct ChannelRequest {
+    #[get = "pub(crate)"]
     recipient_channel: u32,
-    request_type: ChannelRequestType,
+
+    #[get = "pub(crate)"]
     want_reply: bool,
+
+    #[get = "pub(crate)"]
+    typ: Type,
 }
 
-impl ChannelRequest {
-    pub(crate) fn new_exit_status(recipient_channel: u32, exit_code: u32) -> Self {
-        Self {
-            recipient_channel,
-            request_type: ChannelRequestType::ExitStatus(exit_code),
-            want_reply: false,
+impl MsgItem for ChannelRequest {
+    const ID: u8 = 98;
+}
+
+impl Pack for ChannelRequest {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.recipient_channel.pack(buf);
+        match &self.typ {
+            Type::PtyReq(..) => "pty-req",
+            Type::X11Req(..) => "x11-req",
+            Type::Env(..) => "env",
+            Type::Shell(..) => "shell",
+            Type::Exec(..) => "exec",
+            Type::Subsystem(..) => "subsystem",
+            Type::WindowChange(..) => "window-change",
+            Type::XonXoff(..) => "xon-xoff",
+            Type::Signal(..) => "signal",
+            Type::ExitStatus(..) => "exit-status",
+            Type::ExitSignal(..) => "exit-signal",
+            Type::Unknown(name, ..) => &*name,
+        }
+        .pack(buf);
+        self.want_reply.pack(buf);
+
+        match &self.typ {
+            Type::PtyReq(item) => item.pack(buf),
+            Type::X11Req(item) => item.pack(buf),
+            Type::Env(item) => item.pack(buf),
+            Type::Shell(..) => {}
+            Type::Exec(item) => item.pack(buf),
+            Type::Subsystem(item) => item.pack(buf),
+            Type::WindowChange(item) => item.pack(buf),
+            Type::XonXoff(item) => item.pack(buf),
+            Type::Signal(item) => item.pack(buf),
+            Type::ExitStatus(item) => item.pack(buf),
+            Type::ExitSignal(item) => item.pack(buf),
+            Type::Unknown(_, data) => buf.put(&data),
         }
     }
+}
 
-    pub(crate) fn new_exit_signal(
-        recipient_channel: u32,
-        signal: Signal,
-        coredumped: bool,
-        error_message: impl Into<String>,
-        language_tag: impl Into<String>,
-    ) -> Self {
-        Self {
-            recipient_channel,
-            request_type: ChannelRequestType::ExitSignal(ExitSignal {
-                signal,
-                coredumped,
-                error_message: error_message.into(),
-                language_tag: language_tag.into(),
-            }),
-            want_reply: false,
-        }
-    }
+impl Unpack for ChannelRequest {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let recipient_channel = Unpack::unpack(buf)?;
+        let typ = String::unpack(buf)?;
+        let want_reply = Unpack::unpack(buf)?;
 
-    pub(crate) fn recipient_channel(&self) -> u32 {
-        self.recipient_channel
-    }
-
-    pub(crate) fn request_type(&self) -> &ChannelRequestType {
-        &self.request_type
-    }
-
-    pub(crate) fn want_reply(&self) -> bool {
-        self.want_reply
-    }
-
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let recipient_channel = buf.get_uint32()?;
-        let request_type = buf.get_string()?;
-        let want_reply = buf.get_boolean()?;
-
-        let request_type = match request_type.as_ref() {
-            "pty-req" => ChannelRequestType::PtyReq(PtyReq {
-                term_name: buf.get_string()?,
-                terminal_width: buf.get_uint32()?,
-                terminal_height: buf.get_uint32()?,
-                terminal_width_px: buf.get_uint32()?,
-                terminal_height_px: buf.get_uint32()?,
-                terminal_modes: buf.get_binary_string()?.into(),
-            }),
-            "x11-req" => ChannelRequestType::X11Req(X11Req {
-                signle_connection: buf.get_boolean()?,
-                x11_authentication_protocol: buf.get_string()?,
-                x11_authentication_cookie: buf.get_string()?.into(),
-                x11_screen_number: buf.get_uint32()?,
-            }),
-            "env" => ChannelRequestType::Env(buf.get_string()?, buf.get_string()?),
-            "shell" => ChannelRequestType::Shell,
-            "exec" => ChannelRequestType::Exec(buf.get_string()?),
-            "subsystem" => ChannelRequestType::Subsystem(buf.get_string()?),
-            "window-change" => ChannelRequestType::WindowChange(WindowChange {
-                terminal_width: buf.get_uint32()?,
-                terminal_height: buf.get_uint32()?,
-                terminal_width_px: buf.get_uint32()?,
-                terminal_height_px: buf.get_uint32()?,
-            }),
-            "xon-xoff" => ChannelRequestType::XonXoff(buf.get_boolean()?),
-            "signal" => ChannelRequestType::Signal(buf.get_string()?.into()),
-            "exit-status" => ChannelRequestType::ExitStatus(buf.get_uint32()?),
-            "exit-signal" => ChannelRequestType::ExitSignal(ExitSignal {
-                signal: buf.get_string()?.into(),
-                coredumped: buf.get_boolean()?,
-                error_message: buf.get_string()?,
-                language_tag: buf.get_string()?,
-            }),
-            name => ChannelRequestType::Unknown {
-                name: name.to_string(),
-                data: buf.to_bytes(),
-            },
+        let typ = match &*typ {
+            "pty-req" => Type::PtyReq(Unpack::unpack(buf)?),
+            "x11-req" => Type::X11Req(Unpack::unpack(buf)?),
+            "env" => Type::Env(Unpack::unpack(buf)?),
+            "shell" => Type::Shell(()),
+            "exec" => Type::Exec(Unpack::unpack(buf)?),
+            "subsystem" => Type::Subsystem(Unpack::unpack(buf)?),
+            "window-change" => Type::WindowChange(Unpack::unpack(buf)?),
+            "xon-xoff" => Type::XonXoff(Unpack::unpack(buf)?),
+            "signal" => Type::Signal(Unpack::unpack(buf)?),
+            "exit-status" => Type::ExitStatus(Unpack::unpack(buf)?),
+            "exit-signal" => Type::ExitSignal(Unpack::unpack(buf)?),
+            x => Type::Unknown(x.into(), buf.to_bytes()),
         };
 
         Ok(Self {
             recipient_channel,
-            request_type,
             want_reply,
+            typ,
         })
-    }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        use ChannelRequestType::*;
-
-        buf.put_uint32(self.recipient_channel);
-        buf.put_string(&self.request_type.name());
-        buf.put_boolean(self.want_reply);
-        match &self.request_type {
-            PtyReq(v) => {
-                buf.put_string(v.term_name());
-                buf.put_uint32(v.terminal_width());
-                buf.put_uint32(v.terminal_height());
-                buf.put_uint32(v.terminal_width_px());
-                buf.put_uint32(v.terminal_height_px());
-                buf.put_binary_string(v.terminal_modes());
-            }
-            X11Req(v) => {
-                buf.put_boolean(v.signle_connection());
-                buf.put_string(v.x11_authentication_protocol());
-                buf.put_binary_string(v.x11_authentication_cookie());
-                buf.put_uint32(v.x11_screen_number());
-            }
-            Env(k, v) => {
-                buf.put_string(k);
-                buf.put_string(v);
-            }
-            Shell => {}
-            Exec(v) | Subsystem(v) => {
-                buf.put_string(v);
-            }
-            WindowChange(v) => {
-                buf.put_uint32(v.terminal_width());
-                buf.put_uint32(v.terminal_height());
-                buf.put_uint32(v.terminal_width_px());
-                buf.put_uint32(v.terminal_height_px());
-            }
-            XonXoff(v) => {
-                buf.put_boolean(*v);
-            }
-            Signal(v) => {
-                buf.put_string(v.as_ref());
-            }
-            ExitStatus(v) => {
-                buf.put_uint32(*v);
-            }
-            ExitSignal(v) => {
-                buf.put_string(v.signal().as_ref());
-                buf.put_boolean(v.coredumped());
-                buf.put_string(v.error_message());
-                buf.put_string(v.language_tag());
-            }
-            Unknown { data, .. } => {
-                buf.extend_from_slice(&data);
-            }
-        }
     }
 }
 
-impl From<ChannelRequest> for Message {
+impl From<ChannelRequest> for Msg {
     fn from(v: ChannelRequest) -> Self {
         Self::ChannelRequest(v)
     }

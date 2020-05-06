@@ -1,59 +1,133 @@
-use std::io::Cursor;
+use getset::Getters;
 
-use bytes::{Buf as _, Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug, Clone)]
+#[derive(Debug, Getters)]
 pub(crate) struct Publickey {
+    #[get = "pub(crate)"]
     algorithm: String,
+
+    #[get = "pub(crate)"]
     blob: Bytes,
+
+    #[get = "pub(crate)"]
     signature: Option<Bytes>,
 }
 
-impl Publickey {
-    pub(crate) fn algorithm(&self) -> &str {
-        &self.algorithm
-    }
-
-    pub(crate) fn blob(&self) -> &Bytes {
-        &self.blob
-    }
-
-    pub(crate) fn signature(&self) -> &Option<Bytes> {
-        &self.signature
+impl Pack for Publickey {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.signature.is_some().pack(buf);
+        self.algorithm.pack(buf);
+        self.blob.pack(buf);
+        if let Some(sig) = &self.signature {
+            sig.pack(buf);
+        }
     }
 }
 
-#[derive(Debug, Clone)]
+impl Unpack for Publickey {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let has_signature = bool::unpack(buf)?;
+        let algorithm = Unpack::unpack(buf)?;
+        let blob = Unpack::unpack(buf)?;
+        let signature = if has_signature {
+            Some(Unpack::unpack(buf)?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            algorithm,
+            blob,
+            signature,
+        })
+    }
+}
+
+#[derive(Debug, Getters)]
 pub(crate) struct Password {
+    #[get = "pub(crate)"]
     password: String,
+
+    #[get = "pub(crate)"]
     newpassword: Option<String>,
 }
 
-impl Password {
-    pub fn password(&self) -> &str {
-        &self.password
-    }
-
-    pub fn newpassword(&self) -> &Option<String> {
-        &self.newpassword
+impl Pack for Password {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.newpassword.is_some().pack(buf);
+        self.password.pack(buf);
+        if let Some(newpassword) = &self.newpassword {
+            newpassword.pack(buf);
+        }
     }
 }
 
-#[derive(Debug, Clone)]
+impl Unpack for Password {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let has_newpassword = bool::unpack(buf)?;
+        let password = Unpack::unpack(buf)?;
+        let newpassword = if has_newpassword {
+            Some(Unpack::unpack(buf)?)
+        } else {
+            None
+        };
+
+        Ok(Self {
+            password,
+            newpassword,
+        })
+    }
+}
+
+#[derive(Debug, Getters)]
 pub(crate) struct Hostbased {
+    #[get = "pub(crate)"]
     algorithm: String,
+
+    #[get = "pub(crate)"]
     client_hostkey: Bytes,
+
+    #[get = "pub(crate)"]
     client_hostname: String,
+
+    #[get = "pub(crate)"]
     user_name: String,
+
+    #[get = "pub(crate)"]
     signature: Bytes,
 }
 
-#[derive(Debug, Clone)]
-#[allow(clippy::module_name_repetitions)]
-pub(crate) enum UserauthRequestMethod {
+impl Pack for Hostbased {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.algorithm.pack(buf);
+        self.client_hostkey.pack(buf);
+        self.client_hostname.pack(buf);
+        self.user_name.pack(buf);
+        self.signature.pack(buf);
+    }
+}
+
+impl Unpack for Hostbased {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let algorithm = Unpack::unpack(buf)?;
+        let client_hostkey = Unpack::unpack(buf)?;
+        let client_hostname = Unpack::unpack(buf)?;
+        let user_name = Unpack::unpack(buf)?;
+        let signature = Unpack::unpack(buf)?;
+
+        Ok(Self {
+            algorithm,
+            client_hostkey,
+            client_hostname,
+            user_name,
+            signature,
+        })
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum Method {
     None,
     Publickey(Publickey),
     Password(Password),
@@ -61,79 +135,70 @@ pub(crate) enum UserauthRequestMethod {
     Unknown(String, Bytes),
 }
 
-impl AsRef<str> for UserauthRequestMethod {
-    fn as_ref(&self) -> &str {
+impl Pack for Method {
+    fn pack<P: Put>(&self, buf: &mut P) {
         match self {
-            Self::None => "none",
-            Self::Publickey(..) => "publickey",
-            Self::Password(..) => "password",
-            Self::Hostbased(..) => "hostbased",
-            Self::Unknown(n, ..) => n.as_ref(),
+            Self::None => "none".to_string().pack(buf),
+            Self::Publickey(item) => {
+                "publickey".pack(buf);
+                item.pack(buf)
+            }
+            Self::Password(item) => {
+                "password".pack(buf);
+                item.pack(buf)
+            }
+            Self::Hostbased(item) => {
+                "hostbased".pack(buf);
+                item.pack(buf)
+            }
+            Self::Unknown(name, item) => {
+                name.pack(buf);
+                buf.put(item);
+            }
         }
     }
 }
 
-#[derive(Debug, Clone)]
-pub struct UserauthRequest {
-    user_name: String,
-    service_name: String,
-    method: UserauthRequestMethod,
+impl Unpack for Method {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let method = String::unpack(buf)?;
+        Ok(match &*method {
+            "none" => Self::None,
+            "publickey" => Self::Publickey(Unpack::unpack(buf)?),
+            "password" => Self::Password(Unpack::unpack(buf)?),
+            "hostbased" => Self::Hostbased(Unpack::unpack(buf)?),
+            x => Self::Unknown(x.into(), buf.to_bytes()),
+        })
+    }
 }
 
-impl UserauthRequest {
-    pub(crate) fn user_name(&self) -> &str {
-        &self.user_name
-    }
+#[derive(Debug, Getters)]
+pub(crate) struct UserauthRequest {
+    #[get = "pub(crate)"]
+    user_name: String,
+    #[get = "pub(crate)"]
+    service_name: String,
+    #[get = "pub(crate)"]
+    method: Method,
+}
 
-    pub(crate) fn service_name(&self) -> &str {
-        &self.service_name
-    }
+impl MsgItem for UserauthRequest {
+    const ID: u8 = 50;
+}
 
-    pub(crate) fn method(&self) -> &UserauthRequestMethod {
-        &self.method
+impl Pack for UserauthRequest {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.user_name.pack(buf);
+        self.service_name.pack(buf);
+        self.method.pack(buf);
     }
+}
 
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let user_name = buf.get_string()?;
-        let service_name = buf.get_string()?;
-        let method_name = buf.get_string()?;
-        let method = match method_name.as_ref() {
-            "none" => UserauthRequestMethod::None,
-            "publickey" => {
-                let has_signature = buf.get_boolean()?;
-                UserauthRequestMethod::Publickey(Publickey {
-                    algorithm: buf.get_string()?,
-                    blob: buf.get_binary_string()?.into(),
-                    signature: if has_signature {
-                        Some(buf.get_binary_string()?.into())
-                    } else {
-                        None
-                    },
-                })
-            }
-            "password" => {
-                let has_newpassword = buf.get_boolean()?;
-                UserauthRequestMethod::Password(Password {
-                    password: buf.get_string()?,
-                    newpassword: if has_newpassword {
-                        Some(buf.get_string()?)
-                    } else {
-                        None
-                    },
-                })
-            }
-            "hostbased" => UserauthRequestMethod::Hostbased(Hostbased {
-                algorithm: buf.get_string()?,
-                client_hostkey: buf.get_binary_string()?.into(),
-                client_hostname: buf.get_string()?,
-                user_name: buf.get_string()?,
-                signature: buf.get_binary_string()?.into(),
-            }),
-            u => UserauthRequestMethod::Unknown(
-                u.to_string(),
-                buf.to_bytes(),
-            ),
-        };
+impl Unpack for UserauthRequest {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let user_name = Unpack::unpack(buf)?;
+        let service_name = Unpack::unpack(buf)?;
+        let method = Unpack::unpack(buf)?;
 
         Ok(Self {
             user_name,
@@ -141,43 +206,9 @@ impl UserauthRequest {
             method,
         })
     }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_string(&self.user_name);
-        buf.put_string(&self.service_name);
-        buf.put_string(&self.method.as_ref());
-        match &self.method {
-            UserauthRequestMethod::None => {}
-            UserauthRequestMethod::Publickey(item) => {
-                buf.put_boolean(item.signature.is_some());
-                buf.put_string(item.algorithm.as_ref());
-                buf.put_binary_string(&item.blob);
-                if let Some(e) = &item.signature {
-                    buf.put_binary_string(e);
-                }
-            }
-            UserauthRequestMethod::Password(item) => {
-                buf.put_boolean(item.newpassword.is_some());
-                buf.put_string(item.password.as_ref());
-                if let Some(e) = &item.newpassword {
-                    buf.put_string(e);
-                }
-            }
-            UserauthRequestMethod::Hostbased(item) => {
-                buf.put_string(&item.algorithm);
-                buf.put_binary_string(&item.client_hostkey);
-                buf.put_string(&item.client_hostname);
-                buf.put_string(&item.user_name);
-                buf.put_binary_string(&item.signature);
-            }
-            UserauthRequestMethod::Unknown(_, data) => {
-                buf.extend_from_slice(&data);
-            }
-        }
-    }
 }
 
-impl From<UserauthRequest> for Message {
+impl From<UserauthRequest> for Msg {
     fn from(v: UserauthRequest) -> Self {
         Self::UserauthRequest(v)
     }

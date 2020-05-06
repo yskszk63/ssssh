@@ -1,33 +1,37 @@
-use std::io::Cursor;
+//! SSH_MSG_KEX_ECDH_INIT
+//!
+//! [ECDH Key Exchange](https://tools.ietf.org/html/rfc5656#section-4)
+use getset::Getters;
 
-use bytes::{Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug)]
+#[derive(Debug, Getters)]
 pub(crate) struct KexEcdhInit {
-    ephemeral_public_key: Vec<u8>,
+    #[get = "pub(crate)"]
+    ephemeral_public_key: Bytes,
 }
 
-impl KexEcdhInit {
-    pub(crate) fn ephemeral_public_key(&self) -> &[u8] {
-        &self.ephemeral_public_key
-    }
+impl MsgItem for KexEcdhInit {
+    const ID: u8 = 30;
+}
 
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let ephemeral_public_key = buf.get_binary_string()?;
+impl Pack for KexEcdhInit {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.ephemeral_public_key.pack(buf);
+    }
+}
+
+impl Unpack for KexEcdhInit {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let ephemeral_public_key = Unpack::unpack(buf)?;
+
         Ok(Self {
             ephemeral_public_key,
         })
     }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_binary_string(&self.ephemeral_public_key);
-    }
 }
 
-impl From<KexEcdhInit> for Message {
+impl From<KexEcdhInit> for Msg {
     fn from(v: KexEcdhInit) -> Self {
         Self::KexEcdhInit(v)
     }

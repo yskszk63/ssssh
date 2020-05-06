@@ -1,33 +1,37 @@
-use std::io::Cursor;
+use derive_new::new;
 
-use bytes::{Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug, Clone)]
+#[derive(Debug, new)]
 pub(crate) struct ChannelWindowAdjust {
     recipient_channel: u32,
     bytes_to_add: u32,
 }
 
-impl ChannelWindowAdjust {
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let recipient_channel = buf.get_uint32()?;
-        let bytes_to_add = buf.get_uint32()?;
+impl MsgItem for ChannelWindowAdjust {
+    const ID: u8 = 93;
+}
+
+impl Pack for ChannelWindowAdjust {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.recipient_channel.pack(buf);
+        self.bytes_to_add.pack(buf);
+    }
+}
+
+impl Unpack for ChannelWindowAdjust {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let recipient_channel = Unpack::unpack(buf)?;
+        let bytes_to_add = Unpack::unpack(buf)?;
+
         Ok(Self {
             recipient_channel,
             bytes_to_add,
         })
     }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_uint32(self.recipient_channel);
-        buf.put_uint32(self.bytes_to_add);
-    }
 }
 
-impl From<ChannelWindowAdjust> for Message {
+impl From<ChannelWindowAdjust> for Msg {
     fn from(v: ChannelWindowAdjust) -> Self {
         Self::ChannelWindowAdjust(v)
     }

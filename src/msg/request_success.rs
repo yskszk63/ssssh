@@ -1,33 +1,31 @@
-use std::io::Cursor;
+use derive_new::new;
 
-use bytes::{Buf as _, Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-
-#[derive(Debug, Clone)]
+#[derive(Debug, new)]
 pub(crate) struct RequestSuccess {
-    data: Bytes,
+    additional_data: Bytes,
 }
 
-impl RequestSuccess {
-    /*
-    pub(crate) fn new() -> Self {
-        let data = Bytes::from("");
-        Self { data }
-    }
-    */
+impl MsgItem for RequestSuccess {
+    const ID: u8 = 81;
+}
 
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let data = buf.to_bytes();
-        Ok(Self { data })
-    }
-
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.extend_from_slice(&self.data);
+impl Pack for RequestSuccess {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        buf.put(&self.additional_data);
     }
 }
 
-impl From<RequestSuccess> for Message {
+impl Unpack for RequestSuccess {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let additional_data = buf.to_bytes();
+
+        Ok(Self { additional_data })
+    }
+}
+
+impl From<RequestSuccess> for Msg {
     fn from(v: RequestSuccess) -> Self {
         Self::RequestSuccess(v)
     }

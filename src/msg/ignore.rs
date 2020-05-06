@@ -1,27 +1,31 @@
-use std::io::Cursor;
+use derive_new::new;
 
-use bytes::{Bytes, BytesMut};
+use super::*;
 
-use super::{Message, MessageResult};
-use crate::sshbuf::{SshBuf as _, SshBufMut as _};
-
-#[derive(Debug, Clone)]
+#[derive(Debug, new)]
 pub(crate) struct Ignore {
     data: Bytes,
 }
 
-impl Ignore {
-    pub(crate) fn from(buf: &mut Cursor<Bytes>) -> MessageResult<Self> {
-        let data = buf.get_binary_string()?.into();
-        Ok(Self { data })
-    }
+impl MsgItem for Ignore {
+    const ID: u8 = 2;
+}
 
-    pub(crate) fn put(&self, buf: &mut BytesMut) {
-        buf.put_binary_string(&self.data);
+impl Pack for Ignore {
+    fn pack<P: Put>(&self, buf: &mut P) {
+        self.data.pack(buf);
     }
 }
 
-impl From<Ignore> for Message {
+impl Unpack for Ignore {
+    fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
+        let data = Unpack::unpack(buf)?;
+
+        Ok(Self { data })
+    }
+}
+
+impl From<Ignore> for Msg {
     fn from(v: Ignore) -> Self {
         Self::Ignore(v)
     }

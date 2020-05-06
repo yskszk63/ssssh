@@ -1,43 +1,41 @@
 use std::time::Duration;
 
 use async_trait::async_trait;
+use futures::stream::TryStreamExt as _;
 
-use ssssh::AuthHandle;
 use ssssh::ServerBuilder;
-use ssssh::{Handler, PasswordAuth, PasswordChangeAuth};
+use ssssh::{Handlers, PasswordResult};
 
 struct MyHandler;
 
 #[async_trait]
-impl Handler for MyHandler {
-    type Error = failure::Error;
+impl Handlers for MyHandler {
+    type Err = anyhow::Error;
 
-    async fn auth_password_change(
+    async fn handle_auth_password_change(
         &mut self,
         _username: &str,
         _oldpassword: &str,
         _newpassword: &str,
-        _handle: &AuthHandle,
-    ) -> Result<PasswordChangeAuth, Self::Error> {
-        Ok(PasswordChangeAuth::ChangePasswdreq(
+    ) -> Result<PasswordResult, Self::Err> {
+        Ok(PasswordResult::PasswordChangeRequired(
             "password expired".into(),
         ))
     }
 
-    async fn auth_password(
+    async fn handle_auth_password(
         &mut self,
         _username: &str,
-        _password: &[u8],
-        handle: &AuthHandle,
-    ) -> Result<PasswordAuth, Self::Error> {
-        let mut handle = handle.clone();
-        handle.send_banner("Allow Logged in", "").await.unwrap();
-        Ok(PasswordAuth::ChangePasswdreq("password expired".into()))
+        _password: &str,
+    ) -> Result<PasswordResult, Self::Err> {
+        Ok(PasswordResult::PasswordChangeRequired(
+            "password expired".into(),
+        ))
     }
 }
 
 #[tokio::main(basic_scheduler)]
-async fn main() {
+async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     use tokio::process::Command;
@@ -52,19 +50,15 @@ async fn main() {
         .spawn()
         .unwrap();
 
-    let builder = ServerBuilder::default();
-    let mut server = builder
-        .timeout(Duration::from_secs(5))
-        .build("[::1]:2222".parse().unwrap(), |_| MyHandler)
-        .await
-        .unwrap();
-    match server.accept().await {
-        Ok(connection) => {
-            connection.run().await.unwrap();
-        }
-        Err(e) => {
-            eprintln!("{}", e);
-        }
+    let mut builder = ServerBuilder::default();
+    builder.timeout(Duration::from_secs(5));
+    let mut server = builder.build("[::1]:2222").await?;
+
+    if let Some(connection) = server.try_next().await? {
+        let connection = connection.await?;
+        connection.run(MyHandler).await?;
     }
     proc.await.unwrap();
+
+    Ok(())
 }
