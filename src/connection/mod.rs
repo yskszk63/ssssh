@@ -2,11 +2,13 @@ use std::future::Future;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
+use std::net::SocketAddr;
 
 use bytes::BytesMut;
 use futures::ready;
 use thiserror::Error;
 use tokio::io::{self, AsyncBufReadExt as _, AsyncRead, AsyncWrite, BufStream};
+use tokio::net::TcpStream;
 
 use crate::handlers::Handlers;
 use crate::preference::Preference;
@@ -98,6 +100,12 @@ where
 #[derive(Debug)]
 pub struct Connection<S> {
     state: S,
+}
+
+impl Connection<Accept<TcpStream>> {
+    pub fn remote_ip(&self) -> io::Result<SocketAddr> {
+        self.state.io.as_ref().expect("invalid state").get_ref().peer_addr()
+    }
 }
 
 impl<IO> Connection<Accept<IO>>
