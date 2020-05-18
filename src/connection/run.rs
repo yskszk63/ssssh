@@ -1,25 +1,18 @@
 use std::collections::HashMap;
-use std::error::Error as StdError;
 use std::future::Future;
-use std::marker::PhantomData;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
-use bytes::Buf;
 use bytes::Bytes;
 use futures::channel::mpsc;
 use futures::future::Either;
 use futures::future::TryFutureExt as _;
-use futures::ready;
-use futures::sink::Sink;
 use futures::sink::SinkExt as _;
 use futures::stream::StreamExt as _;
 use futures::stream::TryStreamExt as _;
 use thiserror::Error;
 use tokio::io::{self, AsyncRead, AsyncWrite};
 use tokio::time;
-use log::warn;
+use log::{error, warn, debug};
 
 use crate::handlers::{HandlerError, Handlers, PasswordResult};
 use crate::kex::KexError;
@@ -30,6 +23,7 @@ use crate::state::ChangeKeyError;
 use crate::stream::msg::{MsgStream, RecvError, SendError};
 
 use super::completion_stream::CompletionStream;
+use super::ssh_stdout::SshStdout;
 
 #[derive(Debug, Error)]
 pub enum RunError {
@@ -58,111 +52,12 @@ pub enum RunError {
     Unexpected,
 }
 
-#[derive(Debug, PartialEq, Eq)]
-enum ShutdownState {
-    NeedsSend,
-    NeedsFlush,
-    NeedsClose,
-    Done,
-}
-
-#[derive(Debug)]
-struct OutputWriter<W, E> {
-    channel: u32,
-    inner: W,
-    stdout: bool,
-    shutdown_state: ShutdownState,
-    _phantom: PhantomData<E>,
-}
-
-impl<W, E> OutputWriter<W, E> {
-    fn new(channel: u32, inner: W, stdout: bool) -> Self {
-        Self {
-            channel,
-            inner,
-            stdout,
-            shutdown_state: ShutdownState::NeedsSend,
-            _phantom: PhantomData,
-        }
-    }
-}
-
-impl<W, E> AsyncWrite for OutputWriter<W, E>
-where
-    W: Sink<Msg, Error = E> + Unpin,
-    E: Into<Box<dyn StdError + Sync + Send>> + Unpin,
-{
-    fn poll_write(
-        self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        mut buf: &[u8],
-    ) -> Poll<Result<usize, io::Error>> {
-        let this = self.get_mut();
-        ready!(Pin::new(&mut this.inner).poll_ready(cx))
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-
-        let len = buf.len();
-        let msg = if this.stdout {
-            msg::channel_data::ChannelData::new(this.channel, (&mut buf).to_bytes()).into()
-        } else {
-            let t = msg::channel_extended_data::DataTypeCode::Stderr;
-            msg::channel_extended_data::ChannelExtendedData::new(
-                this.channel,
-                t,
-                (&mut buf).to_bytes(),
-            )
-            .into()
-        };
-        Pin::new(&mut this.inner)
-            .start_send(msg)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-        Poll::Ready(Ok(len))
-    }
-
-    fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        Pin::new(&mut self.get_mut().inner)
-            .poll_flush(cx)
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))
-    }
-
-    fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
-        let this = self.get_mut();
-        ready!(Pin::new(&mut this.inner).poll_ready(cx))
-            .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-
-        loop {
-            match this.shutdown_state {
-                ShutdownState::NeedsSend => {
-                    let msg = msg::channel_eof::ChannelEof::new(this.channel).into();
-                    Pin::new(&mut this.inner)
-                        .start_send(msg)
-                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e))?;
-                    this.shutdown_state = ShutdownState::NeedsFlush;
-                }
-                ShutdownState::NeedsFlush => {
-                    ready!(Pin::new(&mut this.inner)
-                        .poll_flush(cx)
-                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e)))?;
-                    this.shutdown_state = ShutdownState::NeedsClose;
-                }
-                ShutdownState::NeedsClose => {
-                    ready!(Pin::new(&mut this.inner)
-                        .poll_close(cx)
-                        .map_err(|e| io::Error::new(io::ErrorKind::Other, e)))?;
-                    this.shutdown_state = ShutdownState::Done;
-                }
-                ShutdownState::Done => return Poll::Ready(Ok(())),
-            }
-        }
-    }
-}
-
 #[derive(Debug)]
 enum Channel {
     Session(
         u32,
-        Option<mpsc::Sender<Bytes>>,
-        Option<mpsc::Receiver<Bytes>>,
+        Option<mpsc::UnboundedSender<Bytes>>,
+        Option<mpsc::UnboundedReceiver<Bytes>>,
     ),
 }
 
@@ -186,8 +81,8 @@ where
     preference: Arc<Preference>,
     handlers: H,
     channels: HashMap<u32, Channel>,
-    outbound_channel_tx: mpsc::Sender<Msg>,
-    outbound_channel_rx: mpsc::Receiver<Msg>,
+    outbound_channel_tx: mpsc::UnboundedSender<Msg>,
+    outbound_channel_rx: mpsc::UnboundedReceiver<Msg>,
     completions: CompletionStream<Result<(), HandlerError>>,
 }
 
@@ -203,7 +98,7 @@ where
         preference: Arc<Preference>,
         handlers: H,
     ) -> Self {
-        let (tx, rx) = mpsc::channel(1);
+        let (tx, rx) = mpsc::unbounded();
         Self {
             io,
             c_version,
@@ -222,20 +117,25 @@ where
     }
 
     pub(super) async fn run(&mut self) -> Result<(), RunError> {
+        debug!("connection running...");
         let result = self.r#loop().await;
         if let Err(e) = &result {
             match e {
                 _ => {
+                    error!("error ocurred {}", e);
                     let t = msg::disconnect::ReasonCode::ProtocolError;
                     let msg = msg::disconnect::Disconnect::new(
                         t,
                         "Internal server error".into(),
                         "".into(),
                     );
-                    self.send(msg).await.ok(); // ignore error
+                    if let Err(e) = self.send(msg).await {
+                        error!("failed to send disconnect: {}", e)
+                    }
                 }
             }
         }
+        debug!("connection done.");
         result
     }
 
@@ -246,7 +146,13 @@ where
             let mut timeout = maybe_timeout(&self.preference);
 
             tokio::select! {
-                Ok(Some(msg)) = self.io.try_next() => self.handle_msg(&msg, &mut connected).await?,
+                Ok(msg) = self.io.try_next() => {
+                    if let Some(msg) = msg {
+                        self.handle_msg(&msg, &mut connected).await?;
+                    } else {
+                        connected = false;
+                    }
+                }
                 Some(msg) = self.outbound_channel_rx.next() => self.send(msg).await?,
                 Some(completed) = self.completions.next() => completed.map_err(|e| RunError::HandlerError(e))?,
                 _ = &mut timeout => {
@@ -256,8 +162,10 @@ where
                         "timedout".into(),
                         "".into(),
                     );
-                    self.send(msg).await.ok(); // ignore error
-                    break
+                    if let Err(e) = self.send(msg).await {
+                        warn!("failed to send disconnect: {}", e);
+                    }
+                    connected = false
                 }
             }
         }
@@ -454,7 +362,7 @@ where
         let chid = *channel_open.sender_channel();
         match channel_open.typ() {
             Type::Session(..) => {
-                let (stdin_tx, stdin_rx) = mpsc::channel(1);
+                let (stdin_tx, stdin_rx) = mpsc::unbounded();
 
                 let channel = Channel::Session(chid, Some(stdin_tx), Some(stdin_rx));
                 self.channels.insert(chid, channel); // TODO check channel id
@@ -511,7 +419,9 @@ where
         if let Some(channel) = self.channels.get_mut(chid) {
             match channel {
                 Channel::Session(_, stdin, _) => {
-                    stdin.take();
+                    if let Some(stdin) = stdin.take() {
+                        stdin.close_channel()
+                    }
                 }
             }
         }
@@ -538,12 +448,12 @@ where
                 let chid = channel_request.recipient_channel();
                 if let Some(Channel::Session(_, _, stdin)) = self.channels.get_mut(chid) {
                     let stdin = io::stream_reader(stdin.take().unwrap().map(Ok));
-                    let stdout = OutputWriter::<_, mpsc::SendError>::new(
+                    let stdout = SshStdout::new(
                         *channel_request.recipient_channel(),
                         self.outbound_channel_tx.clone(),
                         true,
                     );
-                    let stderr = OutputWriter::<_, mpsc::SendError>::new(
+                    let stderr = SshStdout::new(
                         *channel_request.recipient_channel(),
                         self.outbound_channel_tx.clone(),
                         false,
@@ -584,12 +494,12 @@ where
                 let chid = channel_request.recipient_channel();
                 if let Some(Channel::Session(_, _, stdin)) = self.channels.get_mut(chid) {
                     let stdin = io::stream_reader(stdin.take().unwrap().map(Ok));
-                    let stdout = OutputWriter::<_, mpsc::SendError>::new(
+                    let stdout = SshStdout::new(
                         *channel_request.recipient_channel(),
                         self.outbound_channel_tx.clone(),
                         true,
                     );
-                    let stderr = OutputWriter::<_, mpsc::SendError>::new(
+                    let stderr = SshStdout::new(
                         *channel_request.recipient_channel(),
                         self.outbound_channel_tx.clone(),
                         false,

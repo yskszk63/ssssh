@@ -71,6 +71,7 @@ impl Handlers for MyHandler {
 
         async move {
             stdout.write(b"Hello, world! ").await?;
+            stdout.shutdown().await?;
             Ok(0)
         }
         .boxed()

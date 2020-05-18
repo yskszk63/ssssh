@@ -16,6 +16,7 @@ use crate::stream::msg::MsgStream;
 pub use run::RunError;
 
 mod completion_stream;
+mod ssh_stdout;
 mod run;
 
 #[derive(Debug, Error)]
