@@ -9,6 +9,7 @@ use futures::future::TryFutureExt as _;
 use futures::sink::SinkExt as _;
 use futures::stream::StreamExt as _;
 use futures::stream::TryStreamExt as _;
+use futures::stream::Fuse;
 use thiserror::Error;
 use tokio::io::{self, AsyncRead, AsyncWrite};
 use tokio::time;
@@ -57,7 +58,7 @@ enum Channel {
     Session(
         u32,
         Option<mpsc::UnboundedSender<Bytes>>,
-        Option<mpsc::UnboundedReceiver<Bytes>>,
+        Option<Fuse<mpsc::UnboundedReceiver<Bytes>>>,
     ),
 }
 
@@ -82,7 +83,7 @@ where
     handlers: H,
     channels: HashMap<u32, Channel>,
     outbound_channel_tx: mpsc::UnboundedSender<Msg>,
-    outbound_channel_rx: mpsc::UnboundedReceiver<Msg>,
+    outbound_channel_rx: Fuse<mpsc::UnboundedReceiver<Msg>>,
     completions: CompletionStream<Result<(), HandlerError>>,
 }
 
@@ -99,6 +100,7 @@ where
         handlers: H,
     ) -> Self {
         let (tx, rx) = mpsc::unbounded();
+        let rx = rx.fuse();
         Self {
             io,
             c_version,
@@ -363,6 +365,7 @@ where
         match channel_open.typ() {
             Type::Session(..) => {
                 let (stdin_tx, stdin_rx) = mpsc::unbounded();
+                let stdin_rx = stdin_rx.fuse();
 
                 let channel = Channel::Session(chid, Some(stdin_tx), Some(stdin_rx));
                 self.channels.insert(chid, channel); // TODO check channel id
