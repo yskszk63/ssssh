@@ -17,6 +17,8 @@ use crate::encrypt::EncryptError;
 use crate::mac::MacError;
 use crate::state::State;
 
+pub(crate) const MAXIMUM_PACKET_SIZE: usize = 35000;
+
 #[derive(Debug, Error)]
 pub enum DecodeError {
     #[error(transparent)]
@@ -30,6 +32,9 @@ pub enum DecodeError {
 
     #[error(transparent)]
     MacError(#[from] MacError),
+
+    #[error("too large packet length {0}")]
+    TooLargePacket(usize),
 }
 
 #[derive(Debug, Error)]
@@ -142,6 +147,9 @@ where
                         .update(&this.rxbuf.0[..bs], &mut this.rxbuf.1)?;
 
                     let len = (&this.rxbuf.1[..4]).get_u32() as usize;
+                    if len + 4 + mac_length > MAXIMUM_PACKET_SIZE {
+                        return Poll::Ready(Some(Err(DecodeError::TooLargePacket(len + 4 + mac_length))))
+                    }
                     this.rxstate = DecryptState::FillRemaining { len };
                 }
                 DecryptState::FillRemaining { len } => {

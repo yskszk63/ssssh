@@ -141,7 +141,7 @@ impl State {
         self.ctos.comp = Compression::new(algorithm.compression_algorithm_c2s())?;
         self.stoc.comp = Compression::new(algorithm.compression_algorithm_s2c())?;
 
-        self.session_id = Some(hash.clone());
+        self.session_id = Some(session_id.clone());
         Ok(())
     }
 }
