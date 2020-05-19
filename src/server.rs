@@ -12,6 +12,7 @@ use tokio::stream::Stream;
 
 use crate::preference::Preference;
 use crate::{Accept, Connection};
+use crate::hostkey::GenError;
 
 #[derive(Debug, Error)]
 pub enum BuildError {
@@ -20,6 +21,9 @@ pub enum BuildError {
 
     #[error("unresolved")]
     Unresolved,
+
+    #[error(transparent)]
+    GenError(#[from] GenError)
 }
 
 #[derive(Debug, Default)]
@@ -32,6 +36,11 @@ impl Builder {
         Default::default()
     }
 
+    pub fn generate_hostkeys(&mut self) -> Result<&mut Self, BuildError> {
+        self.preference.hostkeys_mut().generate()?;
+        Ok(self)
+    }
+
     pub fn timeout(&mut self, timeout: Duration) -> &mut Self {
         *self.preference.timeout_mut() = Some(timeout);
         self
@@ -41,10 +50,11 @@ impl Builder {
     where
         A: ToSocketAddrs,
     {
-        // FIXME
-        (&mut self.preference)
-            .hostkeys_mut()
-            .insert(crate::hostkey::HostKey::gen("ssh-ed25519").unwrap());
+        if self.preference.hostkeys().names().is_empty() {
+            // Generate volatility hostkeys
+            // TODO log
+            self.generate_hostkeys()?;
+        }
 
         let addr = addr.to_socket_addrs().await?.next();
         if let Some(addr) = addr {

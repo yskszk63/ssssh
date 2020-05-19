@@ -35,7 +35,15 @@ impl HostKeys {
         self.hostkeys.keys().map(ToString::to_string).collect()
     }
 
-    // TODO implement gen and load public interface
+    pub(crate) fn generate(&mut self) -> Result<(), GenError> {
+        for name in &HostKey::defaults() {
+            let hostkey = HostKey::gen(name)?;
+            self.insert(hostkey);
+        }
+        Ok(())
+    }
+
+    // TODO implement load public interface
 }
 
 /// Sign by hostkey
@@ -86,7 +94,7 @@ impl Unpack for PublicKey {
 
 /// Hostkey generate error
 #[derive(Debug, Error)]
-pub(crate) enum GenError {
+pub enum GenError {
     #[error(transparent)]
     Err(#[from] Box<dyn StdError + Send + Sync + 'static>),
 
@@ -120,6 +128,11 @@ pub(crate) enum HostKey {
 }
 
 impl HostKey {
+    /// Supported hostkey algorithms
+    fn defaults() -> Vec<String> {
+        vec![ed25519::Ed25519::NAME.into(), rsa::Rsa::NAME.into()]
+    }
+
     /// Generate hostkey by algorithm name
     pub(crate) fn gen(name: &str) -> Result<Self, GenError> {
         Ok(match name {
