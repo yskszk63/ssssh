@@ -187,8 +187,14 @@ where
             Msg::ChannelRequest(msg) => self.on_channel_request(msg).await?,
             Msg::Disconnect(..) => *connected = false,
             Msg::Ignore(..) => {}
-            Msg::Unimplemented(..) => {}
-            x => warn!("UNHANDLED {:?}", x),
+            Msg::Unimplemented(..) => { }
+            x => {
+                warn!("UNHANDLED {:?}", x);
+
+                let last_seq = self.io.get_ref().state().ctos().seq();
+                let m = msg::unimplemented::Unimplemented::new(last_seq);
+                self.send(m).await?;
+            }
         }
 
         Ok(())

@@ -46,6 +46,10 @@ where
         }
     }
 
+    pub(crate) fn get_ref(&self) -> &BppStream<IO> {
+        &self.io
+    }
+
     pub(crate) fn get_mut(&mut self) -> &mut BppStream<IO> {
         &mut self.io
     }

@@ -53,6 +53,10 @@ impl OneWayState {
         self.seq += Wrapping(1);
         r.0
     }
+
+    pub(crate) fn seq(&self) -> u32 {
+        self.seq.0
+    }
 }
 
 fn compute_hash(

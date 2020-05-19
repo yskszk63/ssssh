@@ -1,6 +1,8 @@
+use derive_new::new;
+
 use super::*;
 
-#[derive(Debug)]
+#[derive(Debug, new)]
 pub(crate) struct Unimplemented {
     pkt_seq: u32,
 }

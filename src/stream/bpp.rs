@@ -100,6 +100,10 @@ where
         }
     }
 
+    pub(crate) fn state(&self) -> &State {
+        &self.state
+    }
+
     pub(crate) fn state_mut(&mut self) -> &mut State {
         &mut self.state
     }
