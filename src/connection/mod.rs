@@ -1,8 +1,8 @@
 use std::future::Future;
+use std::net::SocketAddr;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
-use std::net::SocketAddr;
 
 use bytes::BytesMut;
 use futures::ready;
@@ -16,8 +16,8 @@ use crate::stream::msg::MsgStream;
 pub use run::RunError;
 
 mod completion_stream;
-mod ssh_stdout;
 mod run;
+mod ssh_stdout;
 
 #[derive(Debug, Error)]
 pub enum AcceptError {
@@ -105,7 +105,12 @@ pub struct Connection<S> {
 
 impl Connection<Accept<TcpStream>> {
     pub fn remote_ip(&self) -> io::Result<SocketAddr> {
-        self.state.io.as_ref().expect("invalid state").get_ref().peer_addr()
+        self.state
+            .io
+            .as_ref()
+            .expect("invalid state")
+            .get_ref()
+            .peer_addr()
     }
 }
 

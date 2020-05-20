@@ -3,9 +3,8 @@ use std::time::Duration;
 use async_trait::async_trait;
 use futures::future::{BoxFuture, FutureExt as _, TryFutureExt as _};
 use futures::stream::TryStreamExt as _;
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt as _};
-
 use ssssh::{Handlers, PasswordResult, ServerBuilder};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 struct MyHandler;
 
@@ -33,7 +32,6 @@ impl Handlers for MyHandler {
         E: AsyncWrite + Send + Unpin + 'static,
     {
         async move {
-            stdout.write(b"Hello World!").await?;
             tokio::io::copy(&mut stdin, &mut stdout).await?;
             Ok(0)
         }
@@ -45,16 +43,16 @@ impl Handlers for MyHandler {
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    let mut builder = ServerBuilder::default();
-    builder.timeout(Duration::from_secs(5));
-    let mut server = builder.build("[::1]:2222").await?;
+    let mut server = ServerBuilder::default()
+        .timeout(Duration::from_secs(5))
+        .build("[::1]:2222")
+        .await?;
 
     while let Some(conn) = server.try_next().await? {
         tokio::spawn(
             async move {
                 let conn = conn.await?;
-                //conn.run(MyHandler).await?;
-                conn.run(MyHandler).await.unwrap();
+                conn.run(MyHandler).await?;
                 Ok::<_, anyhow::Error>(())
             }
             .map_err(|e| println!("{}", e)),

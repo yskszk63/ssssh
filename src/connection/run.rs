@@ -7,13 +7,13 @@ use futures::channel::mpsc;
 use futures::future::Either;
 use futures::future::TryFutureExt as _;
 use futures::sink::SinkExt as _;
+use futures::stream::Fuse;
 use futures::stream::StreamExt as _;
 use futures::stream::TryStreamExt as _;
-use futures::stream::Fuse;
+use log::{debug, error, warn};
 use thiserror::Error;
 use tokio::io::{self, AsyncRead, AsyncWrite};
 use tokio::time;
-use log::{error, warn, debug};
 
 use crate::handlers::{HandlerError, Handlers, PasswordResult};
 use crate::kex::KexError;
@@ -187,7 +187,7 @@ where
             Msg::ChannelRequest(msg) => self.on_channel_request(msg).await?,
             Msg::Disconnect(..) => *connected = false,
             Msg::Ignore(..) => {}
-            Msg::Unimplemented(..) => { }
+            Msg::Unimplemented(..) => {}
             x => {
                 warn!("UNHANDLED {:?}", x);
 

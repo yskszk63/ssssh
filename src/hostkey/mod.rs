@@ -1,5 +1,6 @@
 //! Hostkey algorithms
 use std::error::Error as StdError;
+use std::path::{Path, PathBuf};
 
 use bytes::{Buf, Bytes, BytesMut};
 use linked_hash_map::LinkedHashMap;
@@ -9,6 +10,51 @@ use crate::pack::{Pack, Put, Unpack, UnpackError};
 
 mod ed25519;
 mod rsa;
+
+#[derive(Debug)]
+enum BuilderOperation {
+    LoadFromDir(PathBuf),
+    LoadFromFile(String, PathBuf),
+    Generate,
+}
+
+#[derive(Debug, Default)]
+pub(crate) struct HostKeysBuilder {
+    operations: Vec<BuilderOperation>,
+}
+
+impl HostKeysBuilder {
+    pub(crate) fn load_from_file<P: AsRef<Path>>(&mut self, name: &str, path: P) -> &mut Self {
+        self.operations.push(BuilderOperation::LoadFromFile(
+            name.to_string(),
+            path.as_ref().to_path_buf(),
+        ));
+        self
+    }
+
+    pub(crate) fn load_from_dir<P: AsRef<Path>>(&mut self, dir: P) -> &mut Self {
+        self.operations
+            .push(BuilderOperation::LoadFromDir(dir.as_ref().to_path_buf()));
+        self
+    }
+
+    pub(crate) fn generate(&mut self) -> &mut Self {
+        self.operations.push(BuilderOperation::Generate);
+        self
+    }
+
+    pub(crate) fn build(&self) -> Result<HostKeys, GenError> {
+        let mut hostkeys = HostKeys::new();
+        for op in &self.operations {
+            match op {
+                BuilderOperation::LoadFromDir(_dir) => todo!(),
+                BuilderOperation::LoadFromFile(_alg, _path) => todo!(),
+                BuilderOperation::Generate => hostkeys.generate()?,
+            }
+        }
+        Ok(hostkeys)
+    }
+}
 
 /// HostKey collection
 #[derive(Debug)]

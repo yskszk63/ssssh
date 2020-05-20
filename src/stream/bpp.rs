@@ -152,7 +152,9 @@ where
 
                     let len = (&this.rxbuf.1[..4]).get_u32() as usize;
                     if len + 4 + mac_length > MAXIMUM_PACKET_SIZE {
-                        return Poll::Ready(Some(Err(DecodeError::TooLargePacket(len + 4 + mac_length))))
+                        return Poll::Ready(Some(Err(DecodeError::TooLargePacket(
+                            len + 4 + mac_length,
+                        ))));
                     }
                     this.rxstate = DecryptState::FillRemaining { len };
                 }

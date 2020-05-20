@@ -50,9 +50,10 @@ async fn main() -> anyhow::Result<()> {
         .spawn()
         .unwrap();
 
-    let mut builder = ServerBuilder::default();
-    builder.timeout(Duration::from_secs(5));
-    let mut server = builder.build("[::1]:2222").await?;
+    let mut server = ServerBuilder::default()
+        .timeout(Duration::from_secs(5))
+        .build("[::1]:2222")
+        .await?;
 
     if let Some(connection) = server.try_next().await? {
         let connection = connection.await?;

@@ -1,13 +1,13 @@
 use std::error::Error as StdError;
-use std::pin::Pin;
 use std::marker::PhantomData;
+use std::pin::Pin;
 use std::task::{Context, Poll};
 
 use bytes::Buf as _;
-use tokio::io::{self, AsyncWrite};
-use futures::sink::Sink;
-use futures::ready;
 use futures::channel::mpsc::SendError;
+use futures::ready;
+use futures::sink::Sink;
+use tokio::io::{self, AsyncWrite};
 
 use crate::msg::{self, Msg};
 
@@ -67,8 +67,7 @@ where
         mut buf: &[u8],
     ) -> Poll<Result<usize, io::Error>> {
         let this = self.get_mut();
-        ready!(Pin::new(&mut this.inner).poll_ready(cx))
-            .map_err(IntoIoError::into_io_error)?;
+        ready!(Pin::new(&mut this.inner).poll_ready(cx)).map_err(IntoIoError::into_io_error)?;
 
         let len = buf.len();
         let msg = if this.stdout {
@@ -96,8 +95,7 @@ where
 
     fn poll_shutdown(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), io::Error>> {
         let this = self.get_mut();
-        ready!(Pin::new(&mut this.inner).poll_ready(cx))
-            .map_err(IntoIoError::into_io_error)?;
+        ready!(Pin::new(&mut this.inner).poll_ready(cx)).map_err(IntoIoError::into_io_error)?;
 
         loop {
             match this.shutdown_state {
@@ -125,5 +123,3 @@ where
         }
     }
 }
-
-

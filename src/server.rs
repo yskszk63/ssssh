@@ -1,4 +1,5 @@
 use std::marker::PhantomData;
+use std::path::Path;
 use std::pin::Pin;
 use std::sync::Arc;
 use std::task::{Context, Poll};
@@ -10,9 +11,9 @@ use tokio::io;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::stream::Stream;
 
-use crate::preference::Preference;
-use crate::{Accept, Connection};
 use crate::hostkey::GenError;
+use crate::preference::{Preference, PreferenceBuilder};
+use crate::{Accept, Connection};
 
 #[derive(Debug, Error)]
 pub enum BuildError {
@@ -23,12 +24,12 @@ pub enum BuildError {
     Unresolved,
 
     #[error(transparent)]
-    GenError(#[from] GenError)
+    GenError(#[from] GenError),
 }
 
 #[derive(Debug, Default)]
 pub struct Builder {
-    preference: Preference,
+    preference: PreferenceBuilder,
 }
 
 impl Builder {
@@ -36,30 +37,61 @@ impl Builder {
         Default::default()
     }
 
-    pub fn generate_hostkeys(&mut self) -> Result<&mut Self, BuildError> {
-        self.preference.hostkeys_mut().generate()?;
-        Ok(self)
-    }
-
-    pub fn timeout(&mut self, timeout: Duration) -> &mut Self {
-        *self.preference.timeout_mut() = Some(timeout);
+    pub fn add_kex_algorithm(&mut self, name: &str) -> &mut Self {
+        self.preference.add_kex_algorithm(name);
         self
     }
 
-    pub async fn build<A>(mut self, addr: A) -> Result<Server<TcpListener, TcpStream>, BuildError>
+    pub fn add_encryption_algorithm(&mut self, name: &str) -> &mut Self {
+        self.preference.add_encryption_algorithm(name);
+        self
+    }
+
+    pub fn add_mac_algorithm(&mut self, name: &str) -> &mut Self {
+        self.preference.add_mac_algorithm(name);
+        self
+    }
+
+    pub fn add_compression_algorithm(&mut self, name: &str) -> &mut Self {
+        self.preference.add_compression_algorithm(name);
+        self
+    }
+
+    pub fn name(&mut self, name: &str) -> &mut Self {
+        self.preference.name(name);
+        self
+    }
+
+    pub fn hostkeys_from_dir<P: AsRef<Path>>(&mut self, dir: P) -> &mut Self {
+        self.preference.hostkeys_from_dir(dir);
+        self
+    }
+
+    pub fn hostkeys_from_path<P: AsRef<Path>>(&mut self, name: &str, file: P) -> &mut Self {
+        self.preference.hostkeys_from_path(name, file);
+        self
+    }
+
+    pub fn generate_hostkeys(&mut self) -> &mut Self {
+        self.preference.hostkeys_generate();
+        self
+    }
+
+    pub fn timeout(&mut self, timeout: Duration) -> &mut Self {
+        self.preference.timeout(timeout);
+        self
+    }
+
+    pub async fn build<A>(&self, addr: A) -> Result<Server<TcpListener, TcpStream>, BuildError>
     where
         A: ToSocketAddrs,
     {
-        if self.preference.hostkeys().names().is_empty() {
-            // Generate volatility hostkeys
-            // TODO log
-            self.generate_hostkeys()?;
-        }
+        let preference = self.preference.build()?;
+        let preference = Arc::new(preference);
 
         let addr = addr.to_socket_addrs().await?.next();
         if let Some(addr) = addr {
             let io = TcpListener::bind(addr).await?;
-            let preference = Arc::new(self.preference);
             Ok(Server {
                 io,
                 preference,
