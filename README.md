@@ -8,12 +8,13 @@ This is my hobby project.
 simple echo server
 
 ~~~rust
+use std::time::Duration;
+
 use async_trait::async_trait;
 use futures::future::{BoxFuture, FutureExt as _, TryFutureExt as _};
 use futures::stream::TryStreamExt as _;
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt as _};
-
 use ssssh::{Handlers, PasswordResult, ServerBuilder};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 struct MyHandler;
 
@@ -53,16 +54,15 @@ async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
     let mut server = ServerBuilder::default()
-        //.timeout(Duration::from_secs(5))
+        .timeout(Duration::from_secs(5))
         .build("[::1]:2222")
-        .await
-        .unwrap();
+        .await?;
+
     while let Some(conn) = server.try_next().await? {
         tokio::spawn(
             async move {
-                let conn = conn.await?;
-                //conn.run(MyHandler).await?;
-                conn.run(MyHandler).await.unwrap();
+                let conn = conn.accept().await?;
+                conn.run(MyHandler).await?;
                 Ok::<_, anyhow::Error>(())
             }
             .map_err(|e| println!("{}", e)),

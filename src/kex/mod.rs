@@ -161,8 +161,14 @@ mod tests {
 
         let hostkey = crate::hostkey::HostKey::gen("ssh-rsa").unwrap();
 
-        let c_kexinit = crate::preference::Preference::default().to_kexinit(0);
-        let s_kexinit = crate::preference::Preference::default().to_kexinit(0);
+        let c_kexinit = crate::preference::PreferenceBuilder::default()
+            .build()
+            .unwrap()
+            .to_kexinit(0);
+        let s_kexinit = crate::preference::PreferenceBuilder::default()
+            .build()
+            .unwrap()
+            .to_kexinit(0);
 
         let kex = assert(Kex::new("curve25519-sha256")).unwrap();
         let _ = assert(kex.kex(&mut io, "", "", &c_kexinit, &s_kexinit, &hostkey));

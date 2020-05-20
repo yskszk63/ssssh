@@ -56,7 +56,7 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     if let Some(connection) = server.try_next().await? {
-        let connection = connection.await?;
+        let connection = connection.accept().await?;
         connection.run(MyHandler).await?;
     }
     proc.await.unwrap();

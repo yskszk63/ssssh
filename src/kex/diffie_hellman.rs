@@ -128,8 +128,14 @@ mod tests {
 
         let hostkey = crate::hostkey::HostKey::gen("ssh-rsa").unwrap();
 
-        let c_kexinit = crate::preference::Preference::default().to_kexinit(0);
-        let s_kexinit = crate::preference::Preference::default().to_kexinit(0);
+        let c_kexinit = crate::preference::PreferenceBuilder::default()
+            .build()
+            .unwrap()
+            .to_kexinit(0);
+        let s_kexinit = crate::preference::PreferenceBuilder::default()
+            .build()
+            .unwrap()
+            .to_kexinit(0);
 
         let kex = assert(DiffieHellmanGroup14Sha1::new());
         let env = Env {

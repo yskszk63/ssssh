@@ -86,9 +86,8 @@ async fn main() -> anyhow::Result<()> {
     while let Some(conn) = server.try_next().await? {
         tokio::spawn(
             async move {
-                let conn = conn.await?;
-                //conn.run(MyHandler).await?;
-                conn.run(MyHandler).await.unwrap();
+                let conn = conn.accept().await?;
+                conn.run(MyHandler).await?;
                 Ok::<_, anyhow::Error>(())
             }
             .map_err(|e| println!("{}", e)),

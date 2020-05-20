@@ -1,13 +1,8 @@
-use std::future::Future;
 use std::net::SocketAddr;
-use std::pin::Pin;
 use std::sync::Arc;
-use std::task::{Context, Poll};
 
-use bytes::BytesMut;
-use futures::ready;
 use thiserror::Error;
-use tokio::io::{self, AsyncBufReadExt as _, AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{self, AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream;
 
 use crate::handlers::Handlers;
@@ -18,14 +13,15 @@ pub use run::RunError;
 mod completion_stream;
 mod run;
 mod ssh_stdout;
+mod version_ex;
 
 #[derive(Debug, Error)]
 pub enum AcceptError {
     #[error(transparent)]
     Io(#[from] io::Error),
 
-    #[error("invalid version string")]
-    InvalidVersion,
+    #[error("invalid version string: {0}")]
+    InvalidVersion(String),
 
     #[error("unexpected eof")]
     UnexpectedEof,
@@ -39,13 +35,7 @@ pub struct Accept<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
-    io: Option<BufStream<IO>>,
-    rxok: bool,
-    rxbuf: Vec<u8>,
-    txok: bool,
-    txbuf: BytesMut,
-    c_version: Option<String>,
-    s_version: String,
+    io: BufStream<IO>,
     preference: Arc<Preference>,
 }
 
@@ -54,15 +44,8 @@ where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
     pub(crate) fn new(io: IO, preference: Arc<Preference>) -> Self {
-        let s_version = format!("SSH-2.0-{}", preference.name());
         Accept {
-            io: Some(BufStream::new(io)),
-            rxok: false,
-            rxbuf: Vec::new(),
-            txok: false,
-            txbuf: BytesMut::from(&*format!("{}\r\n", s_version)),
-            c_version: None,
-            s_version,
+            io: BufStream::new(io),
             preference,
         }
     }
@@ -105,12 +88,7 @@ pub struct Connection<S> {
 
 impl Connection<Accept<TcpStream>> {
     pub fn remote_ip(&self) -> io::Result<SocketAddr> {
-        self.state
-            .io
-            .as_ref()
-            .expect("invalid state")
-            .get_ref()
-            .peer_addr()
+        self.state.io.get_ref().peer_addr()
     }
 }
 
@@ -122,58 +100,14 @@ where
         let state = Accept::new(io, preference);
         Self { state }
     }
-}
 
-impl<IO> Future for Connection<Accept<IO>>
-where
-    IO: AsyncRead + AsyncWrite + Unpin,
-{
-    type Output = Result<Connection<Established<IO>>, AcceptError>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let Self { state } = self.get_mut();
-
-        if !state.rxok {
-            let mut task = state
-                .io
-                .as_mut()
-                .expect("invalid state")
-                .read_until(b'\n', &mut state.rxbuf);
-            if matches!(Pin::new(&mut task).poll(cx)?, Poll::Ready(..)) {
-                if state.rxbuf.is_empty() {
-                    return Poll::Ready(Err(AcceptError::UnexpectedEof));
-                }
-                if !matches!(&state.rxbuf[..], [.., b'\r', b'\n']) {
-                    return Poll::Ready(Err(AcceptError::InvalidVersion));
-                }
-                let version = String::from_utf8_lossy(&state.rxbuf[..state.rxbuf.len() - 2]);
-                if !version.starts_with("SSH-2.0-") {
-                    return Poll::Ready(Err(AcceptError::InvalidVersion));
-                }
-                state.c_version = Some(version.to_string());
-                state.rxok = true
-            }
-        }
-
-        if !state.txok {
-            let mut io = state.io.as_mut().expect("invalid state");
-            ready!(Pin::new(&mut io).poll_write_buf(cx, &mut state.txbuf)?);
-            ready!(Pin::new(&mut io).poll_flush(cx)?);
-            state.txok = true
-        }
-
-        if state.txok && state.rxok {
-            Poll::Ready(Ok(Connection {
-                state: Established::new(
-                    state.io.take().unwrap(),
-                    state.c_version.clone().unwrap(),
-                    state.s_version.clone(),
-                    state.preference.clone(),
-                ),
-            }))
-        } else {
-            Poll::Pending
-        }
+    pub async fn accept(self) -> Result<Connection<Established<IO>>, AcceptError> {
+        let Accept { io, preference } = self.state;
+        let (c_version, s_version, io) =
+            version_ex::VersionExchange::new(io, preference.name().to_string()).await?;
+        Ok(Connection {
+            state: Established::new(io, c_version, s_version, preference),
+        })
     }
 }
 
