@@ -75,7 +75,6 @@ where
             return Poll::Pending;
         }
     };
-    println!("{:?}", state.buf);
 
     let result = match &state.buf[..] {
         [result @ .., b'\r', b'\n'] => result,
