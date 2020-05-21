@@ -209,6 +209,7 @@ where
         self.send(s_kexinit.clone()).await?;
 
         let algorithm = negotiate(&c_kexinit, &s_kexinit)?;
+        debug!("algorithm: {:?}", algorithm);
 
         let hostkey = self
             .preference
