@@ -116,7 +116,7 @@ where
     IO: AsyncRead + AsyncWrite + Unpin + Send,
 {
     pub fn client_version(&self) -> &str {
-        &self.c_version
+        &self.state.c_version
     }
 
     pub async fn run<H>(self, handler: H) -> Result<(), RunError>
