@@ -79,6 +79,10 @@ where
             preference,
         }
     }
+
+    pub fn client_version(&self) -> &str {
+        &self.c_version
+    }
 }
 
 #[derive(Debug)]
