@@ -70,6 +70,7 @@ fn to_msg_bytes(kexinit: &Kexinit) -> Bytes {
 pub(crate) enum Kex {
     Curve25519Sha256(curve25519::Curve25519Sha256),
     DiffieHellmanGroup14Sha1(diffie_hellman::DiffieHellmanGroup14Sha1),
+    DiffieHellmanGroupExchangeSha256(diffie_hellman::DiffieHellmanGroupExchangeSha256),
 }
 
 impl Kex {
@@ -77,6 +78,7 @@ impl Kex {
         vec![
             curve25519::Curve25519Sha256::NAME.to_string(),
             diffie_hellman::DiffieHellmanGroup14Sha1::NAME.to_string(),
+            diffie_hellman::DiffieHellmanGroupExchangeSha256::NAME.to_string(),
         ]
     }
 
@@ -86,6 +88,9 @@ impl Kex {
             Self::DiffieHellmanGroup14Sha1(..) => {
                 diffie_hellman::DiffieHellmanGroup14Sha1::hash(buf)
             }
+            Self::DiffieHellmanGroupExchangeSha256(..) => {
+                diffie_hellman::DiffieHellmanGroupExchangeSha256::hash(buf)
+            }
         }
     }
 
@@ -94,6 +99,9 @@ impl Kex {
             curve25519::Curve25519Sha256::NAME => curve25519::Curve25519Sha256::new().into(),
             diffie_hellman::DiffieHellmanGroup14Sha1::NAME => {
                 diffie_hellman::DiffieHellmanGroup14Sha1::new().into()
+            }
+            diffie_hellman::DiffieHellmanGroupExchangeSha256::NAME => {
+                diffie_hellman::DiffieHellmanGroupExchangeSha256::new().into()
             }
             v => return Err(KexError::UnknownKexAlgorithm(v.to_string())),
         })
@@ -124,6 +132,7 @@ impl Kex {
         Ok(match self {
             Self::Curve25519Sha256(item) => item.kex(io, env).await?,
             Self::DiffieHellmanGroup14Sha1(item) => item.kex(io, env).await?,
+            Self::DiffieHellmanGroupExchangeSha256(item) => item.kex(io, env).await?,
         })
     }
 }

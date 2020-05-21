@@ -130,6 +130,12 @@ impl Mpint {
     }
 }
 
+impl AsRef<[u8]> for Mpint {
+    fn as_ref(&self) -> &[u8] {
+        self.0.as_ref()
+    }
+}
+
 impl Pack for Mpint {
     fn pack<P: Put>(&self, buf: &mut P) {
         let (head, len) = if !self.0.is_empty() && self.0[0] & 0x80 != 0 {

@@ -5,6 +5,12 @@ pub(crate) struct Unknown {
     data: Bytes,
 }
 
+impl Unknown {
+    pub(super) fn new(data: Bytes) -> Self {
+        Self { data }
+    }
+}
+
 impl Pack for Unknown {
     fn pack<P: Put>(&self, buf: &mut P) {
         buf.put(&self.data);
