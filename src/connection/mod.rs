@@ -79,10 +79,6 @@ where
             preference,
         }
     }
-
-    pub fn client_version(&self) -> &str {
-        &self.c_version
-    }
 }
 
 #[derive(Debug)]
@@ -119,6 +115,10 @@ impl<IO> Connection<Established<IO>>
 where
     IO: AsyncRead + AsyncWrite + Unpin + Send,
 {
+    pub fn client_version(&self) -> &str {
+        &self.c_version
+    }
+
     pub async fn run<H>(self, handler: H) -> Result<(), RunError>
     where
         H: Handlers,
