@@ -32,9 +32,9 @@ pub(crate) struct Algorithm {
 }
 
 fn decide(l: &NameList, r: &NameList) -> Result<String, NegotiateError> {
-    let found = l
+    let found = r
         .iter()
-        .flat_map(|l| r.iter().filter(move |r| l == *r))
+        .flat_map(|r| l.iter().filter(move |l| r == *l))
         .next();
 
     found.map(ToOwned::to_owned).ok_or_else(|| {
