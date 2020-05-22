@@ -217,6 +217,8 @@ where
             .lookup(algorithm.server_host_key_algorithm())
             .unwrap();
         let kex = Kex::new(algorithm.kex_algorithm())?;
+
+        debug!("Begin kex.. {:?}", kex);
         let (hash, key) = kex
             .kex(
                 &mut self.io,
@@ -227,6 +229,7 @@ where
                 hostkey,
             )
             .await?;
+        debug!("Done kex. {:?}", kex);
 
         match self.io.try_next().await? {
             Some(Msg::NewKeys(..)) => {}
