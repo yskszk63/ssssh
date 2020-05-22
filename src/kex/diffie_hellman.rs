@@ -47,7 +47,7 @@ impl KexTrait for DiffieHellmanGroup14Sha1 {
         let e = kexdh_init.ephemeral_public_key();
         let e = BigNum::from_slice(e).unwrap();
 
-        let p = get_p();
+        let p = get_p(14);
         let y = gen_y();
         let g = get_g();
 
@@ -76,8 +76,18 @@ impl KexTrait for DiffieHellmanGroup14Sha1 {
     }
 }
 
-fn get_p() -> BigNum {
-    BigNum::get_rfc3526_prime_2048().unwrap()
+fn get_p(n: u32) -> BigNum {
+    match n {
+        1 => BigNum::get_rfc2409_prime_768(),
+        2 => BigNum::get_rfc2409_prime_1024(),
+        5 => BigNum::get_rfc3526_prime_1536(),
+        14 => BigNum::get_rfc3526_prime_2048(),
+        15 => BigNum::get_rfc3526_prime_3072(),
+        16 => BigNum::get_rfc3526_prime_4096(),
+        17 => BigNum::get_rfc3526_prime_6144(),
+        18 => BigNum::get_rfc3526_prime_8192(),
+        x => panic!("out of range {}", x),
+    }.unwrap()
 }
 
 fn get_g() -> BigNum {
@@ -143,7 +153,30 @@ impl KexTrait for DiffieHellmanGroupExchangeSha256 {
             Some(Err(e)) => return Err(e.into()),
             None => return Err(KexError::UnexpectedEof),
         };
-        let p = get_p();
+        let min = *kex_dh_gex_request.min();
+        let n = *kex_dh_gex_request.n();
+        let max = *kex_dh_gex_request.max();
+
+        let p = if (min..=max).contains(&8192) {
+            get_p(18)
+        } else if (min..=max).contains(&6144) {
+            get_p(17)
+        } else if (min..=max).contains(&4096) {
+            get_p(16)
+        } else if (min..=max).contains(&3072) {
+            get_p(15)
+        } else if (min..=max).contains(&2048) {
+            get_p(14)
+        } else if (min..=max).contains(&1536) {
+            get_p(5)
+        } else if (min..=max).contains(&1024) {
+            get_p(2)
+        } else if (min..=max).contains(&768) {
+            get_p(1)
+        } else {
+            todo!()
+        };
+
         let g = get_g();
 
         let group = KexDhGexGroup::new(Mpint::new(p.to_vec()), Mpint::new(g.to_vec()));
@@ -179,9 +212,9 @@ impl KexTrait for DiffieHellmanGroupExchangeSha256 {
 
         let h = compute_gax_hash(
             &env,
-            *kex_dh_gex_request.min(),
-            *kex_dh_gex_request.n(),
-            *kex_dh_gex_request.max(),
+            min,
+            n,
+            max,
             &Mpint::new(p.to_vec()),
             &Mpint::new(g.to_vec()),
             &Mpint::new(e.to_vec()),
