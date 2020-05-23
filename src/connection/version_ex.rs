@@ -48,6 +48,7 @@ impl<IO> VersionExchange<IO> {
 
 fn poll_recv<IO>(
     mut io: &mut IO,
+
     state: &mut RecvState,
     cx: &mut Context<'_>,
 ) -> Poll<Result<String, AcceptError>>
@@ -67,7 +68,7 @@ where
         Some(p) => {
             let p = p + 1;
             if p + state.buf.len() > 255 {
-                return Poll::Ready(Err(AcceptError::TooLong))
+                return Poll::Ready(Err(AcceptError::TooLong));
             }
             state.buf.extend_from_slice(&buf[..p]);
             Pin::new(&mut io).consume(p);
@@ -75,7 +76,7 @@ where
         None => {
             let n = buf.len();
             if n + state.buf.len() > 255 {
-                return Poll::Ready(Err(AcceptError::TooLong))
+                return Poll::Ready(Err(AcceptError::TooLong));
             }
             Pin::new(&mut io).consume(n);
             return Poll::Pending;
@@ -84,6 +85,7 @@ where
 
     let result = match &state.buf[..] {
         [result @ .., b'\r', b'\n'] => result,
+        [result @ .., b'\n'] => result, // for old libssh
         x => {
             return Poll::Ready(Err(AcceptError::InvalidVersion(
                 String::from_utf8_lossy(x).to_string(),

@@ -88,6 +88,7 @@ where
     outbound_channel_tx: mpsc::UnboundedSender<Msg>,
     outbound_channel_rx: Fuse<mpsc::UnboundedReceiver<Msg>>,
     completions: CompletionStream<Result<(), HandlerError>>,
+    first_kexinit: Option<msg::kexinit::Kexinit>,
 }
 
 impl<IO, H> Runner<IO, H>
@@ -104,6 +105,7 @@ where
     ) -> Self {
         let (tx, rx) = mpsc::unbounded();
         let rx = rx.fuse();
+
         Self {
             io,
             c_version,
@@ -114,6 +116,7 @@ where
             outbound_channel_tx: tx,
             outbound_channel_rx: rx,
             completions: CompletionStream::new(),
+            first_kexinit: None,
         }
     }
 
@@ -145,6 +148,10 @@ where
     }
 
     async fn r#loop(&mut self) -> Result<(), RunError> {
+        let first_kexinit = self.preference.to_kexinit();
+        self.send(first_kexinit.clone()).await?;
+        self.first_kexinit = Some(first_kexinit);
+
         let mut connected = true;
 
         while connected {
@@ -208,8 +215,13 @@ where
         use crate::msg::new_keys::NewKeys;
 
         let c_kexinit = kexinit;
-        let s_kexinit = self.preference.to_kexinit(*c_kexinit.cookie());
-        self.send(s_kexinit.clone()).await?;
+        let s_kexinit = if self.first_kexinit.is_some() {
+            self.first_kexinit.take().unwrap()
+        } else {
+            let s_kexinit = self.preference.to_kexinit();
+            self.send(s_kexinit.clone()).await?;
+            s_kexinit
+        };
 
         let algorithm = negotiate(&c_kexinit, &s_kexinit)?;
         debug!("algorithm: {:?}", algorithm);

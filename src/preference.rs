@@ -140,8 +140,17 @@ pub(crate) struct Preference {
     timeout: Option<Duration>,
 }
 
+fn generate_cookie() -> u128 {
+    use ring::rand::{SecureRandom as _, SystemRandom};
+    let mut cookie = 0u128.to_ne_bytes();
+    SystemRandom::new().fill(&mut cookie).unwrap();
+    u128::from_ne_bytes(cookie)
+}
+
 impl Preference {
-    pub(crate) fn to_kexinit(&self, cookie: u128) -> Kexinit {
+    pub(crate) fn to_kexinit(&self) -> Kexinit {
+        let cookie = generate_cookie();
+
         KexinitBuilder::default()
             .cookie(cookie)
             .kex_algorithms(self.kex_algorithms.clone().into_iter().collect())

@@ -87,7 +87,8 @@ fn get_p(n: u32) -> BigNum {
         17 => BigNum::get_rfc3526_prime_6144(),
         18 => BigNum::get_rfc3526_prime_8192(),
         x => panic!("out of range {}", x),
-    }.unwrap()
+    }
+    .unwrap()
 }
 
 fn get_g() -> BigNum {
