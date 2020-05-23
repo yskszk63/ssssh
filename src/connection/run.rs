@@ -49,8 +49,11 @@ pub enum RunError {
     #[error(transparent)]
     MpscSendError(#[from] mpsc::SendError),
 
-    #[error("unexpected error")]
-    Unexpected,
+    #[error("unexpected error {0}")]
+    UnexpectedMsg(String),
+
+    #[error("no packet received.")]
+    NoPacketReceived,
 }
 
 #[derive(Debug)]
@@ -233,7 +236,8 @@ where
 
         match self.io.try_next().await? {
             Some(Msg::NewKeys(..)) => {}
-            _ => return Err(RunError::Unexpected),
+            Some(msg) => return Err(RunError::UnexpectedMsg(format!("{:?}", msg))),
+            None => return Err(RunError::NoPacketReceived),
         };
         self.send(NewKeys::new()).await?;
 
