@@ -24,7 +24,7 @@ pub enum AcceptError {
     #[error("invalid version string: {0:?}")]
     InvalidVersion(String),
 
-    #[error("unexpected eof")]
+    #[error("unexpected eof {0:?}")]
     UnexpectedEof(BytesMut),
 }
 
