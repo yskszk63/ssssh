@@ -66,11 +66,17 @@ where
     match buf.iter().position(|b| *b == b'\n') {
         Some(p) => {
             let p = p + 1;
+            if p + state.buf.len() > 255 {
+                return Poll::Ready(Err(AcceptError::TooLong))
+            }
             state.buf.extend_from_slice(&buf[..p]);
             Pin::new(&mut io).consume(p);
         }
         None => {
             let n = buf.len();
+            if n + state.buf.len() > 255 {
+                return Poll::Ready(Err(AcceptError::TooLong))
+            }
             Pin::new(&mut io).consume(n);
             return Poll::Pending;
         }

@@ -26,6 +26,9 @@ pub enum AcceptError {
 
     #[error("unexpected eof {0:?}")]
     UnexpectedEof(BytesMut),
+
+    #[error("too long version identifier")]
+    TooLong,
 }
 
 /// Protocol Version Exchange
