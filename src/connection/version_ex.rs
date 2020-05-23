@@ -60,7 +60,7 @@ where
 
     let buf = ready!(Pin::new(&mut io).poll_fill_buf(cx))?;
     if buf.is_empty() {
-        return Poll::Ready(Err(AcceptError::UnexpectedEof));
+        return Poll::Ready(Err(AcceptError::UnexpectedEof(state.buf.clone())));
     }
 
     match buf.iter().position(|b| *b == b'\n') {

@@ -1,6 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use bytes::BytesMut;
 use thiserror::Error;
 use tokio::io::{self, AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream;
@@ -20,11 +21,11 @@ pub enum AcceptError {
     #[error(transparent)]
     Io(#[from] io::Error),
 
-    #[error("invalid version string: {0}")]
+    #[error("invalid version string: {0:?}")]
     InvalidVersion(String),
 
     #[error("unexpected eof")]
-    UnexpectedEof,
+    UnexpectedEof(BytesMut),
 }
 
 /// Protocol Version Exchange
