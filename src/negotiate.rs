@@ -119,7 +119,7 @@ mod tests {
         assert_eq!(r, Ok("a".into()));
 
         let r = decide(&list(["a", "b"]), &list(["b", "a"]));
-        assert_eq!(r, Ok("a".into()));
+        assert_eq!(r, Ok("b".into()));
 
         let r = decide(&list(["a"]), &list(["b", "c"]));
         assert!(matches!(r, Err(NegotiateError::NotMatched(..))));
