@@ -1,6 +1,6 @@
 use std::num::Wrapping;
 
-use bytes::{BufMut as _, Bytes, BytesMut};
+use bytes::{Bytes, BytesMut};
 use getset::{Getters, MutGetters};
 use thiserror::Error;
 
@@ -9,7 +9,7 @@ use crate::encrypt::{Encrypt, EncryptError};
 use crate::kex::Kex;
 use crate::mac::{Mac, MacError};
 use crate::negotiate::Algorithm;
-use crate::pack::{Mpint, Pack};
+use crate::pack::{Mpint, Pack, Put};
 
 #[derive(Debug, Error)]
 pub enum ChangeKeyError {
@@ -69,20 +69,20 @@ fn compute_hash(
 ) -> Bytes {
     let mut result = BytesMut::new();
 
-    let mut buf = BytesMut::new();
-    Mpint::new(key.clone()).pack(&mut buf);
-    buf.put_slice(hash);
-    buf.put_u8(kind);
-    buf.put_slice(session_id);
-    result.put_slice(&kex.hash(&buf));
+    let mut hasher = kex.hasher();
+    Mpint::new(key.clone()).pack(&mut hasher);
+    hasher.put(hash);
+    kind.pack(&mut hasher);
+    hasher.put(session_id);
+    result.extend_from_slice(&hasher.finish());
 
     while result.len() < len {
         let last = result.clone().freeze();
-        let mut buf = BytesMut::new();
-        Mpint::new(key.clone()).pack(&mut buf);
-        buf.put_slice(hash);
-        buf.put_slice(&last);
-        result.put_slice(&kex.hash(&buf));
+        let mut hasher = kex.hasher();
+        Mpint::new(key.clone()).pack(&mut hasher);
+        hasher.put(hash);
+        hasher.put(&last);
+        result.extend_from_slice(&hasher.finish());
     }
 
     result.freeze().split_to(len)

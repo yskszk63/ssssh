@@ -1,6 +1,5 @@
 use futures::sink::SinkExt as _;
 use ring::agreement::{agree_ephemeral, EphemeralPrivateKey, PublicKey, UnparsedPublicKey, X25519};
-use ring::digest::{digest, SHA256};
 use ring::error::Unspecified;
 use ring::rand::SystemRandom;
 use tokio::stream::StreamExt as _;
@@ -21,9 +20,8 @@ impl KexTrait for Curve25519Sha256 {
         Self {}
     }
 
-    fn hash<B: Buf>(buf: &B) -> Bytes {
-        let hash = digest(&SHA256, buf.bytes());
-        hash.as_ref().to_bytes()
+    fn hasher() -> Hasher {
+        Hasher::sha256()
     }
 
     async fn kex<IO>(
@@ -34,6 +32,14 @@ impl KexTrait for Curve25519Sha256 {
     where
         IO: AsyncRead + AsyncWrite + Unpin + Send,
     {
+        let mut hasher = Self::hasher();
+
+        env.c_version.pack(&mut hasher);
+        env.s_version.pack(&mut hasher);
+        env.c_kexinit.pack(&mut hasher);
+        env.s_kexinit.pack(&mut hasher);
+        env.hostkey.publickey().pack(&mut hasher);
+
         let kex_ecdh_init = match io.next().await {
             Some(Ok(Msg::KexEcdhInit(msg))) => msg,
             Some(Ok(msg)) => return Err(KexError::UnexpectedMsg(format!("{:?}", msg))),
@@ -44,8 +50,11 @@ impl KexTrait for Curve25519Sha256 {
         let client_ephemeral_public_key = kex_ecdh_init.ephemeral_public_key();
         let client_ephemeral_public_key =
             UnparsedPublicKey::new(&X25519, client_ephemeral_public_key);
+        Bytes::from(client_ephemeral_public_key.clone().bytes().to_vec()).pack(&mut hasher);
 
         let (server_ephemeral_private_key, server_ephemeral_public_key) = gen_keypair()?;
+        Bytes::from(server_ephemeral_public_key.as_ref().to_vec()).pack(&mut hasher);
+
         let key = agree_ephemeral(
             server_ephemeral_private_key,
             &client_ephemeral_public_key,
@@ -53,13 +62,9 @@ impl KexTrait for Curve25519Sha256 {
             |mut e| Ok(e.to_bytes()),
         )
         .map_err(|e| KexError::Any(e.to_string()))?;
+        Mpint::new(key.clone()).pack(&mut hasher);
 
-        let hash = compute_hash(
-            &env,
-            client_ephemeral_public_key.bytes(),
-            server_ephemeral_public_key.as_ref(),
-            &key,
-        );
+        let hash = hasher.finish();
 
         let signature = env.hostkey.sign(&hash);
 
@@ -83,25 +88,6 @@ fn gen_keypair() -> Result<(EphemeralPrivateKey, PublicKey), KexError> {
         .compute_public_key()
         .map_err(|e| KexError::Any(e.to_string()))?;
     Ok((private, public))
-}
-
-fn compute_hash(
-    env: &Env<'_>,
-    mut c_ephemeral: &[u8],
-    mut s_ephemeral: &[u8],
-    mut shared_key: &[u8],
-) -> Bytes {
-    let mut buf = BytesMut::new();
-    env.c_version.pack(&mut buf);
-    env.s_version.pack(&mut buf);
-    env.c_kexinit.pack(&mut buf);
-    env.s_kexinit.pack(&mut buf);
-    env.hostkey.publickey().pack(&mut buf);
-    c_ephemeral.to_bytes().pack(&mut buf);
-    s_ephemeral.to_bytes().pack(&mut buf);
-    Mpint::new(shared_key.to_bytes()).pack(&mut buf);
-
-    Curve25519Sha256::hash(&buf)
 }
 
 impl From<Curve25519Sha256> for Kex {
@@ -134,11 +120,11 @@ mod tests {
         let c_kexinit = crate::preference::PreferenceBuilder::default()
             .build()
             .unwrap()
-            .to_kexinit(0);
+            .to_kexinit();
         let s_kexinit = crate::preference::PreferenceBuilder::default()
             .build()
             .unwrap()
-            .to_kexinit(0);
+            .to_kexinit();
 
         let kex = assert(Curve25519Sha256::new());
         let env = Env {

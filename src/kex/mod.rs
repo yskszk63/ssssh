@@ -3,6 +3,7 @@ use bytes::{Buf, Bytes, BytesMut};
 use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite};
 
+use crate::hash::Hasher;
 use crate::hostkey::HostKey;
 use crate::msg::kexinit::Kexinit;
 use crate::msg::Msg;
@@ -48,7 +49,7 @@ trait KexTrait: Sized + Into<Kex> {
 
     fn new() -> Self;
 
-    fn hash<B: Buf>(buf: &B) -> Bytes;
+    fn hasher() -> Hasher;
 
     async fn kex<IO>(
         &self,
@@ -82,14 +83,14 @@ impl Kex {
         ]
     }
 
-    pub(crate) fn hash<B: Buf>(&self, buf: &B) -> Bytes {
+    pub(crate) fn hasher(&self) -> Hasher {
         match self {
-            Self::Curve25519Sha256(..) => curve25519::Curve25519Sha256::hash(buf),
+            Self::Curve25519Sha256(..) => curve25519::Curve25519Sha256::hasher(),
             Self::DiffieHellmanGroup14Sha1(..) => {
-                diffie_hellman::DiffieHellmanGroup14Sha1::hash(buf)
+                diffie_hellman::DiffieHellmanGroup14Sha1::hasher()
             }
             Self::DiffieHellmanGroupExchangeSha256(..) => {
-                diffie_hellman::DiffieHellmanGroupExchangeSha256::hash(buf)
+                diffie_hellman::DiffieHellmanGroupExchangeSha256::hasher()
             }
         }
     }
@@ -173,11 +174,11 @@ mod tests {
         let c_kexinit = crate::preference::PreferenceBuilder::default()
             .build()
             .unwrap()
-            .to_kexinit(0);
+            .to_kexinit();
         let s_kexinit = crate::preference::PreferenceBuilder::default()
             .build()
             .unwrap()
-            .to_kexinit(0);
+            .to_kexinit();
 
         let kex = assert(Kex::new("curve25519-sha256")).unwrap();
         let _ = assert(kex.kex(&mut io, "", "", &c_kexinit, &s_kexinit, &hostkey));

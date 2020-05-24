@@ -1,6 +1,5 @@
 use futures::sink::SinkExt as _;
 use openssl::bn::{BigNum, BigNumContext, MsbOption};
-use ring::digest::{digest, SHA1_FOR_LEGACY_USE_ONLY as SHA1, SHA256};
 use tokio::stream::StreamExt as _;
 
 use crate::msg::kex_dh_gex_group::KexDhGexGroup;
@@ -22,9 +21,8 @@ impl KexTrait for DiffieHellmanGroup14Sha1 {
         Self {}
     }
 
-    fn hash<B: Buf>(buf: &B) -> Bytes {
-        let hash = digest(&SHA1, buf.bytes());
-        hash.as_ref().to_bytes()
+    fn hasher() -> Hasher {
+        Hasher::sha1()
     }
 
     #[allow(clippy::many_single_char_names)]
@@ -36,6 +34,13 @@ impl KexTrait for DiffieHellmanGroup14Sha1 {
     where
         IO: AsyncRead + AsyncWrite + Unpin + Send,
     {
+        let mut hasher = Self::hasher();
+        env.c_version.pack(&mut hasher);
+        env.s_version.pack(&mut hasher);
+        env.c_kexinit.pack(&mut hasher);
+        env.s_kexinit.pack(&mut hasher);
+        env.hostkey.publickey().pack(&mut hasher);
+
         // FIXME use kexdh_init
         let kexdh_init = match io.next().await {
             Some(Ok(Msg::KexEcdhInit(msg))) => msg,
@@ -45,6 +50,7 @@ impl KexTrait for DiffieHellmanGroup14Sha1 {
         };
 
         let e = kexdh_init.ephemeral_public_key();
+        e.pack(&mut hasher);
         let e = BigNum::from_slice(e).unwrap();
 
         let p = get_p(14);
@@ -58,13 +64,16 @@ impl KexTrait for DiffieHellmanGroup14Sha1 {
         if f[0] & 0x80 != 0 {
             f.insert(0, 0);
         }
+        let f = Bytes::from(f);
+        f.clone().pack(&mut hasher);
 
         let mut ctx = BigNumContext::new().unwrap();
         let mut k = BigNum::new().unwrap();
         k.mod_exp(&e, &y, &p, &mut ctx).unwrap();
-        let k = k.to_vec();
+        let k = Bytes::from(k.to_vec());
+        Mpint::new(k.clone()).pack(&mut hasher);
 
-        let h = compute_hash(&env, kexdh_init.ephemeral_public_key(), &f, &k);
+        let h = hasher.finish();
 
         let signature = env.hostkey.sign(&h);
 
@@ -101,20 +110,6 @@ fn gen_y() -> BigNum {
     y
 }
 
-fn compute_hash(env: &Env<'_>, mut e: &[u8], mut f: &[u8], mut k: &[u8]) -> Bytes {
-    let mut buf = BytesMut::new();
-    env.c_version.pack(&mut buf);
-    env.s_version.pack(&mut buf);
-    env.c_kexinit.pack(&mut buf);
-    env.s_kexinit.pack(&mut buf);
-    env.hostkey.publickey().pack(&mut buf);
-    e.to_bytes().pack(&mut buf);
-    f.to_bytes().pack(&mut buf);
-    Mpint::new(k.to_bytes()).pack(&mut buf);
-
-    DiffieHellmanGroup14Sha1::hash(&buf)
-}
-
 impl From<DiffieHellmanGroup14Sha1> for Kex {
     fn from(v: DiffieHellmanGroup14Sha1) -> Self {
         Self::DiffieHellmanGroup14Sha1(v)
@@ -132,9 +127,8 @@ impl KexTrait for DiffieHellmanGroupExchangeSha256 {
         Self {}
     }
 
-    fn hash<B: Buf>(buf: &B) -> Bytes {
-        let hash = digest(&SHA256, buf.bytes());
-        hash.as_ref().to_bytes()
+    fn hasher() -> Hasher {
+        Hasher::sha256()
     }
 
     #[allow(clippy::many_single_char_names)]
@@ -147,20 +141,30 @@ impl KexTrait for DiffieHellmanGroupExchangeSha256 {
         IO: AsyncRead + AsyncWrite + Unpin + Send,
     {
         let mut io = io.context::<GexMsg>();
+        let mut hasher = Self::hasher();
 
-        let (min, n, max) = match io.next().await {
+        env.c_version.pack(&mut hasher);
+        env.s_version.pack(&mut hasher);
+        env.c_kexinit.pack(&mut hasher);
+        env.s_kexinit.pack(&mut hasher);
+        env.hostkey.publickey().pack(&mut hasher);
+
+        let range = match io.next().await {
             Some(Ok(GexMsg::KexDhGexRequestOld(msg))) => {
-                (None, *msg.n(), None)
+                msg.n().pack(&mut hasher);
+                *msg.n()..=*msg.n()
             }
             Some(Ok(GexMsg::KexDhGexRequest(msg))) => {
-                (Some(*msg.min()), *msg.n(), Some(*msg.max()))
+                msg.min().pack(&mut hasher);
+                msg.n().pack(&mut hasher);
+                msg.max().pack(&mut hasher);
+                *msg.min()..=*msg.max()
             }
             Some(Ok(msg)) => return Err(KexError::UnexpectedMsg(format!("{:?}", msg))),
             Some(Err(e)) => return Err(e.into()),
             None => return Err(KexError::UnexpectedEof),
         };
 
-        let range = min.unwrap_or(n)..=max.unwrap_or(n);
         let p = if range.contains(&8192) {
             get_p(18)
         } else if range.contains(&6144) {
@@ -180,8 +184,10 @@ impl KexTrait for DiffieHellmanGroupExchangeSha256 {
         } else {
             todo!()
         };
+        Mpint::new(p.to_vec()).pack(&mut hasher);
 
         let g = get_g();
+        Mpint::new(g.to_vec()).pack(&mut hasher);
 
         let group = KexDhGexGroup::new(Mpint::new(p.to_vec()), Mpint::new(g.to_vec()));
         io.send(group.into()).await?;
@@ -194,6 +200,7 @@ impl KexTrait for DiffieHellmanGroupExchangeSha256 {
         };
 
         let e = kex_dh_gex_init.e();
+        e.pack(&mut hasher);
         let e = BigNum::from_slice(e.as_ref()).unwrap();
 
         let y = gen_y();
@@ -205,6 +212,7 @@ impl KexTrait for DiffieHellmanGroupExchangeSha256 {
         if f[0] & 0x80 != 0 {
             f.insert(0, 0);
         }
+        Mpint::new(f.clone()).pack(&mut hasher);
 
         let mut ctx = BigNumContext::new().unwrap();
         let mut k = BigNum::new().unwrap();
@@ -213,18 +221,9 @@ impl KexTrait for DiffieHellmanGroupExchangeSha256 {
         if k[0] & 0x80 != 0 {
             k.insert(0, 0);
         }
+        Mpint::new(k.clone()).pack(&mut hasher);
 
-        let h = compute_gax_hash(
-            &env,
-            min,
-            n,
-            max,
-            &Mpint::new(p.to_vec()),
-            &Mpint::new(g.to_vec()),
-            &Mpint::new(e.to_vec()),
-            &Mpint::new(f.to_vec()),
-            &Mpint::new(k.to_vec()),
-        );
+        let h = hasher.finish();
 
         let signature = env.hostkey.sign(&h);
 
@@ -239,39 +238,6 @@ impl From<DiffieHellmanGroupExchangeSha256> for Kex {
     fn from(v: DiffieHellmanGroupExchangeSha256) -> Self {
         Self::DiffieHellmanGroupExchangeSha256(v)
     }
-}
-
-fn compute_gax_hash(
-    env: &Env<'_>,
-    min: Option<u32>,
-    n: u32,
-    max: Option<u32>,
-    p: &Mpint,
-    g: &Mpint,
-    e: &Mpint,
-    f: &Mpint,
-    k: &Mpint,
-) -> Bytes {
-    let mut buf = BytesMut::new();
-    env.c_version.pack(&mut buf);
-    env.s_version.pack(&mut buf);
-    env.c_kexinit.pack(&mut buf);
-    env.s_kexinit.pack(&mut buf);
-    env.hostkey.publickey().pack(&mut buf);
-    if let Some(min) = min {
-        min.pack(&mut buf);
-    }
-    n.pack(&mut buf);
-    if let Some(max) = max {
-        max.pack(&mut buf);
-    }
-    p.pack(&mut buf);
-    g.pack(&mut buf);
-    e.pack(&mut buf);
-    f.pack(&mut buf);
-    k.pack(&mut buf);
-
-    DiffieHellmanGroupExchangeSha256::hash(&buf)
 }
 
 #[cfg(test)]

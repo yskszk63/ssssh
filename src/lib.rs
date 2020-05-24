@@ -6,6 +6,7 @@ mod comp;
 mod connection;
 mod encrypt;
 mod handlers;
+mod hash;
 mod hostkey;
 mod kex;
 mod mac;
