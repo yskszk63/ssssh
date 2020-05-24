@@ -148,31 +148,34 @@ impl KexTrait for DiffieHellmanGroupExchangeSha256 {
     {
         let mut io = io.context::<GexMsg>();
 
-        let kex_dh_gex_request = match io.next().await {
-            Some(Ok(GexMsg::KexDhGexRequest(msg))) => msg,
+        let (min, n, max) = match io.next().await {
+            Some(Ok(GexMsg::KexDhGexRequestOld(msg))) => {
+                (None, *msg.n(), None)
+            }
+            Some(Ok(GexMsg::KexDhGexRequest(msg))) => {
+                (Some(*msg.min()), *msg.n(), Some(*msg.max()))
+            }
             Some(Ok(msg)) => return Err(KexError::UnexpectedMsg(format!("{:?}", msg))),
             Some(Err(e)) => return Err(e.into()),
             None => return Err(KexError::UnexpectedEof),
         };
-        let min = *kex_dh_gex_request.min();
-        let n = *kex_dh_gex_request.n();
-        let max = *kex_dh_gex_request.max();
 
-        let p = if (min..=max).contains(&8192) {
+        let range = min.unwrap_or(n)..=max.unwrap_or(n);
+        let p = if range.contains(&8192) {
             get_p(18)
-        } else if (min..=max).contains(&6144) {
+        } else if range.contains(&6144) {
             get_p(17)
-        } else if (min..=max).contains(&4096) {
+        } else if range.contains(&4096) {
             get_p(16)
-        } else if (min..=max).contains(&3072) {
+        } else if range.contains(&3072) {
             get_p(15)
-        } else if (min..=max).contains(&2048) {
+        } else if range.contains(&2048) {
             get_p(14)
-        } else if (min..=max).contains(&1536) {
+        } else if range.contains(&1536) {
             get_p(5)
-        } else if (min..=max).contains(&1024) {
+        } else if range.contains(&1024) {
             get_p(2)
-        } else if (min..=max).contains(&768) {
+        } else if range.contains(&768) {
             get_p(1)
         } else {
             todo!()
@@ -240,9 +243,9 @@ impl From<DiffieHellmanGroupExchangeSha256> for Kex {
 
 fn compute_gax_hash(
     env: &Env<'_>,
-    min: u32,
+    min: Option<u32>,
     n: u32,
-    max: u32,
+    max: Option<u32>,
     p: &Mpint,
     g: &Mpint,
     e: &Mpint,
@@ -255,9 +258,13 @@ fn compute_gax_hash(
     env.c_kexinit.pack(&mut buf);
     env.s_kexinit.pack(&mut buf);
     env.hostkey.publickey().pack(&mut buf);
-    min.pack(&mut buf);
+    if let Some(min) = min {
+        min.pack(&mut buf);
+    }
     n.pack(&mut buf);
-    max.pack(&mut buf);
+    if let Some(max) = max {
+        max.pack(&mut buf);
+    }
     p.pack(&mut buf);
     g.pack(&mut buf);
     e.pack(&mut buf);
@@ -291,11 +298,11 @@ mod tests {
         let c_kexinit = crate::preference::PreferenceBuilder::default()
             .build()
             .unwrap()
-            .to_kexinit(0);
+            .to_kexinit();
         let s_kexinit = crate::preference::PreferenceBuilder::default()
             .build()
             .unwrap()
-            .to_kexinit(0);
+            .to_kexinit();
 
         let kex = assert(DiffieHellmanGroup14Sha1::new());
         let env = Env {
