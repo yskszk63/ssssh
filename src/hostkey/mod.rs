@@ -129,12 +129,14 @@ trait VerifierTrait: Sized {
 #[derive(Debug)]
 pub(crate) enum Verifier {
     Ed25519(ed25519::Ed25519Verifier),
+    Rsa(rsa::RsaVerifier),
 }
 
 impl Verifier {
     fn new(name: &str, pk: &[u8]) -> Result<Self, GenError> {
         Ok(match name {
             ed25519::Ed25519Verifier::NAME => Self::Ed25519(ed25519::Ed25519Verifier::new(pk)),
+            rsa::RsaVerifier::NAME => Self::Rsa(rsa::RsaVerifier::new(pk)),
             x => return Err(GenError::UnknownHostkeyAlgorithm(x.to_string())), // FIXME
         })
     }
@@ -142,6 +144,7 @@ impl Verifier {
     pub(crate) fn verify(&self, signature: &Signature) -> bool {
         match self {
             Self::Ed25519(item) => item.verify(&signature.1),
+            Self::Rsa(item) => item.verify(&signature.1),
         }
     }
 }
@@ -150,6 +153,7 @@ impl Put for Verifier {
     fn put(&mut self, src: &[u8]) {
         match self {
             Self::Ed25519(item) => item.update(src),
+            Self::Rsa(item) => item.update(src),
         }
     }
 }

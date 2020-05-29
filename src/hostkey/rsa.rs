@@ -1,7 +1,11 @@
+use std::fmt;
+
+use openssl::bn::BigNum;
 use openssl::hash::MessageDigest;
-use openssl::pkey::{PKey, Private};
+use openssl::pkey::{PKey, Private, Public};
 use openssl::rsa::{Padding, Rsa as OpenSslRsa};
 use openssl::sign::Signer;
+use openssl::sign::Verifier;
 
 use super::*;
 use crate::pack::Mpint;
@@ -39,5 +43,50 @@ impl HostKeyTrait for Rsa {
 impl From<Rsa> for HostKey {
     fn from(v: Rsa) -> Self {
         Self::Rsa(v)
+    }
+}
+
+pub(crate) struct RsaVerifier {
+    key: PKey<Public>,
+    buf: BytesMut,
+}
+
+impl VerifierTrait for RsaVerifier {
+    const NAME: &'static str = "ssh-rsa";
+
+    fn new(pk: &[u8]) -> Self {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(pk);
+
+        let e = Bytes::unpack(&mut buf).unwrap();
+        let n = Bytes::unpack(&mut buf).unwrap();
+
+        let e = BigNum::from_slice(&e).unwrap();
+        let n = BigNum::from_slice(&n).unwrap();
+
+        let key = OpenSslRsa::from_public_components(n, e).unwrap();
+        let key = PKey::from_rsa(key).unwrap();
+
+        Self {
+            key,
+            buf: BytesMut::new(),
+        }
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        self.buf.extend_from_slice(data);
+    }
+
+    fn verify(&self, signature: &[u8]) -> bool {
+        let mut verifier = Verifier::new(MessageDigest::sha1(), &self.key).unwrap();
+        verifier.set_rsa_padding(Padding::PKCS1).unwrap();
+        verifier.update(&self.buf).unwrap();
+        verifier.verify(signature).unwrap()
+    }
+}
+
+impl fmt::Debug for RsaVerifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "RsaVerifier")
     }
 }
