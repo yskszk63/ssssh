@@ -110,6 +110,10 @@ impl State {
         }
     }
 
+    pub(crate) fn session_id(&self) -> &[u8] {
+        self.session_id.as_ref().unwrap()
+    }
+
     pub(crate) fn change_key(
         &mut self,
         hash: &Bytes,

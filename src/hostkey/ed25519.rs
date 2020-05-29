@@ -1,6 +1,8 @@
+use std::fmt;
+
 use bytes::buf::Buf as _;
 use ring::rand::SystemRandom;
-use ring::signature::{Ed25519KeyPair, KeyPair as _};
+use ring::signature::{Ed25519KeyPair, KeyPair as _, UnparsedPublicKey, ED25519};
 
 use super::*;
 
@@ -35,5 +37,39 @@ impl HostKeyTrait for Ed25519 {
 impl From<Ed25519> for HostKey {
     fn from(v: Ed25519) -> Self {
         Self::Ed25519(v)
+    }
+}
+
+pub(crate) struct Ed25519Verifier {
+    pk: UnparsedPublicKey<Bytes>,
+    buf: BytesMut,
+}
+
+impl VerifierTrait for Ed25519Verifier {
+    const NAME: &'static str = "ssh-ed25519";
+
+    fn new(pk: &[u8]) -> Self {
+        let mut buf = BytesMut::new();
+        buf.extend_from_slice(pk);
+        let pk = Bytes::unpack(&mut buf).unwrap();
+        let pk = UnparsedPublicKey::new(&ED25519, pk);
+        Self {
+            pk,
+            buf: BytesMut::new(),
+        }
+    }
+
+    fn update(&mut self, data: &[u8]) {
+        self.buf.extend_from_slice(data);
+    }
+
+    fn verify(&self, signature: &[u8]) -> bool {
+        self.pk.verify(&self.buf, signature).is_ok()
+    }
+}
+
+impl fmt::Debug for Ed25519Verifier {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "ED25519Verifier")
     }
 }

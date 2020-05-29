@@ -15,6 +15,17 @@ impl Handlers for MyHandler {
     type Err = anyhow::Error;
 
     async fn handle_auth_none(&mut self, _username: &str) -> Result<bool, Self::Err> {
+        //Ok(true)
+        Ok(false)
+    }
+
+    async fn handle_auth_publickey(
+        &mut self,
+        username: &str,
+        algorithm: &str,
+        publickey: &[u8],
+    ) -> Result<bool, Self::Err> {
+        println!("PUBLICKEY {} {} {:?}", username, algorithm, publickey);
         Ok(true)
     }
 

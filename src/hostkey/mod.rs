@@ -1,4 +1,5 @@
 //! Hostkey algorithms
+// TODO module name
 use std::error::Error as StdError;
 use std::path::{Path, PathBuf};
 
@@ -115,9 +116,53 @@ impl Unpack for Signature {
     }
 }
 
+trait VerifierTrait: Sized {
+    const NAME: &'static str;
+
+    fn new(pk: &[u8]) -> Self;
+
+    fn update(&mut self, data: &[u8]);
+
+    fn verify(&self, signature: &[u8]) -> bool;
+}
+
+#[derive(Debug)]
+pub(crate) enum Verifier {
+    Ed25519(ed25519::Ed25519Verifier),
+}
+
+impl Verifier {
+    fn new(name: &str, pk: &[u8]) -> Result<Self, GenError> {
+        Ok(match name {
+            ed25519::Ed25519Verifier::NAME => Self::Ed25519(ed25519::Ed25519Verifier::new(pk)),
+            x => return Err(GenError::UnknownHostkeyAlgorithm(x.to_string())), // FIXME
+        })
+    }
+
+    pub(crate) fn verify(&self, signature: &Signature) -> bool {
+        match self {
+            Self::Ed25519(item) => item.verify(&signature.1),
+        }
+    }
+}
+
+impl Put for Verifier {
+    fn put(&mut self, src: &[u8]) {
+        match self {
+            Self::Ed25519(item) => item.update(src),
+        }
+    }
+}
+
 /// Hostkey's public key
 #[derive(Debug)]
 pub(crate) struct PublicKey(String, Bytes);
+
+impl PublicKey {
+    pub(crate) fn verifier(self) -> Result<Verifier, GenError> {
+        Verifier::new(&self.0, &self.1)
+    }
+}
 
 impl Pack for PublicKey {
     fn pack<P: Put>(&self, buf: &mut P) {

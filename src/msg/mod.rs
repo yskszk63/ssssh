@@ -38,6 +38,7 @@ pub(crate) mod unknown;
 pub(crate) mod userauth_banner;
 pub(crate) mod userauth_failure;
 pub(crate) mod userauth_passwd_changereq;
+pub(crate) mod userauth_pk_ok;
 pub(crate) mod userauth_request;
 pub(crate) mod userauth_success;
 
@@ -120,7 +121,7 @@ Msg! {
         UserauthFailure(userauth_failure::UserauthFailure),
         UserauthSuccess(userauth_success::UserauthSuccess),
         UserauthBanner(userauth_banner::UserauthBanner),
-        UserauthPasswdChangereq(userauth_passwd_changereq::UserauthPasswdChangereq),
+        UserauthPasswdChangereq(userauth_passwd_changereq::UserauthPasswdChangereq), // FIXME
         GlobalRequest(global_request::GlobalRequest),
         RequestSuccess(request_success::RequestSuccess),
         RequestFailure(request_failure::RequestFailure),
@@ -148,10 +149,24 @@ Msg! {
     }
 }
 
+Msg! {
+    UserauthPkMsg {
+        UserauthPkOk(userauth_pk_ok::UserauthPkOk),
+    }
+}
+
 impl ContextualMsg for GexMsg {}
 
 impl From<GexMsg> for Msg {
     fn from(v: GexMsg) -> Self {
+        v.into_unknown()
+    }
+}
+
+impl ContextualMsg for UserauthPkMsg {}
+
+impl From<UserauthPkMsg> for Msg {
+    fn from(v: UserauthPkMsg) -> Self {
         v.into_unknown()
     }
 }

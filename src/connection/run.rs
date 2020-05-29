@@ -316,6 +316,76 @@ where
                 self.send::<Msg>(m).await?;
             }
 
+            Method::Publickey(item) if item.signature().is_none() => {
+                use msg::UserauthPkMsg;
+                let r = self
+                    .handlers
+                    .handle_auth_publickey(user_name, item.algorithm(), item.blob())
+                    .await
+                    .map_err(|e| RunError::HandlerError(e.into()))?;
+
+                if r {
+                    let m = msg::userauth_pk_ok::UserauthPkOk::new(
+                        item.algorithm().into(),
+                        item.blob().clone(),
+                    )
+                    .into();
+                    self.io.context::<UserauthPkMsg>().send(m).await?;
+                } else {
+                    let m = msg::userauth_failure::UserauthFailure::new(
+                        vec!["publickey", "password", "hostbased"]
+                            .into_iter()
+                            .collect(),
+                        false,
+                    );
+                    self.send(m).await?;
+                };
+            }
+
+            Method::Publickey(item) if item.signature().is_some() => {
+                use crate::hostkey::{PublicKey, Signature};
+                use crate::pack::{Pack, Unpack};
+                use bytes::{Buf as _, BytesMut};
+
+                let mut signature = BytesMut::new();
+                item.signature().clone().unwrap().pack(&mut signature);
+                let signature = Signature::unpack(&mut signature).unwrap();
+
+                let mut pubkey = BytesMut::new(); // FIXME
+                item.blob().pack(&mut pubkey);
+                let pubkey = PublicKey::unpack(&mut pubkey).unwrap();
+                let mut verifier = pubkey.verifier().unwrap();
+
+                self.io
+                    .get_ref()
+                    .state()
+                    .session_id()
+                    .clone()
+                    .to_bytes()
+                    .pack(&mut verifier);
+                50u8.pack(&mut verifier);
+                user_name.pack(&mut verifier);
+                userauth_request.service_name().pack(&mut verifier);
+                "publickey".pack(&mut verifier);
+                true.pack(&mut verifier);
+                item.algorithm().to_string().pack(&mut verifier);
+                item.blob().clone().to_bytes().pack(&mut verifier);
+
+                let m = if verifier.verify(&signature) {
+                    msg::userauth_success::UserauthSuccess::new().into()
+                } else {
+                    msg::userauth_failure::UserauthFailure::new(
+                        vec!["publickey", "password", "hostbased"]
+                            .into_iter()
+                            .collect(),
+                        false,
+                    )
+                    .into()
+                };
+
+                self.send::<Msg>(m).await?;
+            }
+
             Method::Password(item) => {
                 if let Some(newpassword) = item.newpassword() {
                     let r = self
