@@ -38,12 +38,11 @@ pub trait Handlers: Send {
         Ok(false)
     }
 
-    // FIXME change publickey format
     async fn handle_auth_publickey(
         &mut self,
         _username: &str,
         _algorithm: &str,
-        _publickey: &[u8],
+        _publickey: &str,
     ) -> Result<bool, Self::Err> {
         Ok(false)
     }

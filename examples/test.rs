@@ -23,9 +23,9 @@ impl Handlers for MyHandler {
         &mut self,
         username: &str,
         algorithm: &str,
-        publickey: &[u8],
+        publickey: &str,
     ) -> Result<bool, Self::Err> {
-        println!("PUBLICKEY {} {} {:?}", username, algorithm, publickey);
+        println!("PUBLICKEY {} {} {}", username, algorithm, publickey);
         Ok(true)
     }
 

@@ -318,9 +318,10 @@ where
 
             Method::Publickey(item) if item.signature().is_none() => {
                 use msg::UserauthPkMsg;
+                let blob = item.blob().to_string();
                 let r = self
                     .handlers
-                    .handle_auth_publickey(user_name, item.algorithm(), item.blob())
+                    .handle_auth_publickey(user_name, item.algorithm(), &blob)
                     .await
                     .map_err(|e| RunError::HandlerError(e.into()))?;
 
@@ -343,17 +344,12 @@ where
             }
 
             Method::Publickey(item) if item.signature().is_some() => {
-                use crate::hostkey::{PublicKey, Signature};
-                use crate::pack::{Pack, Unpack};
-                use bytes::{Buf as _, BytesMut};
+                use crate::pack::Pack;
+                use bytes::Buf as _;
 
-                let mut signature = BytesMut::new();
-                item.signature().clone().unwrap().pack(&mut signature);
-                let signature = Signature::unpack(&mut signature).unwrap();
+                let signature = item.signature().as_ref().unwrap().clone();
 
-                let mut pubkey = BytesMut::new(); // FIXME
-                item.blob().pack(&mut pubkey);
-                let pubkey = PublicKey::unpack(&mut pubkey).unwrap();
+                let pubkey = item.blob().clone();
                 let mut verifier = pubkey.verifier().unwrap();
 
                 self.io
@@ -369,7 +365,7 @@ where
                 "publickey".pack(&mut verifier);
                 true.pack(&mut verifier);
                 item.algorithm().to_string().pack(&mut verifier);
-                item.blob().clone().to_bytes().pack(&mut verifier);
+                item.blob().pack(&mut verifier);
 
                 let m = if verifier.verify(&signature) {
                     msg::userauth_success::UserauthSuccess::new().into()

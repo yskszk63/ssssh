@@ -1,11 +1,12 @@
 use derive_new::new;
 
 use super::*;
+use crate::hostkey::PublicKey;
 
 #[derive(Debug, new)]
 pub(crate) struct UserauthPkOk {
     algorithm: String,
-    blob: Bytes,
+    blob: PublicKey,
 }
 
 impl MsgItem<UserauthPkMsg> for UserauthPkOk {

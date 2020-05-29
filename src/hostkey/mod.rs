@@ -1,8 +1,11 @@
 //! Hostkey algorithms
 // TODO module name
 use std::error::Error as StdError;
+use std::fmt;
 use std::path::{Path, PathBuf};
 
+use base64::display::Base64Display;
+use base64::{CharacterSet, Config};
 use bytes::{Buf, Bytes, BytesMut};
 use linked_hash_map::LinkedHashMap;
 use thiserror::Error;
@@ -94,7 +97,7 @@ impl HostKeys {
 }
 
 /// Sign by hostkey
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct Signature(String, Bytes);
 
 impl Pack for Signature {
@@ -159,7 +162,7 @@ impl Put for Verifier {
 }
 
 /// Hostkey's public key
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub(crate) struct PublicKey(String, Bytes);
 
 impl PublicKey {
@@ -184,6 +187,20 @@ impl Unpack for PublicKey {
         let name = Unpack::unpack(&mut buf)?;
         let data = buf.to_bytes();
         Ok(Self(name, data))
+    }
+}
+
+impl fmt::Display for PublicKey {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let mut buf = BytesMut::new();
+        self.0.pack(&mut buf);
+        buf.extend_from_slice(&self.1);
+        write!(
+            f,
+            "{} {}",
+            self.0,
+            Base64Display::with_config(&buf, Config::new(CharacterSet::Standard, false))
+        )
     }
 }
 
