@@ -2,26 +2,14 @@ use std::num::Wrapping;
 
 use bytes::{Bytes, BytesMut};
 use getset::{Getters, MutGetters};
-use thiserror::Error;
 
-use crate::comp::{Compression, CompressionError};
-use crate::encrypt::{Encrypt, EncryptError};
+use crate::comp::Compression;
+use crate::encrypt::Encrypt;
 use crate::kex::Kex;
-use crate::mac::{Mac, MacError};
+use crate::mac::Mac;
 use crate::negotiate::Algorithm;
 use crate::pack::{Mpint, Pack, Put};
-
-#[derive(Debug, Error)]
-pub enum ChangeKeyError {
-    #[error(transparent)]
-    EncryptError(#[from] EncryptError),
-
-    #[error(transparent)]
-    MacError(#[from] MacError),
-
-    #[error(transparent)]
-    CompressionError(#[from] CompressionError),
-}
+use crate::SshError;
 
 #[derive(Debug, Getters, MutGetters)]
 pub(crate) struct OneWayState {
@@ -120,7 +108,7 @@ impl State {
         secret: &Bytes,
         kex: &Kex,
         algorithm: &Algorithm,
-    ) -> Result<(), ChangeKeyError> {
+    ) -> Result<(), SshError> {
         let session_id = self.session_id.as_ref().unwrap_or_else(|| &hash);
 
         let iv_ctos_len = Encrypt::block_size_by_name(algorithm.encryption_algorithm_c2s())?;
@@ -163,6 +151,5 @@ mod tests {
         fn assert<T: Send + Sync + 'static>() {}
 
         assert::<State>();
-        assert::<ChangeKeyError>();
     }
 }

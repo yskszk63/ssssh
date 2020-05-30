@@ -16,15 +16,15 @@ impl EncryptTrait for None {
     const BLOCK_SIZE: usize = 8;
     const KEY_LENGTH: usize = 0;
 
-    fn new_for_encrypt(_key: &[u8], _iv: &[u8]) -> Result<Self, EncryptError> {
+    fn new_for_encrypt(_key: &[u8], _iv: &[u8]) -> Result<Self, SshError> {
         Ok(Self::new())
     }
 
-    fn new_for_decrypt(_key: &[u8], _iv: &[u8]) -> Result<Self, EncryptError> {
+    fn new_for_decrypt(_key: &[u8], _iv: &[u8]) -> Result<Self, SshError> {
         Ok(Self::new())
     }
 
-    fn update(&mut self, src: &[u8], dst: &mut BytesMut) -> Result<(), EncryptError> {
+    fn update(&mut self, src: &[u8], dst: &mut BytesMut) -> Result<(), SshError> {
         dst.extend_from_slice(src);
         Ok(())
     }

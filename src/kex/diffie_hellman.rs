@@ -30,7 +30,7 @@ impl KexTrait for DiffieHellmanGroup14Sha1 {
         &self,
         io: &mut MsgStream<IO>,
         env: Env<'_>,
-    ) -> Result<(Bytes, Bytes), KexError>
+    ) -> Result<(Bytes, Bytes), SshError>
     where
         IO: AsyncRead + AsyncWrite + Unpin + Send,
     {
@@ -44,9 +44,9 @@ impl KexTrait for DiffieHellmanGroup14Sha1 {
         // FIXME use kexdh_init
         let kexdh_init = match io.next().await {
             Some(Ok(Msg::KexEcdhInit(msg))) => msg,
-            Some(Ok(msg)) => return Err(KexError::UnexpectedMsg(format!("{:?}", msg))),
+            Some(Ok(msg)) => return Err(SshError::KexUnexpectedMsg(format!("{:?}", msg))),
             Some(Err(e)) => return Err(e.into()),
-            None => return Err(KexError::UnexpectedEof),
+            None => return Err(SshError::KexUnexpectedEof),
         };
 
         let e = kexdh_init.ephemeral_public_key();
@@ -136,7 +136,7 @@ impl KexTrait for DiffieHellmanGroupExchangeSha256 {
         &self,
         io: &mut MsgStream<IO>,
         env: Env<'_>,
-    ) -> Result<(Bytes, Bytes), KexError>
+    ) -> Result<(Bytes, Bytes), SshError>
     where
         IO: AsyncRead + AsyncWrite + Unpin + Send,
     {
@@ -160,9 +160,9 @@ impl KexTrait for DiffieHellmanGroupExchangeSha256 {
                 msg.max().pack(&mut hasher);
                 *msg.min()..=*msg.max()
             }
-            Some(Ok(msg)) => return Err(KexError::UnexpectedMsg(format!("{:?}", msg))),
+            Some(Ok(msg)) => return Err(SshError::KexUnexpectedMsg(format!("{:?}", msg))),
             Some(Err(e)) => return Err(e.into()),
-            None => return Err(KexError::UnexpectedEof),
+            None => return Err(SshError::KexUnexpectedEof),
         };
 
         let p = if range.contains(&8192) {
@@ -194,9 +194,9 @@ impl KexTrait for DiffieHellmanGroupExchangeSha256 {
 
         let kex_dh_gex_init = match io.next().await {
             Some(Ok(GexMsg::KexDhGexInit(msg))) => msg,
-            Some(Ok(msg)) => return Err(KexError::UnexpectedMsg(format!("{:?}", msg))),
+            Some(Ok(msg)) => return Err(SshError::KexUnexpectedMsg(format!("{:?}", msg))),
             Some(Err(e)) => return Err(e.into()),
-            None => return Err(KexError::UnexpectedEof),
+            None => return Err(SshError::KexUnexpectedEof),
         };
 
         let e = kex_dh_gex_init.e();

@@ -1,10 +1,12 @@
-pub use connection::{Accept, AcceptError, Connection, Established};
+pub use connection::{Accept, Connection, Established};
+pub use error::SshError;
 pub use handlers::*;
 pub use server::{Builder as ServerBuilder, Server};
 
 mod comp;
 mod connection;
 mod encrypt;
+mod error;
 mod handlers;
 mod hash;
 mod hostkey;

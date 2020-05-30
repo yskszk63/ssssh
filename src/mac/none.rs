@@ -11,7 +11,7 @@ impl MacTrait for None {
         Self {}
     }
 
-    fn sign(&self, _seq: u32, _plain: &[u8], _encrypted: &[u8]) -> Result<Bytes, MacError> {
+    fn sign(&self, _seq: u32, _plain: &[u8], _encrypted: &[u8]) -> Result<Bytes, SshError> {
         Ok(Bytes::new())
     }
 
@@ -21,7 +21,7 @@ impl MacTrait for None {
         _plain: &[u8],
         _encrypted: &[u8],
         _tag: &[u8],
-    ) -> Result<(), MacError> {
+    ) -> Result<(), SshError> {
         Ok(())
     }
 }

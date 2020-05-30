@@ -28,7 +28,7 @@ impl KexTrait for Curve25519Sha256 {
         &self,
         io: &mut MsgStream<IO>,
         env: Env<'_>,
-    ) -> Result<(Bytes, Bytes), KexError>
+    ) -> Result<(Bytes, Bytes), SshError>
     where
         IO: AsyncRead + AsyncWrite + Unpin + Send,
     {
@@ -42,9 +42,9 @@ impl KexTrait for Curve25519Sha256 {
 
         let kex_ecdh_init = match io.next().await {
             Some(Ok(Msg::KexEcdhInit(msg))) => msg,
-            Some(Ok(msg)) => return Err(KexError::UnexpectedMsg(format!("{:?}", msg))),
+            Some(Ok(msg)) => return Err(SshError::KexUnexpectedMsg(format!("{:?}", msg))),
             Some(Err(e)) => return Err(e.into()),
-            None => return Err(KexError::UnexpectedEof),
+            None => return Err(SshError::KexUnexpectedEof),
         };
 
         let client_ephemeral_public_key = kex_ecdh_init.ephemeral_public_key();
@@ -61,7 +61,7 @@ impl KexTrait for Curve25519Sha256 {
             Unspecified,
             |mut e| Ok(e.to_bytes()),
         )
-        .map_err(|e| KexError::Any(e.to_string()))?;
+        .map_err(SshError::kex_error)?;
         Mpint::new(key.clone()).pack(&mut hasher);
 
         let hash = hasher.finish();
@@ -80,13 +80,10 @@ impl KexTrait for Curve25519Sha256 {
     }
 }
 
-fn gen_keypair() -> Result<(EphemeralPrivateKey, PublicKey), KexError> {
+fn gen_keypair() -> Result<(EphemeralPrivateKey, PublicKey), SshError> {
     let rand = SystemRandom::new();
-    let private =
-        EphemeralPrivateKey::generate(&X25519, &rand).map_err(|e| KexError::Any(e.to_string()))?;
-    let public = private
-        .compute_public_key()
-        .map_err(|e| KexError::Any(e.to_string()))?;
+    let private = EphemeralPrivateKey::generate(&X25519, &rand).map_err(SshError::kex_error)?;
+    let public = private.compute_public_key().map_err(SshError::kex_error)?;
     Ok((private, public))
 }
 

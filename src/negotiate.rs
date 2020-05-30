@@ -1,15 +1,9 @@
 use derive_builder::Builder;
 use getset::Getters;
-use thiserror::Error;
 
 use crate::msg::kexinit::Kexinit;
 use crate::pack::NameList;
-
-#[derive(Debug, Error, PartialEq, Eq)]
-pub enum NegotiateError {
-    #[error("not matched {0:?}")]
-    NotMatched(String),
-}
+use crate::SshError;
 
 #[derive(Debug, Builder, Getters)]
 pub(crate) struct Algorithm {
@@ -31,21 +25,18 @@ pub(crate) struct Algorithm {
     compression_algorithm_s2c: String,
 }
 
-fn decide(l: &NameList, r: &NameList) -> Result<String, NegotiateError> {
+fn decide(l: &NameList, r: &NameList) -> Result<String, SshError> {
     let found = r
         .iter()
         .flat_map(|r| l.iter().filter(move |l| r == *l))
         .next();
 
     found.map(ToOwned::to_owned).ok_or_else(|| {
-        NegotiateError::NotMatched(r.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(","))
+        SshError::NegotiateNotMatched(r.iter().map(AsRef::as_ref).collect::<Vec<_>>().join(","))
     })
 }
 
-pub(crate) fn negotiate(
-    c_kexinit: &Kexinit,
-    s_kexinit: &Kexinit,
-) -> Result<Algorithm, NegotiateError> {
+pub(crate) fn negotiate(c_kexinit: &Kexinit, s_kexinit: &Kexinit) -> Result<Algorithm, SshError> {
     let mut builder = AlgorithmBuilder::default();
 
     let kex_algorithm = decide(s_kexinit.kex_algorithms(), c_kexinit.kex_algorithms())?;
@@ -110,10 +101,10 @@ mod tests {
         assert_eq!(r, Ok("a".into()));
 
         let r = decide(&list(["a"]), &list(["b"]));
-        assert!(matches!(r, Err(NegotiateError::NotMatched(..))));
+        assert!(matches!(r, Err(SshError::NotMatched(..))));
 
         let r = decide(&list([]), &list([]));
-        assert!(matches!(r, Err(NegotiateError::NotMatched(..))));
+        assert!(matches!(r, Err(SshError::NotMatched(..))));
 
         let r = decide(&list(["a"]), &list(["b", "a"]));
         assert_eq!(r, Ok("a".into()));
@@ -122,7 +113,7 @@ mod tests {
         assert_eq!(r, Ok("b".into()));
 
         let r = decide(&list(["a"]), &list(["b", "c"]));
-        assert!(matches!(r, Err(NegotiateError::NotMatched(..))));
+        assert!(matches!(r, Err(SshError::NotMatched(..))));
     }
 
     #[test]

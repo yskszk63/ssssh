@@ -9,51 +9,12 @@ use futures::ready;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use ring::rand::{SecureRandom, SystemRandom};
-use thiserror::Error;
-use tokio::io::{self, AsyncBufRead, AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufStream};
 
-use crate::comp::CompressionError;
-use crate::encrypt::EncryptError;
-use crate::mac::MacError;
 use crate::state::State;
+use crate::SshError;
 
 pub(crate) const MAXIMUM_PACKET_SIZE: usize = 35000;
-
-#[derive(Debug, Error)]
-pub enum DecodeError {
-    #[error(transparent)]
-    Io(#[from] io::Error),
-
-    #[error(transparent)]
-    EncryptError(#[from] EncryptError),
-
-    #[error(transparent)]
-    CompressionError(#[from] CompressionError),
-
-    #[error(transparent)]
-    MacError(#[from] MacError),
-
-    #[error("too large packet length {0}")]
-    TooLargePacket(usize),
-}
-
-#[derive(Debug, Error)]
-pub enum EncodeError {
-    #[error(transparent)]
-    Io(#[from] io::Error),
-
-    #[error(transparent)]
-    EncryptError(#[from] EncryptError),
-
-    #[error(transparent)]
-    CompressionError(#[from] CompressionError),
-
-    #[error(transparent)]
-    MacError(#[from] MacError),
-
-    #[error("failed to fill pad")]
-    PadFillError,
-}
 
 fn pad_len(len: usize, bs: usize) -> usize {
     const MINIMUM_PAD_SIZE: usize = 4;
@@ -113,7 +74,7 @@ impl<IO> Stream for BppStream<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = Result<Bytes, DecodeError>;
+    type Item = Result<Bytes, SshError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
@@ -152,7 +113,7 @@ where
 
                     let len = (&this.rxbuf.1[..4]).get_u32() as usize;
                     if len + 4 + mac_length > MAXIMUM_PACKET_SIZE {
-                        return Poll::Ready(Some(Err(DecodeError::TooLargePacket(
+                        return Poll::Ready(Some(Err(SshError::TooLargePacket(
                             len + 4 + mac_length,
                         ))));
                     }
@@ -201,7 +162,7 @@ impl<IO> Sink<Bytes> for BppStream<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
-    type Error = EncodeError;
+    type Error = SshError;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let this = self.get_mut();
@@ -221,9 +182,7 @@ where
         let len = len + padding_length + 1;
 
         let mut pad = vec![0; padding_length];
-        SystemRandom::new()
-            .fill(&mut pad)
-            .map_err(|_| EncodeError::PadFillError)?;
+        SystemRandom::new().fill(&mut pad).map_err(SshError::any)?;
 
         this.txbuf.1.put_u32(len as u32);
         this.txbuf.1.put_u8(pad.len() as u8);
@@ -272,7 +231,5 @@ mod test {
         fn assert<T: Send + Sync + 'static>() {}
 
         assert::<BppStream<tokio::net::TcpStream>>();
-        assert::<DecodeError>();
-        assert::<EncodeError>();
     }
 }

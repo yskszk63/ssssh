@@ -3,17 +3,10 @@
 //! [rfc4253](https://tools.ietf.org/html/rfc4253#section-6.2)
 
 use bytes::Bytes;
-use thiserror::Error;
+
+use crate::SshError;
 
 mod none;
-
-/// Compression errors
-#[derive(Debug, Error)]
-pub enum CompressionError {
-    /// Unknown compression algorithm
-    #[error("unknown compression {0:}")]
-    UnknownCompression(String),
-}
 
 /// Compression algorithm trait
 trait CompressionTrait: Sized {
@@ -24,10 +17,10 @@ trait CompressionTrait: Sized {
     fn new() -> Self;
 
     /// Compress target into bytes
-    fn compress(&self, target: &[u8]) -> Result<Bytes, CompressionError>;
+    fn compress(&self, target: &[u8]) -> Result<Bytes, SshError>;
 
     /// Decompress target into bytes
-    fn decompress(&self, target: &[u8]) -> Result<Bytes, CompressionError>;
+    fn decompress(&self, target: &[u8]) -> Result<Bytes, SshError>;
 }
 
 /// Compression algorithms
@@ -43,22 +36,22 @@ impl Compression {
     }
 
     /// Create new instance by algorithm name
-    pub(crate) fn new(name: &str) -> Result<Self, CompressionError> {
+    pub(crate) fn new(name: &str) -> Result<Self, SshError> {
         match name {
             none::None::NAME => Ok(Self::None(none::None::new())),
-            x => Err(CompressionError::UnknownCompression(x.to_string())),
+            x => Err(SshError::UnknownAlgorithm(x.to_string())),
         }
     }
 
     /// Compress target into bytes
-    pub(crate) fn compress(&self, target: &[u8]) -> Result<Bytes, CompressionError> {
+    pub(crate) fn compress(&self, target: &[u8]) -> Result<Bytes, SshError> {
         match self {
             Self::None(item) => item.compress(target),
         }
     }
 
     /// Decompress target into bytes
-    pub(crate) fn decompress(&self, target: &[u8]) -> Result<Bytes, CompressionError> {
+    pub(crate) fn decompress(&self, target: &[u8]) -> Result<Bytes, SshError> {
         match self {
             Self::None(item) => item.decompress(target),
         }
@@ -74,6 +67,5 @@ mod tests {
         fn assert<T: Send + Sync + 'static>() {}
 
         assert::<Compression>();
-        assert::<CompressionError>();
     }
 }

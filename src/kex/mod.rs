@@ -1,6 +1,5 @@
 use async_trait::async_trait;
 use bytes::{Buf, Bytes, BytesMut};
-use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::hash::Hasher;
@@ -8,7 +7,8 @@ use crate::hostkey::HostKey;
 use crate::msg::kexinit::Kexinit;
 use crate::msg::Msg;
 use crate::pack::Pack;
-use crate::stream::msg::{MsgStream, RecvError, SendError};
+use crate::stream::msg::MsgStream;
+use crate::SshError;
 
 mod curve25519;
 mod diffie_hellman;
@@ -20,27 +20,6 @@ struct Env<'a> {
     c_kexinit: &'a Bytes,
     s_kexinit: &'a Bytes,
     hostkey: &'a HostKey,
-}
-
-#[derive(Debug, Error)]
-pub enum KexError {
-    #[error("unexpected msg {0:}")]
-    UnexpectedMsg(String),
-
-    #[error("unexpected eof")]
-    UnexpectedEof,
-
-    #[error("unknown kex algorithm {0}")]
-    UnknownKexAlgorithm(String),
-
-    #[error(transparent)]
-    RecvError(#[from] RecvError),
-
-    #[error(transparent)]
-    SendError(#[from] SendError),
-
-    #[error("{0:?}")]
-    Any(String),
 }
 
 #[async_trait]
@@ -55,7 +34,7 @@ trait KexTrait: Sized + Into<Kex> {
         &self,
         io: &mut MsgStream<IO>,
         env: Env<'_>,
-    ) -> Result<(Bytes, Bytes), KexError>
+    ) -> Result<(Bytes, Bytes), SshError>
     where
         IO: AsyncRead + AsyncWrite + Unpin + Send;
 }
@@ -95,7 +74,7 @@ impl Kex {
         }
     }
 
-    pub(crate) fn new(name: &str) -> Result<Self, KexError> {
+    pub(crate) fn new(name: &str) -> Result<Self, SshError> {
         Ok(match name {
             curve25519::Curve25519Sha256::NAME => curve25519::Curve25519Sha256::new().into(),
             diffie_hellman::DiffieHellmanGroup14Sha1::NAME => {
@@ -104,7 +83,7 @@ impl Kex {
             diffie_hellman::DiffieHellmanGroupExchangeSha256::NAME => {
                 diffie_hellman::DiffieHellmanGroupExchangeSha256::new().into()
             }
-            v => return Err(KexError::UnknownKexAlgorithm(v.to_string())),
+            v => return Err(SshError::UnknownAlgorithm(v.to_string())),
         })
     }
 
@@ -116,7 +95,7 @@ impl Kex {
         c_kexinit: &Kexinit,
         s_kexinit: &Kexinit,
         hostkey: &HostKey,
-    ) -> Result<(Bytes, Bytes), KexError>
+    ) -> Result<(Bytes, Bytes), SshError>
     where
         IO: AsyncRead + AsyncWrite + Unpin + Send,
     {
@@ -144,14 +123,12 @@ mod tests {
 
     trait AssertSendSync: Send + Sync + 'static {}
     impl AssertSendSync for Kex {}
-    impl AssertSendSync for KexError {}
 
     #[test]
     fn test_send() {
         fn assert<T: Send + Sync + 'static>() {}
 
         assert::<Kex>();
-        assert::<KexError>();
     }
 
     #[tokio::test]

@@ -14,11 +14,11 @@ impl CompressionTrait for None {
         Self {}
     }
 
-    fn compress(&self, mut target: &[u8]) -> Result<Bytes, CompressionError> {
+    fn compress(&self, mut target: &[u8]) -> Result<Bytes, SshError> {
         Ok(target.to_bytes())
     }
 
-    fn decompress(&self, mut target: &[u8]) -> Result<Bytes, CompressionError> {
+    fn decompress(&self, mut target: &[u8]) -> Result<Bytes, SshError> {
         Ok(target.to_bytes())
     }
 }

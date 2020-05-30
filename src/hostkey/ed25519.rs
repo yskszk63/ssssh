@@ -14,11 +14,9 @@ pub(crate) struct Ed25519 {
 impl HostKeyTrait for Ed25519 {
     const NAME: &'static str = "ssh-ed25519";
 
-    fn gen() -> Result<Self, GenError> {
-        let pkcs8 = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new())
-            .map_err(|e| GenError::Err(Box::new(e)))?;
-        let pair =
-            Ed25519KeyPair::from_pkcs8(pkcs8.as_ref()).map_err(|e| GenError::Err(Box::new(e)))?;
+    fn gen() -> Result<Self, SshError> {
+        let pkcs8 = Ed25519KeyPair::generate_pkcs8(&SystemRandom::new()).map_err(SshError::any)?;
+        let pair = Ed25519KeyPair::from_pkcs8(pkcs8.as_ref()).map_err(SshError::any)?;
         Ok(Self { pair })
     }
 
@@ -46,7 +44,7 @@ pub(crate) struct Ed25519Verifier {
 }
 
 impl VerifierTrait for Ed25519Verifier {
-    const NAME: &'static str = "ssh-ed25519";
+    const NAME: &'static str = Ed25519::NAME;
 
     fn new(pk: &[u8]) -> Self {
         let mut buf = BytesMut::new();

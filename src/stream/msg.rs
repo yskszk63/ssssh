@@ -7,27 +7,12 @@ use futures::ready;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use log::debug;
-use thiserror::Error;
 use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 
-use super::bpp::{BppStream, DecodeError, EncodeError};
+use super::bpp::BppStream;
 use crate::msg::{ContextualMsg, Msg};
-use crate::pack::{Pack, Unpack, UnpackError};
-
-#[derive(Debug, Error)]
-pub enum RecvError {
-    #[error(transparent)]
-    DecodeError(#[from] DecodeError),
-
-    #[error(transparent)]
-    UnpackError(#[from] UnpackError),
-}
-
-#[derive(Debug, Error)]
-pub enum SendError {
-    #[error(transparent)]
-    EncodeError(#[from] EncodeError),
-}
+use crate::pack::{Pack, Unpack};
+use crate::SshError;
 
 #[derive(Debug)]
 pub(crate) struct MsgStream<IO>
@@ -70,7 +55,7 @@ impl<IO> Stream for MsgStream<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
-    type Item = Result<Msg, RecvError>;
+    type Item = Result<Msg, SshError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let io = &mut self.get_mut().io;
@@ -89,7 +74,7 @@ impl<IO> Sink<Msg> for MsgStream<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
-    type Error = SendError;
+    type Error = SshError;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let io = &mut self.get_mut().io;
@@ -134,7 +119,7 @@ where
     IO: AsyncRead + AsyncWrite + Unpin,
     M: ContextualMsg + Unpin,
 {
-    type Item = Result<M, RecvError>;
+    type Item = Result<M, SshError>;
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let io = &mut self.get_mut().inner.io;
@@ -154,7 +139,7 @@ where
     IO: AsyncRead + AsyncWrite + Unpin,
     M: ContextualMsg + Unpin,
 {
-    type Error = SendError;
+    type Error = SshError;
 
     fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let io = &mut self.get_mut().inner.io;
@@ -194,7 +179,5 @@ mod tests {
 
         assert::<MsgStream<tokio::net::TcpStream>>();
         assert::<ContextualMsgStream<tokio::net::TcpStream, crate::msg::GexMsg>>();
-        assert::<SendError>();
-        assert::<RecvError>();
     }
 }

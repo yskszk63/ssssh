@@ -1,26 +1,16 @@
-use std::error::Error as StdError;
-
 use bytes::Bytes;
-use thiserror::Error;
+
+use crate::SshError;
 
 mod none;
 mod sha;
-
-#[derive(Debug, Error)]
-pub enum MacError {
-    #[error("unknown mac {0:}")]
-    UnknownMac(String),
-
-    #[error("verify error {0}")]
-    VerifyError(#[source] Box<dyn StdError + Send + Sync + 'static>),
-}
 
 pub(crate) trait MacTrait: Into<Mac> + Sized {
     const NAME: &'static str;
     const LEN: usize;
     fn new(key: &[u8]) -> Self;
-    fn sign(&self, seq: u32, plain: &[u8], encrypted: &[u8]) -> Result<Bytes, MacError>;
-    fn verify(&self, seq: u32, plain: &[u8], encrypted: &[u8], tag: &[u8]) -> Result<(), MacError>;
+    fn sign(&self, seq: u32, plain: &[u8], encrypted: &[u8]) -> Result<Bytes, SshError>;
+    fn verify(&self, seq: u32, plain: &[u8], encrypted: &[u8], tag: &[u8]) -> Result<(), SshError>;
 }
 
 #[derive(Debug)]
@@ -42,21 +32,21 @@ impl Mac {
         none::None {}.into()
     }
 
-    pub(crate) fn new(name: &str, key: &[u8]) -> Result<Self, MacError> {
+    pub(crate) fn new(name: &str, key: &[u8]) -> Result<Self, SshError> {
         Ok(match name {
             none::None::NAME => none::None::new(key).into(),
             sha::HmacSha256::NAME => sha::HmacSha256::new(key).into(),
             sha::HmacSha1::NAME => sha::HmacSha1::new(key).into(),
-            x => return Err(MacError::UnknownMac(x.to_string())),
+            x => return Err(SshError::UnknownAlgorithm(x.to_string())),
         })
     }
 
-    pub(crate) fn len_by_name(name: &str) -> Result<usize, MacError> {
+    pub(crate) fn len_by_name(name: &str) -> Result<usize, SshError> {
         Ok(match name {
             none::None::NAME => none::None::LEN,
             sha::HmacSha256::NAME => sha::HmacSha256::LEN,
             sha::HmacSha1::NAME => sha::HmacSha1::LEN,
-            x => return Err(MacError::UnknownMac(x.into())),
+            x => return Err(SshError::UnknownAlgorithm(x.into())),
         })
     }
 
@@ -68,7 +58,7 @@ impl Mac {
         }
     }
 
-    pub(crate) fn sign(&self, seq: u32, plain: &[u8], encrypted: &[u8]) -> Result<Bytes, MacError> {
+    pub(crate) fn sign(&self, seq: u32, plain: &[u8], encrypted: &[u8]) -> Result<Bytes, SshError> {
         match self {
             Self::None(item) => item.sign(seq, plain, encrypted),
             Self::HmacSha256(item) => item.sign(seq, plain, encrypted),
@@ -82,7 +72,7 @@ impl Mac {
         plain: &[u8],
         encrypted: &[u8],
         tag: &[u8],
-    ) -> Result<(), MacError> {
+    ) -> Result<(), SshError> {
         match self {
             Self::None(item) => item.verify(seq, plain, encrypted, tag),
             Self::HmacSha256(item) => item.verify(seq, plain, encrypted, tag),
@@ -101,7 +91,6 @@ mod tests {
         fn assert<T: Send + Sync + 'static>() {}
 
         assert::<Mac>();
-        assert::<MacError>();
     }
 
     #[test]

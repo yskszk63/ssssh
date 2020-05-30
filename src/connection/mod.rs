@@ -1,35 +1,18 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use bytes::BytesMut;
-use thiserror::Error;
 use tokio::io::{self, AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream;
 
 use crate::handlers::Handlers;
 use crate::preference::Preference;
 use crate::stream::msg::MsgStream;
-pub use run::RunError;
+use crate::SshError;
 
 mod completion_stream;
 mod run;
 mod ssh_stdout;
 mod version_ex;
-
-#[derive(Debug, Error)]
-pub enum AcceptError {
-    #[error(transparent)]
-    Io(#[from] io::Error),
-
-    #[error("invalid version string: {0:?}")]
-    InvalidVersion(String),
-
-    #[error("unexpected eof {0:?}")]
-    UnexpectedEof(BytesMut),
-
-    #[error("too long version identifier")]
-    TooLong,
-}
 
 /// Protocol Version Exchange
 ///
@@ -105,7 +88,7 @@ where
         Self { state }
     }
 
-    pub async fn accept(self) -> Result<Connection<Established<IO>>, AcceptError> {
+    pub async fn accept(self) -> Result<Connection<Established<IO>>, SshError> {
         let Accept { io, preference } = self.state;
         let (c_version, s_version, io) =
             version_ex::VersionExchange::new(io, preference.name().to_string()).await?;
@@ -123,7 +106,7 @@ where
         &self.state.c_version
     }
 
-    pub async fn run<H>(self, handler: H) -> Result<(), RunError>
+    pub async fn run<H>(self, handler: H) -> Result<(), SshError>
     where
         H: Handlers,
     {

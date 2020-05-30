@@ -22,24 +22,24 @@ impl EncryptTrait for Aes256Ctr {
     const BLOCK_SIZE: usize = 16;
     const KEY_LENGTH: usize = 32;
 
-    fn new_for_encrypt(key: &[u8], iv: &[u8]) -> Result<Self, EncryptError> {
+    fn new_for_encrypt(key: &[u8], iv: &[u8]) -> Result<Self, SshError> {
         let crypter = Crypter::new(Cipher::aes_256_ctr(), Mode::Encrypt, key, Some(&iv))
-            .map_err(|e| Box::new(e) as Box<dyn StdError + Sync + Send + 'static>)?;
+            .map_err(SshError::encrypt_error)?;
         Ok(Self { crypter })
     }
 
-    fn new_for_decrypt(key: &[u8], iv: &[u8]) -> Result<Self, EncryptError> {
+    fn new_for_decrypt(key: &[u8], iv: &[u8]) -> Result<Self, SshError> {
         let crypter = Crypter::new(Cipher::aes_256_ctr(), Mode::Decrypt, key, Some(&iv))
-            .map_err(|e| Box::new(e) as Box<dyn StdError + Sync + Send + 'static>)?;
+            .map_err(SshError::encrypt_error)?;
         Ok(Self { crypter })
     }
 
-    fn update(&mut self, src: &[u8], dst: &mut BytesMut) -> Result<(), EncryptError> {
+    fn update(&mut self, src: &[u8], dst: &mut BytesMut) -> Result<(), SshError> {
         let mut tail = dst.split_off(dst.len());
         tail.extend_from_slice(&vec![0; src.len()]);
         self.crypter
             .update(src, &mut tail)
-            .map_err(|e| Box::new(e) as Box<dyn StdError + Sync + Send + 'static>)?;
+            .map_err(SshError::encrypt_error)?;
         dst.unsplit(tail);
         Ok(())
     }

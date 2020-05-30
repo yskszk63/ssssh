@@ -17,7 +17,7 @@ impl MacTrait for HmacSha256 {
         Self { key }
     }
 
-    fn sign(&self, seq: u32, plain: &[u8], _encrypted: &[u8]) -> Result<Bytes, MacError> {
+    fn sign(&self, seq: u32, plain: &[u8], _encrypted: &[u8]) -> Result<Bytes, SshError> {
         let mut cx = Context::with_key(&self.key);
         cx.update(&seq.to_be_bytes());
         cx.update(&plain);
@@ -30,11 +30,11 @@ impl MacTrait for HmacSha256 {
         plain: &[u8],
         _encrypted: &[u8],
         tag: &[u8],
-    ) -> Result<(), MacError> {
+    ) -> Result<(), SshError> {
         let mut buf = BytesMut::new();
         buf.extend_from_slice(&seq.to_be_bytes());
         buf.extend_from_slice(&plain);
-        hmac::verify(&self.key, &buf, tag).map_err(|e| MacError::VerifyError(Box::new(e)))?;
+        hmac::verify(&self.key, &buf, tag).map_err(SshError::mac_error)?;
         Ok(())
     }
 }
@@ -59,7 +59,7 @@ impl MacTrait for HmacSha1 {
         Self { key }
     }
 
-    fn sign(&self, seq: u32, plain: &[u8], _encrypted: &[u8]) -> Result<Bytes, MacError> {
+    fn sign(&self, seq: u32, plain: &[u8], _encrypted: &[u8]) -> Result<Bytes, SshError> {
         let mut cx = Context::with_key(&self.key);
         cx.update(&seq.to_be_bytes());
         cx.update(&plain);
@@ -72,11 +72,11 @@ impl MacTrait for HmacSha1 {
         plain: &[u8],
         _encrypted: &[u8],
         tag: &[u8],
-    ) -> Result<(), MacError> {
+    ) -> Result<(), SshError> {
         let mut buf = BytesMut::new();
         buf.extend_from_slice(&seq.to_be_bytes());
         buf.extend_from_slice(&plain);
-        hmac::verify(&self.key, &buf, tag).map_err(|e| MacError::VerifyError(Box::new(e)))?;
+        hmac::verify(&self.key, &buf, tag).map_err(SshError::mac_error)?;
         Ok(())
     }
 }

@@ -11,8 +11,8 @@ use tokio::io;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::stream::Stream;
 
-use crate::hostkey::GenError;
 use crate::preference::{Preference, PreferenceBuilder};
+use crate::SshError;
 use crate::{Accept, Connection};
 
 #[derive(Debug, Error)]
@@ -24,7 +24,7 @@ pub enum BuildError {
     Unresolved,
 
     #[error(transparent)]
-    GenError(#[from] GenError),
+    SshError(#[from] SshError),
 }
 
 #[derive(Debug, Default)]

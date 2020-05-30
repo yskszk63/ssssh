@@ -5,10 +5,11 @@ use getset::Getters;
 
 use crate::comp::Compression;
 use crate::encrypt::Encrypt;
-use crate::hostkey::{GenError, HostKeys, HostKeysBuilder};
+use crate::hostkey::{HostKeys, HostKeysBuilder};
 use crate::kex::Kex;
 use crate::mac::Mac;
 use crate::msg::kexinit::{Kexinit, KexinitBuilder};
+use crate::SshError;
 
 #[derive(Debug, Default)]
 pub(crate) struct PreferenceBuilder {
@@ -67,7 +68,7 @@ impl PreferenceBuilder {
         self
     }
 
-    pub(crate) fn build(&self) -> Result<Preference, GenError> {
+    pub(crate) fn build(&self) -> Result<Preference, SshError> {
         let kex_algorithms = if self.kex_algorithms.is_empty() {
             Kex::defaults()
         } else {

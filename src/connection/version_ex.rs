@@ -6,7 +6,7 @@ use bytes::{Buf as _, Bytes, BytesMut};
 use futures::ready;
 use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufStream};
 
-use super::AcceptError;
+use crate::SshError;
 
 #[derive(Debug)]
 struct RecvState {
@@ -51,7 +51,7 @@ fn poll_recv<IO>(
 
     state: &mut RecvState,
     cx: &mut Context<'_>,
-) -> Poll<Result<String, AcceptError>>
+) -> Poll<Result<String, SshError>>
 where
     IO: AsyncBufRead + Unpin,
 {
@@ -61,14 +61,14 @@ where
 
     let buf = ready!(Pin::new(&mut io).poll_fill_buf(cx))?;
     if buf.is_empty() {
-        return Poll::Ready(Err(AcceptError::UnexpectedEof(state.buf.clone())));
+        return Poll::Ready(Err(SshError::VersionUnexpectedEof(state.buf.clone())));
     }
 
     match buf.iter().position(|b| *b == b'\n') {
         Some(p) => {
             let p = p + 1;
             if p + state.buf.len() > 255 {
-                return Poll::Ready(Err(AcceptError::TooLong));
+                return Poll::Ready(Err(SshError::VersionTooLong));
             }
             state.buf.extend_from_slice(&buf[..p]);
             Pin::new(&mut io).consume(p);
@@ -76,7 +76,7 @@ where
         None => {
             let n = buf.len();
             if n + state.buf.len() > 255 {
-                return Poll::Ready(Err(AcceptError::TooLong));
+                return Poll::Ready(Err(SshError::VersionTooLong));
             }
             Pin::new(&mut io).consume(n);
             return Poll::Pending;
@@ -87,14 +87,14 @@ where
         [result @ .., b'\r', b'\n'] => result,
         [result @ .., b'\n'] => result, // for old libssh
         x => {
-            return Poll::Ready(Err(AcceptError::InvalidVersion(
+            return Poll::Ready(Err(SshError::InvalidVersion(
                 String::from_utf8_lossy(x).to_string(),
             )))
         }
     };
     let result = String::from_utf8_lossy(&result);
     if !result.starts_with("SSH-2.0-") {
-        return Poll::Ready(Err(AcceptError::InvalidVersion(result.to_string())));
+        return Poll::Ready(Err(SshError::InvalidVersion(result.to_string())));
     }
     let result = result.to_string();
     state.result = Some(result.clone());
@@ -105,7 +105,7 @@ fn poll_send<IO>(
     mut io: &mut IO,
     state: &mut SendState,
     cx: &mut Context<'_>,
-) -> Poll<Result<String, AcceptError>>
+) -> Poll<Result<String, SshError>>
 where
     IO: AsyncWrite + Unpin,
 {
@@ -126,7 +126,7 @@ impl<IO> Future for VersionExchange<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
-    type Output = Result<(String, String, BufStream<IO>), AcceptError>;
+    type Output = Result<(String, String, BufStream<IO>), SshError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();

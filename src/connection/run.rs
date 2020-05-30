@@ -11,50 +11,18 @@ use futures::stream::Fuse;
 use futures::stream::StreamExt as _;
 use futures::stream::TryStreamExt as _;
 use log::{debug, error, warn};
-use thiserror::Error;
 use tokio::io::{self, AsyncRead, AsyncWrite};
 use tokio::time;
 
 use crate::handlers::{HandlerError, Handlers, PasswordResult};
-use crate::kex::KexError;
 use crate::msg::{self, Msg};
-use crate::negotiate::{negotiate, NegotiateError};
+use crate::negotiate::negotiate;
 use crate::preference::Preference;
-use crate::state::ChangeKeyError;
-use crate::stream::msg::{MsgStream, RecvError, SendError};
+use crate::stream::msg::MsgStream;
+use crate::SshError;
 
 use super::completion_stream::CompletionStream;
 use super::ssh_stdout::SshStdout;
-
-#[derive(Debug, Error)]
-pub enum RunError {
-    #[error(transparent)]
-    SendError(#[from] SendError),
-
-    #[error(transparent)]
-    RecvError(#[from] RecvError),
-
-    #[error(transparent)]
-    NegotiateError(#[from] NegotiateError),
-
-    #[error(transparent)]
-    ChangeKeyError(#[from] ChangeKeyError),
-
-    #[error(transparent)]
-    KexError(#[from] KexError),
-
-    #[error(transparent)]
-    HandlerError(HandlerError),
-
-    #[error(transparent)]
-    MpscSendError(#[from] mpsc::SendError),
-
-    #[error("unexpected error {0}")]
-    UnexpectedMsg(String),
-
-    #[error("no packet received.")]
-    NoPacketReceived,
-}
 
 #[derive(Debug)]
 enum Channel {
@@ -120,34 +88,28 @@ where
         }
     }
 
-    async fn send<M: Into<Msg>>(&mut self, msg: M) -> Result<(), SendError> {
+    async fn send<M: Into<Msg>>(&mut self, msg: M) -> Result<(), SshError> {
         self.io.send(msg.into()).await
     }
 
-    pub(super) async fn run(&mut self) -> Result<(), RunError> {
+    pub(super) async fn run(&mut self) -> Result<(), SshError> {
         debug!("connection running...");
         let result = self.r#loop().await;
         if let Err(e) = &result {
-            match e {
-                _ => {
-                    error!("error ocurred {}", e);
-                    let t = msg::disconnect::ReasonCode::ProtocolError;
-                    let msg = msg::disconnect::Disconnect::new(
-                        t,
-                        "Internal server error".into(),
-                        "".into(),
-                    );
-                    if let Err(e) = self.send(msg).await {
-                        error!("failed to send disconnect: {}", e)
-                    }
-                }
+            error!("error ocurred {}", e);
+            let t = e
+                .reason_code()
+                .unwrap_or_else(|| msg::disconnect::ReasonCode::ProtocolError);
+            let msg = msg::disconnect::Disconnect::new(t, "error occurred".into(), "".into());
+            if let Err(e) = self.send(msg).await {
+                error!("failed to send disconnect: {}", e)
             }
         }
         debug!("connection done.");
         result
     }
 
-    async fn r#loop(&mut self) -> Result<(), RunError> {
+    async fn r#loop(&mut self) -> Result<(), SshError> {
         let first_kexinit = self.preference.to_kexinit();
         self.send(first_kexinit.clone()).await?;
         self.first_kexinit = Some(first_kexinit);
@@ -166,7 +128,7 @@ where
                     }
                 }
                 Some(msg) = self.outbound_channel_rx.next() => self.send(msg).await?,
-                Some(completed) = self.completions.next() => completed.map_err(|e| RunError::HandlerError(e))?,
+                Some(completed) = self.completions.next() => completed.map_err(SshError::HandlerError)?,
                 _ = &mut timeout => {
                     let t = msg::disconnect::ReasonCode::ConnectionLost;
                     let msg = msg::disconnect::Disconnect::new(
@@ -184,7 +146,7 @@ where
         Ok(())
     }
 
-    async fn handle_msg(&mut self, msg: &msg::Msg, connected: &mut bool) -> Result<(), RunError> {
+    async fn handle_msg(&mut self, msg: &msg::Msg, connected: &mut bool) -> Result<(), SshError> {
         match &msg {
             Msg::Kexinit(msg) => self.on_kexinit(msg).await?,
             Msg::ServiceRequest(msg) => self.on_service_request(msg).await?,
@@ -210,7 +172,7 @@ where
         Ok(())
     }
 
-    async fn on_kexinit(&mut self, kexinit: &msg::kexinit::Kexinit) -> Result<(), RunError> {
+    async fn on_kexinit(&mut self, kexinit: &msg::kexinit::Kexinit) -> Result<(), SshError> {
         use crate::kex::Kex;
         use crate::msg::new_keys::NewKeys;
 
@@ -248,8 +210,8 @@ where
 
         match self.io.try_next().await? {
             Some(Msg::NewKeys(..)) => {}
-            Some(msg) => return Err(RunError::UnexpectedMsg(format!("{:?}", msg))),
-            None => return Err(RunError::NoPacketReceived),
+            Some(msg) => return Err(SshError::UnexpectedMsg(format!("{:?}", msg))),
+            None => return Err(SshError::NoPacketReceived),
         };
         self.send(NewKeys::new()).await?;
 
@@ -261,7 +223,7 @@ where
     async fn on_service_request(
         &mut self,
         service_request: &msg::service_request::ServiceRequest,
-    ) -> Result<(), RunError> {
+    ) -> Result<(), SshError> {
         match service_request.service_name().as_ref() {
             name @ msg::service_request::SSH_USERAUTH => {
                 let accept = msg::service_accept::ServiceAccept::new(name.into());
@@ -290,7 +252,7 @@ where
     async fn on_userauth_request(
         &mut self,
         userauth_request: &msg::userauth_request::UserauthRequest,
-    ) -> Result<(), RunError> {
+    ) -> Result<(), SshError> {
         use msg::userauth_request::Method;
 
         let user_name = userauth_request.user_name();
@@ -300,7 +262,7 @@ where
                     .handlers
                     .handle_auth_none(user_name)
                     .await
-                    .map_err(|e| RunError::HandlerError(e.into()))?;
+                    .map_err(|e| SshError::HandlerError(e.into()))?;
 
                 let m = if r {
                     msg::userauth_success::UserauthSuccess::new().into()
@@ -323,7 +285,7 @@ where
                     .handlers
                     .handle_auth_publickey(user_name, item.algorithm(), &blob)
                     .await
-                    .map_err(|e| RunError::HandlerError(e.into()))?;
+                    .map_err(|e| SshError::HandlerError(e.into()))?;
 
                 if r {
                     let m = msg::userauth_pk_ok::UserauthPkOk::new(
@@ -388,7 +350,7 @@ where
                         .handlers
                         .handle_auth_password_change(user_name, item.password(), newpassword)
                         .await
-                        .map_err(|e| RunError::HandlerError(e.into()))?;
+                        .map_err(|e| SshError::HandlerError(e.into()))?;
 
                     let m = match r {
                         PasswordResult::Ok => msg::userauth_success::UserauthSuccess::new().into(),
@@ -413,7 +375,7 @@ where
                         .handlers
                         .handle_auth_password(user_name, item.password())
                         .await
-                        .map_err(|e| RunError::HandlerError(e.into()))?;
+                        .map_err(|e| SshError::HandlerError(e.into()))?;
                     let m = match r {
                         PasswordResult::Ok => msg::userauth_success::UserauthSuccess::new().into(),
                         PasswordResult::PasswordChangeRequired(message) => {
@@ -450,7 +412,7 @@ where
     async fn on_channel_open(
         &mut self,
         channel_open: &msg::channel_open::ChannelOpen,
-    ) -> Result<(), RunError> {
+    ) -> Result<(), SshError> {
         use msg::channel_open::Type;
 
         let chid = *channel_open.sender_channel();
@@ -488,7 +450,7 @@ where
     async fn on_channel_data(
         &mut self,
         channel_data: &msg::channel_data::ChannelData,
-    ) -> Result<(), RunError> {
+    ) -> Result<(), SshError> {
         let chid = channel_data.recipient_channel();
         let data = channel_data.data();
         if let Some(channel) = self.channels.get_mut(chid) {
@@ -509,7 +471,7 @@ where
     async fn on_channel_eof(
         &mut self,
         channel_eof: &msg::channel_eof::ChannelEof,
-    ) -> Result<(), RunError> {
+    ) -> Result<(), SshError> {
         let chid = channel_eof.recipient_channel();
         if let Some(channel) = self.channels.get_mut(chid) {
             match channel {
@@ -526,7 +488,7 @@ where
     async fn on_channel_close(
         &mut self,
         channel_close: &msg::channel_close::ChannelClose,
-    ) -> Result<(), RunError> {
+    ) -> Result<(), SshError> {
         let chid = channel_close.recipient_channel();
         self.channels.remove(chid);
         Ok(())
@@ -535,7 +497,7 @@ where
     async fn on_channel_request(
         &mut self,
         channel_request: &msg::channel_request::ChannelRequest,
-    ) -> Result<(), RunError> {
+    ) -> Result<(), SshError> {
         use msg::channel_request::Type;
 
         match channel_request.typ() {
@@ -645,7 +607,7 @@ where
     async fn on_global_request(
         &mut self,
         global_request: &msg::global_request::GlobalRequest,
-    ) -> Result<(), RunError> {
+    ) -> Result<(), SshError> {
         use msg::global_request::Type;
         match global_request.typ() {
             Type::TcpipForward(..) => {

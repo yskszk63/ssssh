@@ -2,25 +2,12 @@
 //!
 //! [rfc4253](https://tools.ietf.org/html/rfc4253)
 
-use std::error::Error as StdError;
-
 use bytes::{Bytes, BytesMut};
-use thiserror::Error;
+
+use crate::SshError;
 
 mod aes;
 mod none;
-
-/// Encrypt error
-#[derive(Debug, Error)]
-pub enum EncryptError {
-    /// Unknown encrypt algorithm
-    #[error("unknown encrypt {0:}")]
-    UnknownEncrypt(String),
-
-    /// Encrypt error
-    #[error(transparent)]
-    Err(#[from] Box<dyn StdError + Send + Sync + 'static>),
-}
 
 /// Encrypt algorithm trait
 trait EncryptTrait: Into<Encrypt> + Sized {
@@ -34,13 +21,13 @@ trait EncryptTrait: Into<Encrypt> + Sized {
     const KEY_LENGTH: usize;
 
     /// Create new instance for encrypt
-    fn new_for_encrypt(key: &[u8], iv: &[u8]) -> Result<Self, EncryptError>;
+    fn new_for_encrypt(key: &[u8], iv: &[u8]) -> Result<Self, SshError>;
 
     /// Create new instance for dncrypt
-    fn new_for_decrypt(key: &[u8], iv: &[u8]) -> Result<Self, EncryptError>;
+    fn new_for_decrypt(key: &[u8], iv: &[u8]) -> Result<Self, SshError>;
 
     /// Update encrypt or decrypt block
-    fn update(&mut self, src: &[u8], dst: &mut BytesMut) -> Result<(), EncryptError>;
+    fn update(&mut self, src: &[u8], dst: &mut BytesMut) -> Result<(), SshError>;
 }
 
 /// Encrypt algorithms
@@ -65,46 +52,38 @@ impl Encrypt {
     }
 
     /// Create new instance for encrypt by name
-    pub(crate) fn new_for_encrypt(
-        name: &str,
-        key: &Bytes,
-        iv: &Bytes,
-    ) -> Result<Self, EncryptError> {
+    pub(crate) fn new_for_encrypt(name: &str, key: &Bytes, iv: &Bytes) -> Result<Self, SshError> {
         Ok(match name {
             none::None::NAME => none::None::new_for_encrypt(key, iv)?.into(),
             aes::Aes256Ctr::NAME => aes::Aes256Ctr::new_for_encrypt(key, iv)?.into(),
-            v => return Err(EncryptError::UnknownEncrypt(v.to_string())),
+            v => return Err(SshError::UnknownAlgorithm(v.to_string())),
         })
     }
 
     /// Create new instance for decrypt by name
-    pub(crate) fn new_for_decrypt(
-        name: &str,
-        key: &Bytes,
-        iv: &Bytes,
-    ) -> Result<Self, EncryptError> {
+    pub(crate) fn new_for_decrypt(name: &str, key: &Bytes, iv: &Bytes) -> Result<Self, SshError> {
         Ok(match name {
             none::None::NAME => none::None::new_for_decrypt(key, iv)?.into(),
             aes::Aes256Ctr::NAME => aes::Aes256Ctr::new_for_decrypt(key, iv)?.into(),
-            v => return Err(EncryptError::UnknownEncrypt(v.to_string())),
+            v => return Err(SshError::UnknownAlgorithm(v.to_string())),
         })
     }
 
     /// Get block size by name
-    pub(crate) fn block_size_by_name(name: &str) -> Result<usize, EncryptError> {
+    pub(crate) fn block_size_by_name(name: &str) -> Result<usize, SshError> {
         Ok(match name {
             none::None::NAME => none::None::BLOCK_SIZE,
             aes::Aes256Ctr::NAME => aes::Aes256Ctr::BLOCK_SIZE,
-            x => return Err(EncryptError::UnknownEncrypt(x.into())),
+            x => return Err(SshError::UnknownAlgorithm(x.into())),
         })
     }
 
     /// Get key length by name
-    pub(crate) fn key_length_by_name(name: &str) -> Result<usize, EncryptError> {
+    pub(crate) fn key_length_by_name(name: &str) -> Result<usize, SshError> {
         Ok(match name {
             none::None::NAME => none::None::KEY_LENGTH,
             aes::Aes256Ctr::NAME => aes::Aes256Ctr::KEY_LENGTH,
-            x => return Err(EncryptError::UnknownEncrypt(x.into())),
+            x => return Err(SshError::UnknownAlgorithm(x.into())),
         })
     }
 
@@ -117,7 +96,7 @@ impl Encrypt {
     }
 
     /// Update encrypt or decrypt block
-    pub(crate) fn update(&mut self, src: &[u8], dst: &mut BytesMut) -> Result<(), EncryptError> {
+    pub(crate) fn update(&mut self, src: &[u8], dst: &mut BytesMut) -> Result<(), SshError> {
         match self {
             Self::None(item) => item.update(src, dst),
             Self::Aes256Ctr(item) => item.update(src, dst),
@@ -134,7 +113,6 @@ mod tests {
         fn assert<T: Send + Sync + 'static>() {}
 
         assert::<Encrypt>();
-        assert::<EncryptError>();
     }
 
     #[test]

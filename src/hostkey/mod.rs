@@ -1,6 +1,5 @@
 //! Hostkey algorithms
 // TODO module name
-use std::error::Error as StdError;
 use std::fmt;
 use std::path::{Path, PathBuf};
 
@@ -8,9 +7,9 @@ use base64::display::Base64Display;
 use base64::{CharacterSet, Config};
 use bytes::{Buf, Bytes, BytesMut};
 use linked_hash_map::LinkedHashMap;
-use thiserror::Error;
 
 use crate::pack::{Pack, Put, Unpack, UnpackError};
+use crate::SshError;
 
 mod ed25519;
 mod rsa;
@@ -47,7 +46,7 @@ impl HostKeysBuilder {
         self
     }
 
-    pub(crate) fn build(&self) -> Result<HostKeys, GenError> {
+    pub(crate) fn build(&self) -> Result<HostKeys, SshError> {
         let mut hostkeys = HostKeys::new();
         for op in &self.operations {
             match op {
@@ -85,7 +84,7 @@ impl HostKeys {
         self.hostkeys.keys().map(ToString::to_string).collect()
     }
 
-    pub(crate) fn generate(&mut self) -> Result<(), GenError> {
+    pub(crate) fn generate(&mut self) -> Result<(), SshError> {
         for name in &HostKey::defaults() {
             let hostkey = HostKey::gen(name)?;
             self.insert(hostkey);
@@ -136,11 +135,11 @@ pub(crate) enum Verifier {
 }
 
 impl Verifier {
-    fn new(name: &str, pk: &[u8]) -> Result<Self, GenError> {
+    fn new(name: &str, pk: &[u8]) -> Result<Self, SshError> {
         Ok(match name {
             ed25519::Ed25519Verifier::NAME => Self::Ed25519(ed25519::Ed25519Verifier::new(pk)),
             rsa::RsaVerifier::NAME => Self::Rsa(rsa::RsaVerifier::new(pk)),
-            x => return Err(GenError::UnknownHostkeyAlgorithm(x.to_string())), // FIXME
+            x => return Err(SshError::UnknownAlgorithm(x.to_string())), // FIXME
         })
     }
 
@@ -166,7 +165,7 @@ impl Put for Verifier {
 pub(crate) struct PublicKey(String, Bytes);
 
 impl PublicKey {
-    pub(crate) fn verifier(self) -> Result<Verifier, GenError> {
+    pub(crate) fn verifier(self) -> Result<Verifier, SshError> {
         Verifier::new(&self.0, &self.1)
     }
 }
@@ -204,23 +203,13 @@ impl fmt::Display for PublicKey {
     }
 }
 
-/// Hostkey generate error
-#[derive(Debug, Error)]
-pub enum GenError {
-    #[error(transparent)]
-    Err(#[from] Box<dyn StdError + Send + Sync + 'static>),
-
-    #[error("unknown hostkey algorithm {0}")]
-    UnknownHostkeyAlgorithm(String),
-}
-
 /// Hostkey algorithm trait
 pub(crate) trait HostKeyTrait: Into<HostKey> + Sized {
     /// Hostkey algorithm name
     const NAME: &'static str;
 
     /// Generate hostkey
-    fn gen() -> Result<Self, GenError>;
+    fn gen() -> Result<Self, SshError>;
 
     /// Get hostkey's public key
     fn publickey(&self) -> Bytes;
@@ -246,11 +235,11 @@ impl HostKey {
     }
 
     /// Generate hostkey by algorithm name
-    pub(crate) fn gen(name: &str) -> Result<Self, GenError> {
+    pub(crate) fn gen(name: &str) -> Result<Self, SshError> {
         Ok(match name {
             ed25519::Ed25519::NAME => ed25519::Ed25519::gen()?.into(),
             rsa::Rsa::NAME => rsa::Rsa::gen()?.into(),
-            v => return Err(GenError::UnknownHostkeyAlgorithm(v.into())),
+            v => return Err(SshError::UnknownAlgorithm(v.into())),
         })
     }
 

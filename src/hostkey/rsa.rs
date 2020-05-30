@@ -18,9 +18,8 @@ pub(crate) struct Rsa {
 impl HostKeyTrait for Rsa {
     const NAME: &'static str = "ssh-rsa";
 
-    fn gen() -> Result<Self, GenError> {
-        let pair = OpenSslRsa::generate(2048)
-            .map_err(|e| Box::new(e) as Box<dyn StdError + Send + Sync>)?;
+    fn gen() -> Result<Self, SshError> {
+        let pair = OpenSslRsa::generate(2048).map_err(SshError::any)?;
         Ok(Self { pair })
     }
 
