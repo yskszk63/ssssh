@@ -121,7 +121,7 @@ impl Unpack for Signature {
 trait VerifierTrait: Sized {
     const NAME: &'static str;
 
-    fn new(pk: &[u8]) -> Self;
+    fn new(pk: &[u8]) -> Result<Self, SshError>;
 
     fn update(&mut self, data: &[u8]);
 
@@ -137,8 +137,8 @@ pub(crate) enum Verifier {
 impl Verifier {
     fn new(name: &str, pk: &[u8]) -> Result<Self, SshError> {
         Ok(match name {
-            ed25519::Ed25519Verifier::NAME => Self::Ed25519(ed25519::Ed25519Verifier::new(pk)),
-            rsa::RsaVerifier::NAME => Self::Rsa(rsa::RsaVerifier::new(pk)),
+            ed25519::Ed25519Verifier::NAME => Self::Ed25519(ed25519::Ed25519Verifier::new(pk)?),
+            rsa::RsaVerifier::NAME => Self::Rsa(rsa::RsaVerifier::new(pk)?),
             x => return Err(SshError::UnknownAlgorithm(x.to_string())), // FIXME
         })
     }

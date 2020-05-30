@@ -46,15 +46,15 @@ pub(crate) struct Ed25519Verifier {
 impl VerifierTrait for Ed25519Verifier {
     const NAME: &'static str = Ed25519::NAME;
 
-    fn new(pk: &[u8]) -> Self {
+    fn new(pk: &[u8]) -> Result<Self, SshError> {
         let mut buf = BytesMut::new();
         buf.extend_from_slice(pk);
-        let pk = Bytes::unpack(&mut buf).unwrap();
+        let pk = Bytes::unpack(&mut buf)?;
         let pk = UnparsedPublicKey::new(&ED25519, pk);
-        Self {
+        Ok(Self {
             pk,
             buf: BytesMut::new(),
-        }
+        })
     }
 
     fn update(&mut self, data: &[u8]) {

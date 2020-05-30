@@ -51,15 +51,16 @@ impl KexTrait for DiffieHellmanGroup14Sha1 {
 
         let e = kexdh_init.ephemeral_public_key();
         e.pack(&mut hasher);
-        let e = BigNum::from_slice(e).unwrap();
+        let e = BigNum::from_slice(e).map_err(SshError::kex_error)?;
 
-        let p = get_p(14);
-        let y = gen_y();
-        let g = get_g();
+        let p = get_p(14)?;
+        let y = gen_y()?;
+        let g = get_g()?;
 
-        let mut ctx = BigNumContext::new().unwrap();
-        let mut f = BigNum::new().unwrap();
-        f.mod_exp(&g, &y, &p, &mut ctx).unwrap();
+        let mut ctx = BigNumContext::new().map_err(SshError::kex_error)?;
+        let mut f = BigNum::new().map_err(SshError::kex_error)?;
+        f.mod_exp(&g, &y, &p, &mut ctx)
+            .map_err(SshError::kex_error)?;
         let mut f = f.to_vec();
         if f[0] & 0x80 != 0 {
             f.insert(0, 0);
@@ -67,9 +68,10 @@ impl KexTrait for DiffieHellmanGroup14Sha1 {
         let f = Bytes::from(f);
         f.clone().pack(&mut hasher);
 
-        let mut ctx = BigNumContext::new().unwrap();
-        let mut k = BigNum::new().unwrap();
-        k.mod_exp(&e, &y, &p, &mut ctx).unwrap();
+        let mut ctx = BigNumContext::new().map_err(SshError::kex_error)?;
+        let mut k = BigNum::new().map_err(SshError::kex_error)?;
+        k.mod_exp(&e, &y, &p, &mut ctx)
+            .map_err(SshError::kex_error)?;
         let k = Bytes::from(k.to_vec());
         Mpint::new(k.clone()).pack(&mut hasher);
 
@@ -85,7 +87,7 @@ impl KexTrait for DiffieHellmanGroup14Sha1 {
     }
 }
 
-fn get_p(n: u32) -> BigNum {
+fn get_p(n: u32) -> Result<BigNum, SshError> {
     match n {
         1 => BigNum::get_rfc2409_prime_768(),
         2 => BigNum::get_rfc2409_prime_1024(),
@@ -97,17 +99,18 @@ fn get_p(n: u32) -> BigNum {
         18 => BigNum::get_rfc3526_prime_8192(),
         x => panic!("out of range {}", x),
     }
-    .unwrap()
+    .map_err(SshError::kex_error)
 }
 
-fn get_g() -> BigNum {
-    BigNum::from_u32(2).unwrap()
+fn get_g() -> Result<BigNum, SshError> {
+    BigNum::from_u32(2).map_err(SshError::kex_error)
 }
 
-fn gen_y() -> BigNum {
-    let mut y = BigNum::new().unwrap();
-    y.rand(160, MsbOption::MAYBE_ZERO, false).unwrap();
-    y
+fn gen_y() -> Result<BigNum, SshError> {
+    let mut y = BigNum::new().map_err(SshError::kex_error)?;
+    y.rand(160, MsbOption::MAYBE_ZERO, false)
+        .map_err(SshError::kex_error)?;
+    Ok(y)
 }
 
 impl From<DiffieHellmanGroup14Sha1> for Kex {
@@ -183,10 +186,10 @@ impl KexTrait for DiffieHellmanGroupExchangeSha256 {
             get_p(1)
         } else {
             todo!()
-        };
+        }?;
         Mpint::new(p.to_vec()).pack(&mut hasher);
 
-        let g = get_g();
+        let g = get_g()?;
         Mpint::new(g.to_vec()).pack(&mut hasher);
 
         let group = KexDhGexGroup::new(Mpint::new(p.to_vec()), Mpint::new(g.to_vec()));
@@ -201,22 +204,24 @@ impl KexTrait for DiffieHellmanGroupExchangeSha256 {
 
         let e = kex_dh_gex_init.e();
         e.pack(&mut hasher);
-        let e = BigNum::from_slice(e.as_ref()).unwrap();
+        let e = BigNum::from_slice(e.as_ref()).map_err(SshError::kex_error)?;
 
-        let y = gen_y();
+        let y = gen_y()?;
 
-        let mut ctx = BigNumContext::new().unwrap();
-        let mut f = BigNum::new().unwrap();
-        f.mod_exp(&g, &y, &p, &mut ctx).unwrap();
+        let mut ctx = BigNumContext::new().map_err(SshError::kex_error)?;
+        let mut f = BigNum::new().map_err(SshError::kex_error)?;
+        f.mod_exp(&g, &y, &p, &mut ctx)
+            .map_err(SshError::kex_error)?;
         let mut f = f.to_vec();
         if f[0] & 0x80 != 0 {
             f.insert(0, 0);
         }
         Mpint::new(f.clone()).pack(&mut hasher);
 
-        let mut ctx = BigNumContext::new().unwrap();
-        let mut k = BigNum::new().unwrap();
-        k.mod_exp(&e, &y, &p, &mut ctx).unwrap();
+        let mut ctx = BigNumContext::new().map_err(SshError::kex_error)?;
+        let mut k = BigNum::new().map_err(SshError::kex_error)?;
+        k.mod_exp(&e, &y, &p, &mut ctx)
+            .map_err(SshError::kex_error)?;
         let mut k = k.to_vec();
         if k[0] & 0x80 != 0 {
             k.insert(0, 0);

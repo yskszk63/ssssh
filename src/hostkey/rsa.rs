@@ -53,23 +53,23 @@ pub(crate) struct RsaVerifier {
 impl VerifierTrait for RsaVerifier {
     const NAME: &'static str = "ssh-rsa";
 
-    fn new(pk: &[u8]) -> Self {
+    fn new(pk: &[u8]) -> Result<Self, SshError> {
         let mut buf = BytesMut::new();
         buf.extend_from_slice(pk);
 
-        let e = Bytes::unpack(&mut buf).unwrap();
-        let n = Bytes::unpack(&mut buf).unwrap();
+        let e = Bytes::unpack(&mut buf)?;
+        let n = Bytes::unpack(&mut buf)?;
 
-        let e = BigNum::from_slice(&e).unwrap();
-        let n = BigNum::from_slice(&n).unwrap();
+        let e = BigNum::from_slice(&e).map_err(SshError::any)?;
+        let n = BigNum::from_slice(&n).map_err(SshError::any)?;
 
-        let key = OpenSslRsa::from_public_components(n, e).unwrap();
-        let key = PKey::from_rsa(key).unwrap();
+        let key = OpenSslRsa::from_public_components(n, e).map_err(SshError::any)?;
+        let key = PKey::from_rsa(key).map_err(SshError::any)?;
 
-        Self {
+        Ok(Self {
             key,
             buf: BytesMut::new(),
-        }
+        })
     }
 
     fn update(&mut self, data: &[u8]) {

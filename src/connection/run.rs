@@ -312,7 +312,7 @@ where
                 let signature = item.signature().as_ref().unwrap().clone();
 
                 let pubkey = item.blob().clone();
-                let mut verifier = pubkey.verifier().unwrap();
+                let mut verifier = pubkey.verifier()?;
 
                 self.io
                     .get_ref()
