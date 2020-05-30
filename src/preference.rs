@@ -98,7 +98,7 @@ impl PreferenceBuilder {
         };
 
         let name = self.name.clone().unwrap_or_else(|| "sssh".into());
-        let timeout = self.timeout.clone();
+        let timeout = self.timeout;
 
         let mut hostkeys = self.hostkeys.build()?;
         if hostkeys.names().is_empty() {

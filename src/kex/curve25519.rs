@@ -43,7 +43,7 @@ impl KexTrait for Curve25519Sha256 {
         let kex_ecdh_init = match io.next().await {
             Some(Ok(Msg::KexEcdhInit(msg))) => msg,
             Some(Ok(msg)) => return Err(SshError::KexUnexpectedMsg(format!("{:?}", msg))),
-            Some(Err(e)) => return Err(e.into()),
+            Some(Err(e)) => return Err(e),
             None => return Err(SshError::KexUnexpectedEof),
         };
 

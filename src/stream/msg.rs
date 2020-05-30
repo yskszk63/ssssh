@@ -40,7 +40,7 @@ where
         &mut self.io
     }
 
-    pub(crate) fn context<'a, M>(&'a mut self) -> ContextualMsgStream<'a, IO, M>
+    pub(crate) fn context<M>(&mut self) -> ContextualMsgStream<'_, IO, M>
     where
         M: ContextualMsg + Unpin,
     {

@@ -318,7 +318,6 @@ where
                     .get_ref()
                     .state()
                     .session_id()
-                    .clone()
                     .to_bytes()
                     .pack(&mut verifier);
                 50u8.pack(&mut verifier);

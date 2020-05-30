@@ -45,7 +45,7 @@ impl KexTrait for DiffieHellmanGroup14Sha1 {
         let kexdh_init = match io.next().await {
             Some(Ok(Msg::KexEcdhInit(msg))) => msg,
             Some(Ok(msg)) => return Err(SshError::KexUnexpectedMsg(format!("{:?}", msg))),
-            Some(Err(e)) => return Err(e.into()),
+            Some(Err(e)) => return Err(e),
             None => return Err(SshError::KexUnexpectedEof),
         };
 
@@ -79,11 +79,11 @@ impl KexTrait for DiffieHellmanGroup14Sha1 {
 
         let signature = env.hostkey.sign(&h);
 
-        let reply = KexEcdhReply::new(env.hostkey.publickey(), f.into(), signature);
+        let reply = KexEcdhReply::new(env.hostkey.publickey(), f, signature);
 
         io.send(reply.into()).await?;
 
-        Ok((h, k.into()))
+        Ok((h, k))
     }
 }
 
@@ -164,7 +164,7 @@ impl KexTrait for DiffieHellmanGroupExchangeSha256 {
                 *msg.min()..=*msg.max()
             }
             Some(Ok(msg)) => return Err(SshError::KexUnexpectedMsg(format!("{:?}", msg))),
-            Some(Err(e)) => return Err(e.into()),
+            Some(Err(e)) => return Err(e),
             None => return Err(SshError::KexUnexpectedEof),
         };
 
@@ -198,7 +198,7 @@ impl KexTrait for DiffieHellmanGroupExchangeSha256 {
         let kex_dh_gex_init = match io.next().await {
             Some(Ok(GexMsg::KexDhGexInit(msg))) => msg,
             Some(Ok(msg)) => return Err(SshError::KexUnexpectedMsg(format!("{:?}", msg))),
-            Some(Err(e)) => return Err(e.into()),
+            Some(Err(e)) => return Err(e),
             None => return Err(SshError::KexUnexpectedEof),
         };
 
