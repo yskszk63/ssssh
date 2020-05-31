@@ -102,4 +102,16 @@ pub trait Handlers: Send {
     {
         futures::future::err(Self::Err::from(NotImplemented(()))).boxed()
     }
+
+    fn handle_direct_tcpip<I, O>(
+        &mut self,
+        _input: I,
+        _output: O,
+    ) -> BoxFuture<'static, Result<(), Self::Err>>
+    where
+        I: AsyncRead + Send + Unpin + 'static,
+        O: AsyncWrite + Send + Unpin + 'static,
+    {
+        futures::future::err(Self::Err::from(NotImplemented(()))).boxed()
+    }
 }

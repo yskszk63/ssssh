@@ -39,6 +39,10 @@ enum Channel {
         Option<mpsc::UnboundedSender<Bytes>>,
         Option<Fuse<mpsc::UnboundedReceiver<Bytes>>>,
     ),
+    DirectTcpip(
+        u32,
+        Option<mpsc::UnboundedSender<Bytes>>,
+    ),
 }
 
 fn maybe_timeout(preference: &Preference) -> impl Future<Output = ()> {

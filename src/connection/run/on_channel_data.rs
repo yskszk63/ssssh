@@ -20,7 +20,7 @@ where
         let data = channel_data.data();
         if let Some(channel) = self.channels.get_mut(chid) {
             match channel {
-                Channel::Session(_, stdin, _) => match stdin {
+                Channel::Session(_, stdin, _) | Channel::DirectTcpip(_, stdin) => match stdin {
                     Some(stdin) if stdin.is_closed() => warn!("closed channel {}", chid),
                     Some(stdin) => stdin.send(data.clone()).await?,
                     None => warn!("closed channel {}", chid),

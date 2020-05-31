@@ -101,6 +101,23 @@ impl Handlers for MyHandler {
         }
         .boxed()
     }
+
+    fn handle_direct_tcpip<I, O>(
+        &mut self,
+        _stdin: I,
+        mut stdout: O,
+    ) -> BoxFuture<'static, Result<(), Self::Err>>
+    where
+        I: AsyncRead + Send + Unpin + 'static,
+        O: AsyncWrite + Send + Unpin + 'static,
+    {
+        async move {
+            stdout.write(b"Hello, world! ").await?;
+            stdout.shutdown().await?;
+            Ok(())
+        }
+        .boxed()
+    }
 }
 
 #[tokio::main]
