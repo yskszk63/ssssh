@@ -29,6 +29,20 @@ impl Handlers for MyHandler {
         Ok(true)
     }
 
+    async fn handle_auth_hostbased(
+        &mut self,
+        username: &str,
+        algorithm: &str,
+        hostname: &str,
+        publickey: &str,
+    ) -> Result<bool, Self::Err> {
+        println!(
+            "HOSTBASED {} {} {} {}",
+            username, algorithm, hostname, publickey
+        );
+        Ok(true)
+    }
+
     async fn handle_auth_password(
         &mut self,
         _username: &str,

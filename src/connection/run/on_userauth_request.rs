@@ -4,7 +4,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 use crate::msg::userauth_failure::UserauthFailure;
 use crate::msg::userauth_passwd_changereq::UserauthPasswdChangereq;
 use crate::msg::userauth_pk_ok::UserauthPkOk;
-use crate::msg::userauth_request::{Method, Password, Publickey, UserauthRequest};
+use crate::msg::userauth_request::{Hostbased, Method, Password, Publickey, UserauthRequest};
 use crate::msg::userauth_success::UserauthSuccess;
 use crate::msg::UserauthPkMsg;
 use crate::pack::Pack;
@@ -41,6 +41,11 @@ where
             }
 
             Method::Password(item) => self.on_userauth_password_change(user_name, item).await,
+
+            Method::Hostbased(item) => {
+                self.on_userauth_hostbased(userauth_request, user_name, item)
+                    .await
+            }
 
             x => {
                 debug!("unknown auth method {:?}", x);
@@ -170,6 +175,50 @@ where
                 self.send(m).await
             }
             PasswordResult::Failure => self.send_failure(&["hostbased"]).await,
+        }
+    }
+
+    async fn on_userauth_hostbased(
+        &mut self,
+        userauth_request: &UserauthRequest,
+        user_name: &str,
+        item: &Hostbased,
+    ) -> Result<(), SshError> {
+        let signature = item.signature().clone();
+
+        let pubkey = item.client_hostkey().clone();
+        let mut verifier = pubkey.verifier()?;
+
+        self.io
+            .get_ref()
+            .state()
+            .session_id()
+            .to_bytes()
+            .pack(&mut verifier);
+        50u8.pack(&mut verifier);
+        user_name.pack(&mut verifier);
+        userauth_request.service_name().pack(&mut verifier);
+        "hostbased".pack(&mut verifier);
+        item.algorithm().to_string().pack(&mut verifier);
+        item.client_hostkey().pack(&mut verifier);
+        item.client_hostname().pack(&mut verifier);
+        item.user_name().pack(&mut verifier);
+
+        if verifier.verify(&signature) {
+            let blob = item.client_hostkey().to_string();
+            let r = self
+                .handlers
+                .handle_auth_hostbased(user_name, item.algorithm(), item.client_hostname(), &blob)
+                .await
+                .map_err(|e| SshError::HandlerError(e.into()))?;
+
+            if r {
+                self.send_success().await
+            } else {
+                self.send_failure(&[]).await
+            }
+        } else {
+            self.send_failure(&[]).await
         }
     }
 }

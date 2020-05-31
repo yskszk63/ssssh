@@ -64,6 +64,16 @@ pub trait Handlers: Send {
         Ok(PasswordResult::Failure)
     }
 
+    async fn handle_auth_hostbased(
+        &mut self,
+        _username: &str,
+        _algorithm: &str,
+        _hostname: &str,
+        _publickey: &str,
+    ) -> Result<bool, Self::Err> {
+        Ok(false)
+    }
+
     fn handle_channel_shell<I, O, E>(
         &mut self,
         _stdin: I,

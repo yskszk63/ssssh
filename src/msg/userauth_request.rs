@@ -1,7 +1,7 @@
 use getset::Getters;
 
 use super::*;
-use crate::hostkey::{PublicKey, Signature};
+use crate::hostkey::{PublicKey as Pk, Signature};
 
 #[derive(Debug, Getters)]
 pub(crate) struct Publickey {
@@ -9,7 +9,7 @@ pub(crate) struct Publickey {
     algorithm: String,
 
     #[get = "pub(crate)"]
-    blob: PublicKey,
+    blob: Pk,
 
     #[get = "pub(crate)"]
     signature: Option<Signature>,
@@ -87,7 +87,7 @@ pub(crate) struct Hostbased {
     algorithm: String,
 
     #[get = "pub(crate)"]
-    client_hostkey: Bytes,
+    client_hostkey: Pk,
 
     #[get = "pub(crate)"]
     client_hostname: String,
@@ -96,7 +96,7 @@ pub(crate) struct Hostbased {
     user_name: String,
 
     #[get = "pub(crate)"]
-    signature: Bytes,
+    signature: Signature,
 }
 
 impl Pack for Hostbased {
