@@ -60,6 +60,9 @@ pub enum SshError {
     #[error(transparent)]
     ChannelError(#[from] futures::channel::mpsc::SendError),
 
+    #[error("unacceptable service {0}")]
+    UnacceptableService(String),
+
     #[error("handler error: {0}")]
     HandlerError(#[source] Box<dyn Error + Send + Sync + 'static>),
 
@@ -87,6 +90,7 @@ impl SshError {
             Self::UnexpectedMsg(..) => Some(ReasonCode::ProtocolError),
             Self::NoPacketReceived => Some(ReasonCode::ProtocolError),
             Self::ChannelError(..) => Some(ReasonCode::ServiceNotAvailable),
+            Self::UnacceptableService(..) => Some(ReasonCode::ServiceNotAvailable),
             Self::HandlerError(..) => Some(ReasonCode::ByApplication),
             Self::Any(..) => None,
         }
