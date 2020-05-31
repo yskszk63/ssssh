@@ -1,10 +1,14 @@
 use derive_new::new;
+use getset::Getters;
 
 use super::*;
 
-#[derive(Debug, new)]
+#[derive(Debug, Getters, new)]
 pub(crate) struct ChannelWindowAdjust {
+    #[get = "pub(crate)"]
     recipient_channel: u32,
+
+    #[get = "pub(crate)"]
     bytes_to_add: u32,
 }
 

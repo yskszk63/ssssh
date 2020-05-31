@@ -1,12 +1,12 @@
 use futures::channel::mpsc;
-use futures::stream::StreamExt as _;
 use futures::future::TryFutureExt as _;
 use futures::sink::SinkExt as _;
+use futures::stream::StreamExt as _;
 use log::debug;
 use tokio::io::{self, AsyncRead, AsyncWrite};
 
 use crate::msg::channel_close::ChannelClose;
-use crate::msg::channel_open::{ChannelOpen, Type, DirectTcpip};
+use crate::msg::channel_open::{ChannelOpen, DirectTcpip, Type};
 use crate::msg::channel_open_confirmation::ChannelOpenConfirmation;
 use crate::msg::channel_open_failure::{ChannelOpenFailure, ReasonCode};
 use crate::Handlers;
@@ -83,11 +83,7 @@ where
         let input = stdin_rx.fuse();
 
         let input = io::stream_reader(input.map(Ok));
-        let output = SshStdout::new(
-            chid,
-            self.outbound_channel_tx.clone(),
-            true,
-        );
+        let output = SshStdout::new(chid, self.outbound_channel_tx.clone(), true);
 
         let mut tx = self.outbound_channel_tx.clone();
         self.completions.push(

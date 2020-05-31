@@ -27,6 +27,7 @@ mod on_channel_data;
 mod on_channel_eof;
 mod on_channel_open;
 mod on_channel_request;
+mod on_channel_window_adjust;
 mod on_global_request;
 mod on_kexinit;
 mod on_service_request;
@@ -39,10 +40,7 @@ enum Channel {
         Option<mpsc::UnboundedSender<Bytes>>,
         Option<Fuse<mpsc::UnboundedReceiver<Bytes>>>,
     ),
-    DirectTcpip(
-        u32,
-        Option<mpsc::UnboundedSender<Bytes>>,
-    ),
+    DirectTcpip(u32, Option<mpsc::UnboundedSender<Bytes>>),
 }
 
 fn maybe_timeout(preference: &Preference) -> impl Future<Output = ()> {
@@ -168,6 +166,7 @@ where
             Msg::ChannelData(msg) => self.on_channel_data(msg).await?,
             Msg::ChannelEof(msg) => self.on_channel_eof(msg).await?,
             Msg::ChannelClose(msg) => self.on_channel_close(msg).await?,
+            Msg::ChannelWindowAdjust(msg) => self.on_channel_window_adjust(msg).await?,
             Msg::ChannelRequest(msg) => self.on_channel_request(msg).await?,
             Msg::Disconnect(..) => *connected = false,
             Msg::Ignore(..) => {}
