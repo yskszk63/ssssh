@@ -9,7 +9,7 @@ use futures::ready;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use ring::rand::{SecureRandom, SystemRandom};
-use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{AsyncRead, AsyncWrite, BufStream};
 
 use crate::state::State;
 use crate::SshError;
@@ -81,23 +81,14 @@ where
         let bs = this.state.ctos().encrypt().block_size();
         let mac_length = this.state.ctos().mac().len();
 
-        match Pin::new(&mut this.io).poll_fill_buf(cx) {
-            Poll::Ready(buf) => {
-                let buf = buf?;
-                let n = buf.len();
-                this.rxbuf.0.put(buf);
-                Pin::new(&mut this.io).consume(n);
-                if n == 0 {
-                    return Poll::Ready(None);
-                }
-            }
-            Poll::Pending => {
-                if this.rxbuf.0.has_remaining() {
-                } else {
-                    return Poll::Pending;
-                }
-            }
-        };
+        this.rxbuf.0.reserve(MAXIMUM_PACKET_SIZE);
+        match Pin::new(&mut this.io).poll_read_buf(cx, &mut this.rxbuf.0) {
+            Poll::Ready(Ok(0)) => return Poll::Ready(None),
+            Poll::Ready(Ok(_)) => {},
+            Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
+            Poll::Pending if this.rxbuf.0.has_remaining() => {},
+            Poll::Pending => return Poll::Pending,
+        }
 
         loop {
             match &mut this.rxstate {
@@ -164,12 +155,12 @@ where
 {
     type Error = SshError;
 
-    fn poll_ready(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        let this = self.get_mut();
-        if !this.txbuf.0.is_empty() {
-            ready!(Pin::new(this).poll_flush(cx))?;
+    fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
+        if self.txbuf.0.remaining() > MAXIMUM_PACKET_SIZE {
+            self.as_mut().poll_flush(cx)
+        } else {
+            Poll::Ready(Ok(()))
         }
-        Poll::Ready(Ok(()))
     }
 
     fn start_send(self: Pin<&mut Self>, item: Bytes) -> Result<(), Self::Error> {
@@ -208,8 +199,10 @@ where
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let this = self.get_mut();
-        ready!(Pin::new(&mut this.io).poll_write(cx, &this.txbuf.0))?;
-        this.txbuf.0.clear();
+        while this.txbuf.0.has_remaining() {
+            let n = ready!(Pin::new(&mut this.io).poll_write(cx, &this.txbuf.0))?;
+            this.txbuf.0.advance(n);
+        }
         ready!(Pin::new(&mut this.io).poll_flush(cx))?;
         Poll::Ready(Ok(()))
     }
