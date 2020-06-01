@@ -1,43 +1,8 @@
 use std::time::Duration;
 
-use async_trait::async_trait;
-use futures::future::{BoxFuture, FutureExt as _, TryFutureExt as _};
+use futures::future::{ok, FutureExt as _, TryFutureExt as _};
 use futures::stream::TryStreamExt as _;
-use ssssh::{Handlers, PasswordResult, ServerBuilder};
-use tokio::io::{AsyncRead, AsyncWrite};
-
-struct MyHandler;
-
-#[async_trait]
-impl Handlers for MyHandler {
-    type Err = anyhow::Error;
-
-    async fn handle_auth_password(
-        &mut self,
-        _username: &str,
-        _password: &str,
-    ) -> Result<PasswordResult, Self::Err> {
-        Ok(PasswordResult::Ok)
-    }
-
-    fn handle_channel_shell<I, O, E>(
-        &mut self,
-        mut stdin: I,
-        mut stdout: O,
-        _stderr: E,
-    ) -> BoxFuture<'static, Result<u32, Self::Err>>
-    where
-        I: AsyncRead + Send + Unpin + 'static,
-        O: AsyncWrite + Send + Unpin + 'static,
-        E: AsyncWrite + Send + Unpin + 'static,
-    {
-        async move {
-            tokio::io::copy(&mut stdin, &mut stdout).await?;
-            Ok(0)
-        }
-        .boxed()
-    }
-}
+use ssssh::{Handlers, ServerBuilder};
 
 #[tokio::main(basic_scheduler)]
 async fn main() -> anyhow::Result<()> {
@@ -52,7 +17,19 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(
             async move {
                 let conn = conn.accept().await?;
-                conn.run(MyHandler).await?;
+
+                let mut handlers = Handlers::<anyhow::Error>::new();
+
+                handlers.on_auth_none(|_| ok(true).boxed());
+                handlers.on_channel_shell(|mut stdin, mut stdout, _| {
+                    async move {
+                        tokio::io::copy(&mut stdin, &mut stdout).await?;
+                        Ok(0)
+                    }
+                    .boxed()
+                });
+
+                conn.run(handlers).await?;
                 Ok::<_, anyhow::Error>(())
             }
             .map_err(|e| println!("{}", e)),

@@ -4,14 +4,15 @@ use std::sync::Arc;
 use tokio::io::{self, AsyncRead, AsyncWrite, BufStream};
 use tokio::net::TcpStream;
 
-use crate::handlers::Handlers;
+use crate::handlers::{HandlerError, Handlers};
 use crate::preference::Preference;
 use crate::stream::msg::MsgStream;
 use crate::SshError;
+pub use ssh_stream::{SshInput, SshOutput};
 
 mod completion_stream;
 mod run;
-mod ssh_stdout;
+mod ssh_stream;
 mod version_ex;
 
 /// Protocol Version Exchange
@@ -106,9 +107,9 @@ where
         &self.state.c_version
     }
 
-    pub async fn run<H>(self, handler: H) -> Result<(), SshError>
+    pub async fn run<E>(self, handler: Handlers<E>) -> Result<(), SshError>
     where
-        H: Handlers,
+        E: Into<HandlerError> + Send + 'static,
     {
         let Established {
             io,

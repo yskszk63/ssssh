@@ -20,7 +20,7 @@ use crate::stream::msg::MsgStream;
 use crate::SshError;
 
 use super::completion_stream::CompletionStream;
-use super::ssh_stdout::SshStdout;
+use super::ssh_stream::{SshInput, SshOutput};
 
 mod on_channel_close;
 mod on_channel_data;
@@ -35,11 +35,7 @@ mod on_userauth_request;
 
 #[derive(Debug)]
 enum Channel {
-    Session(
-        u32,
-        Option<mpsc::UnboundedSender<Bytes>>,
-        Option<Fuse<mpsc::UnboundedReceiver<Bytes>>>,
-    ),
+    Session(u32, Option<mpsc::UnboundedSender<Bytes>>, Option<SshInput>),
     DirectTcpip(u32, Option<mpsc::UnboundedSender<Bytes>>),
 }
 
@@ -52,16 +48,16 @@ fn maybe_timeout(preference: &Preference) -> impl Future<Output = ()> {
 }
 
 #[derive(Debug)]
-pub(super) struct Runner<IO, H>
+pub(super) struct Runner<IO, E>
 where
     IO: AsyncRead + AsyncWrite + Unpin + Send,
-    H: Handlers,
+    E: Into<HandlerError> + Send + 'static,
 {
     io: MsgStream<IO>,
     c_version: String,
     s_version: String,
     preference: Arc<Preference>,
-    handlers: H,
+    handlers: Handlers<E>,
     channels: HashMap<u32, Channel>,
     outbound_channel_tx: mpsc::UnboundedSender<Msg>,
     outbound_channel_rx: Fuse<mpsc::UnboundedReceiver<Msg>>,
@@ -69,17 +65,17 @@ where
     first_kexinit: Option<msg::kexinit::Kexinit>,
 }
 
-impl<IO, H> Runner<IO, H>
+impl<IO, E> Runner<IO, E>
 where
     IO: AsyncRead + AsyncWrite + Unpin + Send,
-    H: Handlers,
+    E: Into<HandlerError> + Send + 'static,
 {
     pub(super) fn new(
         io: MsgStream<IO>,
         c_version: String,
         s_version: String,
         preference: Arc<Preference>,
-        handlers: H,
+        handlers: Handlers<E>,
     ) -> Self {
         let (tx, rx) = mpsc::unbounded();
         let rx = rx.fuse();

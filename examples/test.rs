@@ -1,124 +1,12 @@
-use std::ffi::OsString;
-
-use futures::future::{BoxFuture, FutureExt as _, TryFutureExt as _};
+use futures::future::ok;
+use futures::future::{FutureExt as _, TryFutureExt as _};
 use futures::stream::TryStreamExt as _;
-use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt as _};
+use tokio::io::AsyncWriteExt as _;
 
 use ssssh::Handlers;
 use ssssh::PasswordResult;
 use ssssh::ServerBuilder;
-
-struct MyHandler;
-
-#[async_trait::async_trait]
-impl Handlers for MyHandler {
-    type Err = anyhow::Error;
-
-    async fn handle_auth_none(&mut self, _username: &str) -> Result<bool, Self::Err> {
-        //Ok(true)
-        Ok(false)
-    }
-
-    async fn handle_auth_publickey(
-        &mut self,
-        username: &str,
-        algorithm: &str,
-        publickey: &str,
-    ) -> Result<bool, Self::Err> {
-        println!("PUBLICKEY {} {} {}", username, algorithm, publickey);
-        Ok(true)
-    }
-
-    async fn handle_auth_hostbased(
-        &mut self,
-        username: &str,
-        algorithm: &str,
-        hostname: &str,
-        publickey: &str,
-    ) -> Result<bool, Self::Err> {
-        println!(
-            "HOSTBASED {} {} {} {}",
-            username, algorithm, hostname, publickey
-        );
-        Ok(true)
-    }
-
-    async fn handle_auth_password(
-        &mut self,
-        _username: &str,
-        _password: &str,
-    ) -> Result<PasswordResult, Self::Err> {
-        Ok(PasswordResult::Failure)
-    }
-
-    async fn handle_auth_password_change(
-        &mut self,
-        _username: &str,
-        _old_password: &str,
-        _new_password: &str,
-    ) -> Result<PasswordResult, Self::Err> {
-        Ok(PasswordResult::Failure)
-    }
-
-    fn handle_channel_shell<I, O, E>(
-        &mut self,
-        mut stdin: I,
-        mut stdout: O,
-        _stderr: E,
-    ) -> BoxFuture<'static, Result<u32, Self::Err>>
-    where
-        I: AsyncRead + Send + Unpin + 'static,
-        O: AsyncWrite + Send + Unpin + 'static,
-        E: AsyncWrite + Send + Unpin + 'static,
-    {
-        async move {
-            tokio::io::copy(&mut stdin, &mut stdout).await?;
-            stdout.shutdown().await?;
-            Ok(0)
-        }
-        .boxed()
-    }
-
-    fn handle_channel_exec<I, O, E>(
-        &mut self,
-        stdin: I,
-        mut stdout: O,
-        stderr: E,
-        _prog: OsString,
-    ) -> BoxFuture<'static, Result<u32, Self::Err>>
-    where
-        I: AsyncRead + Send + Unpin + 'static,
-        O: AsyncWrite + Send + Unpin + 'static,
-        E: AsyncWrite + Send + Unpin + 'static,
-    {
-        drop(stdin);
-        drop(stderr);
-
-        async move {
-            stdout.write(b"Hello, world! ").await?;
-            stdout.shutdown().await?;
-            Ok(0)
-        }
-        .boxed()
-    }
-
-    fn handle_direct_tcpip<I, O>(
-        &mut self,
-        _stdin: I,
-        mut stdout: O,
-    ) -> BoxFuture<'static, Result<(), Self::Err>>
-    where
-        I: AsyncRead + Send + Unpin + 'static,
-        O: AsyncWrite + Send + Unpin + 'static,
-    {
-        async move {
-            stdout.write(b"Hello, world! ").await?;
-            stdout.shutdown().await?;
-            Ok(())
-        }
-        .boxed()
-    }
-}
+use ssssh::SshOutput;
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -129,7 +17,48 @@ async fn main() -> anyhow::Result<()> {
         tokio::spawn(
             async move {
                 let conn = conn.accept().await?;
-                conn.run(MyHandler).await?;
+
+                let mut handlers = Handlers::<anyhow::Error>::new();
+
+                handlers.on_auth_none(|_| ok(false).boxed());
+                handlers.on_auth_publickey(|_, _, _| ok(false).boxed());
+                handlers.on_auth_password(|_, _| {
+                    ok(PasswordResult::PasswordChangeRequired(
+                        "please change password!".into(),
+                    ))
+                    .boxed()
+                });
+                handlers.on_auth_change_password(|_, _, _| ok(PasswordResult::Failure).boxed());
+                handlers.on_auth_hostbased(|_, _, _, _| ok(true).boxed());
+
+                handlers.on_channel_shell(|mut stdin, mut stdout: SshOutput, _| {
+                    async move {
+                        tokio::io::copy(&mut stdin, &mut stdout).await?;
+                        stdout.shutdown().await?;
+                        Ok(0)
+                    }
+                    .boxed()
+                });
+
+                handlers.on_channel_exec(|_, mut stdout: SshOutput, _, _| {
+                    async move {
+                        stdout.write(b"Hello, World!").await?;
+                        stdout.shutdown().await?;
+                        Ok(0)
+                    }
+                    .boxed()
+                });
+
+                handlers.on_channel_direct_tcpip(|_, mut stdout: SshOutput| {
+                    async move {
+                        stdout.write(b"Hello, World!").await?;
+                        stdout.shutdown().await?;
+                        Ok(())
+                    }
+                    .boxed()
+                });
+
+                conn.run(handlers).await?;
                 Ok::<_, anyhow::Error>(())
             }
             .map_err(|e| println!("{}", e)),

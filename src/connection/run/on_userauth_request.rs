@@ -8,16 +8,16 @@ use crate::msg::userauth_request::{Hostbased, Method, Password, Publickey, Usera
 use crate::msg::userauth_success::UserauthSuccess;
 use crate::msg::UserauthPkMsg;
 use crate::pack::Pack;
-use crate::{Handlers, PasswordResult};
+use crate::{HandlerError, PasswordResult};
 use bytes::Buf as _;
 use log::debug;
 
 use super::{Runner, SshError};
 
-impl<IO, H> Runner<IO, H>
+impl<IO, E> Runner<IO, E>
 where
     IO: AsyncRead + AsyncWrite + Unpin + Send,
-    H: Handlers,
+    E: Into<HandlerError> + Send + 'static,
 {
     pub(super) async fn on_userauth_request(
         &mut self,
@@ -60,21 +60,24 @@ where
     }
 
     async fn send_failure(&mut self, methods: &[&str]) -> Result<(), SshError> {
-        let msg = UserauthFailure::new(methods.into_iter().cloned().collect(), false);
+        let msg = UserauthFailure::new(methods.iter().cloned().collect(), false);
         self.send(msg).await?;
         Ok(())
     }
 
     async fn on_userauth_none(&mut self, user_name: &str) -> Result<(), SshError> {
-        let r = self
-            .handlers
-            .handle_auth_none(user_name)
-            .await
-            .map_err(|e| SshError::HandlerError(e.into()))?;
+        let user_name = user_name.into();
+
+        let r = if let Some(fut) = self.handlers.dispatch_auth_none(user_name) {
+            fut.await.map_err(|e| SshError::HandlerError(e.into()))?
+        } else {
+            false
+        };
 
         if r {
             self.send_success().await
         } else {
+            // TODO manage remaining
             self.send_failure(&["publickey", "password", "hostbased"])
                 .await
         }
@@ -85,12 +88,18 @@ where
         user_name: &str,
         item: &Publickey,
     ) -> Result<(), SshError> {
-        let blob = item.blob().to_string();
-        let r = self
+        let username = user_name.into();
+        let algorithm = item.algorithm().into();
+        let publickey = item.blob().to_string();
+
+        let r = if let Some(fut) = self
             .handlers
-            .handle_auth_publickey(user_name, item.algorithm(), &blob)
-            .await
-            .map_err(|e| SshError::HandlerError(e.into()))?;
+            .dispatch_auth_publickey(username, algorithm, publickey)
+        {
+            fut.await.map_err(|e| SshError::HandlerError(e.into()))?
+        } else {
+            false
+        };
 
         if r {
             let m = UserauthPkOk::new(item.algorithm().into(), item.blob().clone()).into();
@@ -126,10 +135,25 @@ where
         item.algorithm().to_string().pack(&mut verifier);
         item.blob().pack(&mut verifier);
 
-        // TODO check acceptable
-
         if verifier.verify(&signature) {
-            self.send_success().await
+            let username = user_name.into();
+            let algorithm = item.algorithm().into();
+            let publickey = item.blob().to_string();
+
+            let r = if let Some(fut) = self
+                .handlers
+                .dispatch_auth_publickey(username, algorithm, publickey)
+            {
+                fut.await.map_err(|e| SshError::HandlerError(e.into()))?
+            } else {
+                false
+            };
+
+            if r {
+                self.send_success().await
+            } else {
+                self.send_failure(&["password", "hostbased"]).await
+            }
         } else {
             self.send_failure(&["password", "hostbased"]).await
         }
@@ -140,11 +164,14 @@ where
         user_name: &str,
         item: &Password,
     ) -> Result<(), SshError> {
-        let r = self
-            .handlers
-            .handle_auth_password(user_name, item.password())
-            .await
-            .map_err(|e| SshError::HandlerError(e.into()))?;
+        let username = user_name.into();
+        let password = item.password().into();
+
+        let r = if let Some(fut) = self.handlers.dispatch_auth_password(username, password) {
+            fut.await.map_err(|e| SshError::HandlerError(e.into()))?
+        } else {
+            PasswordResult::Failure
+        };
 
         match r {
             PasswordResult::Ok => self.send_success().await,
@@ -161,12 +188,18 @@ where
         user_name: &str,
         item: &Password,
     ) -> Result<(), SshError> {
-        let newpassword = item.newpassword().as_ref().unwrap();
-        let r = self
-            .handlers
-            .handle_auth_password_change(user_name, item.password(), newpassword)
-            .await
-            .map_err(|e| SshError::HandlerError(e.into()))?;
+        let username = user_name.into();
+        let oldpassword = item.password().into();
+        let newpassword = item.newpassword().clone().unwrap();
+
+        let r = if let Some(fut) =
+            self.handlers
+                .dispatch_auth_change_password(username, oldpassword, newpassword)
+        {
+            fut.await.map_err(|e| SshError::HandlerError(e.into()))?
+        } else {
+            PasswordResult::Failure
+        };
 
         match r {
             PasswordResult::Ok => self.send_success().await,
@@ -205,12 +238,19 @@ where
         item.user_name().pack(&mut verifier);
 
         if verifier.verify(&signature) {
-            let blob = item.client_hostkey().to_string();
-            let r = self
+            let username = user_name.into();
+            let hostname = item.client_hostname().into();
+            let algorithm = item.algorithm().into();
+            let publickey = item.client_hostkey().to_string();
+
+            let r = if let Some(fut) = self
                 .handlers
-                .handle_auth_hostbased(user_name, item.algorithm(), item.client_hostname(), &blob)
-                .await
-                .map_err(|e| SshError::HandlerError(e.into()))?;
+                .dispatch_auth_hostbased(username, hostname, algorithm, publickey)
+            {
+                fut.await.map_err(|e| SshError::HandlerError(e.into()))?
+            } else {
+                false
+            };
 
             if r {
                 self.send_success().await

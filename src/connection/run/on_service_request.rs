@@ -2,14 +2,14 @@ use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::msg::service_accept::ServiceAccept;
 use crate::msg::service_request::{ServiceRequest, SSH_CONNECTION, SSH_USERAUTH};
-use crate::Handlers;
+use crate::HandlerError;
 
 use super::{Runner, SshError};
 
-impl<IO, H> Runner<IO, H>
+impl<IO, E> Runner<IO, E>
 where
     IO: AsyncRead + AsyncWrite + Unpin + Send,
-    H: Handlers,
+    E: Into<HandlerError> + Send + 'static,
 {
     pub(super) async fn on_service_request(
         &mut self,

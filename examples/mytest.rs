@@ -1,42 +1,20 @@
 use std::time::Duration;
 
-use async_trait::async_trait;
+use futures::future::ok;
+use futures::future::FutureExt as _;
 use futures::stream::TryStreamExt as _;
 
 use ssssh::ServerBuilder;
 use ssssh::{Handlers, PasswordResult};
 
-struct MyHandler;
-
-#[async_trait]
-impl Handlers for MyHandler {
-    type Err = anyhow::Error;
-
-    async fn handle_auth_password_change(
-        &mut self,
-        _username: &str,
-        _oldpassword: &str,
-        _newpassword: &str,
-    ) -> Result<PasswordResult, Self::Err> {
-        Ok(PasswordResult::PasswordChangeRequired(
-            "password expired".into(),
-        ))
-    }
-
-    async fn handle_auth_password(
-        &mut self,
-        _username: &str,
-        _password: &str,
-    ) -> Result<PasswordResult, Self::Err> {
-        Ok(PasswordResult::PasswordChangeRequired(
-            "password expired".into(),
-        ))
-    }
-}
-
 #[tokio::main(basic_scheduler)]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
+
+    let mut server = ServerBuilder::default()
+        .timeout(Duration::from_secs(5))
+        .build("[::1]:2222")
+        .await?;
 
     use tokio::process::Command;
     let proc = Command::new("ssh")
@@ -45,19 +23,30 @@ async fn main() -> anyhow::Result<()> {
         .arg("-p2222")
         .arg("-vvv")
         .arg("::1")
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
+        .stdout(std::process::Stdio::inherit())
+        .stderr(std::process::Stdio::inherit())
         .spawn()
         .unwrap();
 
-    let mut server = ServerBuilder::default()
-        .timeout(Duration::from_secs(5))
-        .build("[::1]:2222")
-        .await?;
-
     if let Some(connection) = server.try_next().await? {
         let connection = connection.accept().await?;
-        connection.run(MyHandler).await?;
+
+        let mut handlers = Handlers::<anyhow::Error>::new();
+
+        handlers.on_auth_password(|_, _| {
+            ok(PasswordResult::PasswordChangeRequired(
+                "please change password!".into(),
+            ))
+            .boxed()
+        });
+        handlers.on_auth_change_password(|_, _, _| {
+            ok(PasswordResult::PasswordChangeRequired(
+                "please change password!".into(),
+            ))
+            .boxed()
+        });
+
+        connection.run(handlers).await?;
     }
     proc.await.unwrap();
 

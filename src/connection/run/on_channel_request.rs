@@ -2,23 +2,22 @@ use std::os::unix::ffi::OsStringExt;
 
 use futures::future::TryFutureExt as _;
 use futures::sink::SinkExt as _;
-use futures::stream::StreamExt as _;
-use tokio::io::{self, AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::msg::channel_close::ChannelClose;
+use crate::msg::channel_extended_data::DataTypeCode;
 use crate::msg::channel_failure::ChannelFailure;
 use crate::msg::channel_request::{ChannelRequest, Type};
 use crate::msg::channel_success::ChannelSuccess;
 
-use crate::Handlers;
+use crate::HandlerError;
 
-use super::SshStdout;
-use super::{Channel, Runner, SshError};
+use super::{Channel, Runner, SshError, SshOutput};
 
-impl<IO, H> Runner<IO, H>
+impl<IO, E> Runner<IO, E>
 where
     IO: AsyncRead + AsyncWrite + Unpin + Send,
-    H: Handlers,
+    E: Into<HandlerError> + Send + 'static,
 {
     pub(super) async fn on_channel_request(
         &mut self,
@@ -39,39 +38,35 @@ where
         &mut self,
         channel_request: &ChannelRequest,
     ) -> Result<(), SshError> {
-        let chid = channel_request.recipient_channel();
-        if let Some(Channel::Session(_, _, stdin)) = self.channels.get_mut(chid) {
-            let stdin = io::stream_reader(stdin.take().unwrap().map(Ok));
-            let stdout = SshStdout::new(
-                *channel_request.recipient_channel(),
-                self.outbound_channel_tx.clone(),
-                true,
-            );
-            let stderr = SshStdout::new(
-                *channel_request.recipient_channel(),
-                self.outbound_channel_tx.clone(),
-                false,
-            );
-            let mut tx = self.outbound_channel_tx.clone();
-            let chid = *chid;
-            self.completions.push(
-                self.handlers
-                    .handle_channel_shell(stdin, stdout, stderr)
-                    .and_then(move |r| async move {
+        let channel = *channel_request.recipient_channel();
+
+        if let Some(Channel::Session(_, _, stdin)) = self.channels.get_mut(&channel) {
+            let stdin = stdin.take().unwrap();
+            let stdout = SshOutput::new(channel, self.outbound_channel_tx.clone());
+            let stderr = SshOutput::new(channel, self.outbound_channel_tx.clone())
+                .with_extended(DataTypeCode::Stderr);
+
+            if let Some(fut) = self.handlers.dispatch_channel_shell(stdin, stdout, stderr) {
+                let mut tx = self.outbound_channel_tx.clone();
+                self.completions.push(
+                    fut.and_then(move |r| async move {
                         let typ = Type::ExitStatus(r);
-                        let msg = ChannelRequest::new(chid, false, typ).into();
+                        let msg = ChannelRequest::new(channel, false, typ).into();
                         tx.send(msg).await.ok(); // FIXME
 
-                        let msg = ChannelClose::new(chid).into();
+                        let msg = ChannelClose::new(channel).into();
                         tx.send(msg).await.ok(); // FIXME
 
                         Ok(())
                     })
                     .map_err(Into::into),
-            );
-
-            let r = ChannelSuccess::new(*channel_request.recipient_channel());
-            self.send(r).await?;
+                );
+                let r = ChannelSuccess::new(*channel_request.recipient_channel());
+                self.send(r).await?;
+            } else {
+                let r = ChannelFailure::new(*channel_request.recipient_channel());
+                self.send(r).await?;
+            }
         } else {
             let r = ChannelFailure::new(*channel_request.recipient_channel());
             self.send(r).await?;
@@ -84,40 +79,39 @@ where
         channel_request: &ChannelRequest,
         prog: &[u8],
     ) -> Result<(), SshError> {
-        let chid = channel_request.recipient_channel();
-        if let Some(Channel::Session(_, _, stdin)) = self.channels.get_mut(chid) {
-            let stdin = io::stream_reader(stdin.take().unwrap().map(Ok));
-            let stdout = SshStdout::new(
-                *channel_request.recipient_channel(),
-                self.outbound_channel_tx.clone(),
-                true,
-            );
-            let stderr = SshStdout::new(
-                *channel_request.recipient_channel(),
-                self.outbound_channel_tx.clone(),
-                false,
-            );
-            let mut tx = self.outbound_channel_tx.clone();
-            let chid = *chid;
+        let channel = *channel_request.recipient_channel();
+
+        if let Some(Channel::Session(_, _, stdin)) = self.channels.get_mut(&channel) {
+            let stdin = stdin.take().unwrap();
+            let stdout = SshOutput::new(channel, self.outbound_channel_tx.clone());
+            let stderr = SshOutput::new(channel, self.outbound_channel_tx.clone())
+                .with_extended(DataTypeCode::Stderr);
             let prog = std::ffi::OsString::from_vec(prog.to_vec());
-            self.completions.push(
-                self.handlers
-                    .handle_channel_exec(stdin, stdout, stderr, prog)
-                    .and_then(move |r| async move {
+
+            if let Some(fut) = self
+                .handlers
+                .dispatch_channel_exec(stdin, stdout, stderr, prog)
+            {
+                let mut tx = self.outbound_channel_tx.clone();
+                self.completions.push(
+                    fut.and_then(move |r| async move {
                         let typ = Type::ExitStatus(r);
-                        let msg = ChannelRequest::new(chid, false, typ).into();
+                        let msg = ChannelRequest::new(channel, false, typ).into();
                         tx.send(msg).await.ok(); // FIXME
 
-                        let msg = ChannelClose::new(chid).into();
+                        let msg = ChannelClose::new(channel).into();
                         tx.send(msg).await.ok(); // FIXME
 
                         Ok(())
                     })
                     .map_err(Into::into),
-            );
-
-            let r = ChannelSuccess::new(*channel_request.recipient_channel());
-            self.send(r).await?;
+                );
+                let r = ChannelSuccess::new(*channel_request.recipient_channel());
+                self.send(r).await?;
+            } else {
+                let r = ChannelFailure::new(*channel_request.recipient_channel());
+                self.send(r).await?;
+            }
         } else {
             let r = ChannelFailure::new(*channel_request.recipient_channel());
             self.send(r).await?;
