@@ -1,4 +1,4 @@
-pub use connection::{Accept, Connection, Established, SshInput, SshOutput};
+pub use connection::{Connection, SshInput, SshOutput};
 pub use error::SshError;
 pub use handlers::*;
 pub use server::{Builder as ServerBuilder, Server};

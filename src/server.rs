@@ -11,9 +11,9 @@ use tokio::io;
 use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
 use tokio::stream::Stream;
 
+use crate::connection::{Accept, Connection};
 use crate::preference::{Preference, PreferenceBuilder};
 use crate::SshError;
-use crate::{Accept, Connection};
 
 #[derive(Debug, Error)]
 pub enum BuildError {
@@ -108,16 +108,6 @@ pub struct Server<L, S> {
     io: L,
     preference: Arc<Preference>,
     _stream: PhantomData<S>,
-}
-
-impl<L, S> Server<L, S>
-where
-    L: Stream<Item = io::Result<S>> + Unpin,
-    S: io::AsyncRead + io::AsyncWrite + Unpin,
-{
-    pub fn builder() -> Builder {
-        Builder::new()
-    }
 }
 
 impl<L, S> Stream for Server<L, S>
