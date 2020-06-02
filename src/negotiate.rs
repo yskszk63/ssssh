@@ -98,22 +98,22 @@ mod tests {
     #[test]
     fn test_decide() {
         let r = decide(&list(["a"]), &list(["a"]));
-        assert_eq!(r, Ok("a".into()));
+        assert_eq!(&r.unwrap(), "a");
 
         let r = decide(&list(["a"]), &list(["b"]));
-        assert!(matches!(r, Err(SshError::NotMatched(..))));
+        assert!(matches!(r, Err(SshError::NegotiateNotMatched(..))));
 
         let r = decide(&list([]), &list([]));
-        assert!(matches!(r, Err(SshError::NotMatched(..))));
+        assert!(matches!(r, Err(SshError::NegotiateNotMatched(..))));
 
         let r = decide(&list(["a"]), &list(["b", "a"]));
-        assert_eq!(r, Ok("a".into()));
+        assert_eq!(&r.unwrap(), "a");
 
         let r = decide(&list(["a", "b"]), &list(["b", "a"]));
-        assert_eq!(r, Ok("b".into()));
+        assert_eq!(&r.unwrap(), "b");
 
         let r = decide(&list(["a"]), &list(["b", "c"]));
-        assert!(matches!(r, Err(SshError::NotMatched(..))));
+        assert!(matches!(r, Err(SshError::NegotiateNotMatched(..))));
     }
 
     #[test]
