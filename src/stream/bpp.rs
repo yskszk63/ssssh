@@ -84,9 +84,9 @@ where
         this.rxbuf.0.reserve(MAXIMUM_PACKET_SIZE);
         match Pin::new(&mut this.io).poll_read_buf(cx, &mut this.rxbuf.0) {
             Poll::Ready(Ok(0)) => return Poll::Ready(None),
-            Poll::Ready(Ok(_)) => {},
+            Poll::Ready(Ok(_)) => {}
             Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
-            Poll::Pending if this.rxbuf.0.has_remaining() => {},
+            Poll::Pending if this.rxbuf.0.has_remaining() => {}
             Poll::Pending => return Poll::Pending,
         }
 
@@ -149,7 +149,7 @@ where
     }
 }
 
-impl<IO> Sink<Bytes> for BppStream<IO>
+impl<IO> Sink<&[u8]> for BppStream<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
@@ -163,10 +163,10 @@ where
         }
     }
 
-    fn start_send(self: Pin<&mut Self>, item: Bytes) -> Result<(), Self::Error> {
+    fn start_send(self: Pin<&mut Self>, item: &[u8]) -> Result<(), Self::Error> {
         let this = self.get_mut();
 
-        let item = this.state.stoc().comp().compress(&item)?;
+        let item = this.state.stoc().comp().compress(item)?;
         let len = item.len();
         let bs = this.state.stoc().encrypt().block_size();
         let padding_length = pad_len(len, bs);

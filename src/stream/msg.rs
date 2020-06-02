@@ -20,6 +20,7 @@ where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
     io: BppStream<IO>,
+    txbuf: BytesMut,
 }
 
 impl<IO> MsgStream<IO>
@@ -29,6 +30,7 @@ where
     pub(crate) fn new(io: BufStream<IO>) -> Self {
         Self {
             io: BppStream::new(io),
+            txbuf: BytesMut::new(),
         }
     }
 
@@ -84,10 +86,10 @@ where
 
     fn start_send(self: Pin<&mut Self>, item: Msg) -> Result<(), Self::Error> {
         debug!("> {:?}", item);
-        let mut buf = BytesMut::new();
-        item.pack(&mut buf);
-        let io = &mut self.get_mut().io;
-        Pin::new(io).start_send(buf.freeze())?;
+        let Self { io, txbuf } = self.get_mut();
+        txbuf.clear();
+        item.pack(txbuf);
+        Pin::new(io).start_send(&txbuf)?;
         Ok(())
     }
 
@@ -149,10 +151,10 @@ where
 
     fn start_send(self: Pin<&mut Self>, item: M) -> Result<(), Self::Error> {
         debug!("> {:?}", item);
-        let mut buf = BytesMut::new();
-        item.pack(&mut buf);
-        let io = &mut self.get_mut().inner.io;
-        Pin::new(io).start_send(buf.freeze())?;
+        let MsgStream { io, txbuf } = self.get_mut().inner;
+        txbuf.clear();
+        item.pack(txbuf);
+        Pin::new(io).start_send(&txbuf)?;
         Ok(())
     }
 
