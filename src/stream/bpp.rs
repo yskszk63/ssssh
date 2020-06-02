@@ -200,8 +200,7 @@ where
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let this = self.get_mut();
         while this.txbuf.0.has_remaining() {
-            let n = ready!(Pin::new(&mut this.io).poll_write(cx, &this.txbuf.0))?;
-            this.txbuf.0.advance(n);
+            ready!(Pin::new(&mut this.io).poll_write_buf(cx, &mut this.txbuf.0))?;
         }
         ready!(Pin::new(&mut this.io).poll_flush(cx))?;
         Poll::Ready(Ok(()))
