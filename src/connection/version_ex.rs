@@ -4,7 +4,7 @@ use std::task::{Context, Poll};
 
 use bytes::{Buf as _, Bytes, BytesMut};
 use futures::ready;
-use tokio::io::{AsyncBufRead, AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::SshError;
 
@@ -23,13 +23,13 @@ struct SendState {
 
 #[derive(Debug)]
 pub(crate) struct VersionExchange<IO> {
-    io: Option<BufStream<IO>>,
+    io: Option<IO>,
     recv: RecvState,
     send: SendState,
 }
 
 impl<IO> VersionExchange<IO> {
-    pub(crate) fn new(io: BufStream<IO>, name: String) -> Self {
+    pub(crate) fn new(io: IO, name: String) -> Self {
         let name = format!("SSH-2.0-{}", name);
         Self {
             io: Some(io),
@@ -53,35 +53,28 @@ fn poll_recv<IO>(
     cx: &mut Context<'_>,
 ) -> Poll<Result<String, SshError>>
 where
-    IO: AsyncBufRead + Unpin,
+    IO: AsyncRead + Unpin,
 {
     if let Some(result) = &state.result {
         return Poll::Ready(Ok(result.clone()));
     }
 
-    let buf = ready!(Pin::new(&mut io).poll_fill_buf(cx))?;
-    if buf.is_empty() {
-        return Poll::Ready(Err(SshError::VersionUnexpectedEof(state.buf.clone())));
+    let mut b = [0];
+    loop {
+        match ready!(Pin::new(&mut io).poll_read(cx, &mut b))? {
+            0 => return Poll::Ready(Err(SshError::VersionUnexpectedEof(state.buf.clone()))),
+            1 => {
+                state.buf.extend_from_slice(&b);
+                if state.buf.len() > 255 {
+                    return Poll::Ready(Err(SshError::VersionTooLong));
+                }
+                if b[0] == b'\n' {
+                    break;
+                }
+            }
+            _ => unreachable!(),
+        }
     }
-
-    match buf.iter().position(|b| *b == b'\n') {
-        Some(p) => {
-            let p = p + 1;
-            if p + state.buf.len() > 255 {
-                return Poll::Ready(Err(SshError::VersionTooLong));
-            }
-            state.buf.extend_from_slice(&buf[..p]);
-            Pin::new(&mut io).consume(p);
-        }
-        None => {
-            let n = buf.len();
-            if n + state.buf.len() > 255 {
-                return Poll::Ready(Err(SshError::VersionTooLong));
-            }
-            Pin::new(&mut io).consume(n);
-            return Poll::Pending;
-        }
-    };
 
     let result = match &state.buf[..] {
         [result @ .., b'\r', b'\n'] => result,
@@ -126,7 +119,7 @@ impl<IO> Future for VersionExchange<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
-    type Output = Result<(String, String, BufStream<IO>), SshError>;
+    type Output = Result<(String, String, IO), SshError>;
 
     fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
         let this = self.get_mut();

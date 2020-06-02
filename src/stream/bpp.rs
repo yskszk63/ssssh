@@ -9,7 +9,7 @@ use futures::ready;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use ring::rand::{SecureRandom, SystemRandom};
-use tokio::io::{AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::state::State;
 use crate::SshError;
@@ -39,7 +39,7 @@ where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
     state: State,
-    io: BufStream<IO>,
+    io: IO,
     txbuf: (BytesMut, BytesMut), // enc, plain
     rxbuf: (BytesMut, BytesMut), // enc, plain
     rxstate: DecryptState,
@@ -49,7 +49,7 @@ impl<IO> BppStream<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
-    pub(crate) fn new(io: BufStream<IO>) -> Self {
+    pub(crate) fn new(io: IO) -> Self {
         let state = State::new();
         let rxstate = DecryptState::FillFirst;
         Self {

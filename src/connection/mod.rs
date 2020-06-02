@@ -1,7 +1,7 @@
 use std::net::SocketAddr;
 use std::sync::Arc;
 
-use tokio::io::{self, AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{self, AsyncRead, AsyncWrite};
 use tokio::net::TcpStream;
 
 use crate::handlers::{HandlerError, Handlers};
@@ -23,7 +23,7 @@ pub struct Accept<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
-    io: BufStream<IO>,
+    io: IO,
     preference: Arc<Preference>,
 }
 
@@ -32,10 +32,7 @@ where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
     pub(crate) fn new(io: IO, preference: Arc<Preference>) -> Self {
-        Accept {
-            io: BufStream::new(io),
-            preference,
-        }
+        Accept { io, preference }
     }
 }
 
@@ -54,12 +51,7 @@ impl<IO> Established<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
-    fn new(
-        io: BufStream<IO>,
-        c_version: String,
-        s_version: String,
-        preference: Arc<Preference>,
-    ) -> Self {
+    fn new(io: IO, c_version: String, s_version: String, preference: Arc<Preference>) -> Self {
         Self {
             io: MsgStream::new(io),
             c_version,
@@ -76,7 +68,7 @@ pub struct Connection<S> {
 
 impl Connection<Accept<TcpStream>> {
     pub fn remote_ip(&self) -> io::Result<SocketAddr> {
-        self.state.io.get_ref().peer_addr()
+        self.state.io.peer_addr()
     }
 }
 

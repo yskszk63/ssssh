@@ -7,7 +7,7 @@ use futures::ready;
 use futures::sink::Sink;
 use futures::stream::Stream;
 use log::debug;
-use tokio::io::{AsyncRead, AsyncWrite, BufStream};
+use tokio::io::{AsyncRead, AsyncWrite};
 
 use super::bpp::BppStream;
 use crate::msg::{ContextualMsg, Msg};
@@ -27,7 +27,7 @@ impl<IO> MsgStream<IO>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
-    pub(crate) fn new(io: BufStream<IO>) -> Self {
+    pub(crate) fn new(io: IO) -> Self {
         Self {
             io: BppStream::new(io),
             txbuf: BytesMut::new(),
