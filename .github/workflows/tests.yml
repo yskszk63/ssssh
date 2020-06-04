@@ -30,7 +30,9 @@ jobs:
         grcov ./target/debug -s . -t lcov --llvm --branch --ignore-not-existing -o lcov.info
       env:
         CARGO_INCREMENTAL: "0"
-        RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Cinline-threshold=0 -Clink-dead-code -Coverflow-checks=off -Zno-landing-pads"
+        RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
+        RUSTDOCFLAGS: "-Cpanic=abort"
+
 
     - uses: codecov/codecov-action@v1
       with:
