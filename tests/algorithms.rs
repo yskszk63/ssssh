@@ -1,6 +1,10 @@
+use std::fs::Permissions;
+use std::os::unix::fs::PermissionsExt as _;
+
 use futures::future::ok;
 use futures::prelude::*;
 use tokio::process::Command;
+use tokio::fs::set_permissions;
 
 use ssssh::{Handlers, ServerBuilder};
 
@@ -42,6 +46,10 @@ fn algorithms() -> Vec<(
 
 #[tokio::test]
 async fn test() {
+    for ckey in CKEYS {
+        set_permissions(ckey, Permissions::from_mode(0o400)).await.unwrap();
+    }
+
     for (cipher, kex, key, mac, ckey) in algorithms() {
         do_test(cipher, kex, key, mac, ckey).await
     }
