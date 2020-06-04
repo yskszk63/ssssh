@@ -15,6 +15,7 @@ async fn test() {
     handlers.on_channel_shell(|_, _, _| ok(0).boxed());
 
     let proc = Command::new("ssh")
+        .env_clear()
         .arg("-oStrictHostKeyChecking=no")
         .arg("-oUserKnownHostsFile=/dev/null")
         .arg("-p2222")
