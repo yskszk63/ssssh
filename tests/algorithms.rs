@@ -1,12 +1,10 @@
-use tokio::process::Command;
-use futures::prelude::*;
 use futures::future::ok;
+use futures::prelude::*;
+use tokio::process::Command;
 
-use ssssh::{ServerBuilder, Handlers};
+use ssssh::{Handlers, ServerBuilder};
 
-const CIPHERS: &'static [&'static str] = &[
-    "aes256-ctr",
-];
+const CIPHERS: &'static [&'static str] = &["aes256-ctr"];
 
 const KEXS: &'static [&'static str] = &[
     "diffie-hellman-group14-sha1",
@@ -14,22 +12,19 @@ const KEXS: &'static [&'static str] = &[
     "curve25519-sha256",
 ];
 
-const KEYS: &'static [&'static str] = &[
-    "ssh-ed25519",
-    "ssh-rsa",
-];
+const KEYS: &'static [&'static str] = &["ssh-ed25519", "ssh-rsa"];
 
-const MACS: &'static [&'static str] = &[
-    "hmac-sha1",
-    "hmac-sha2-256",
-];
+const MACS: &'static [&'static str] = &["hmac-sha1", "hmac-sha2-256"];
 
-const CKEYS: &'static [&'static str] = &[
-    "tests/ed25519",
-    "tests/rsa",
-];
+const CKEYS: &'static [&'static str] = &["tests/ed25519", "tests/rsa"];
 
-fn algorithms() -> Vec<(&'static str, &'static str, &'static str, &'static str, &'static str)> {
+fn algorithms() -> Vec<(
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+    &'static str,
+)> {
     let mut result = vec![];
     for cipher in CIPHERS {
         for kex in KEXS {
@@ -53,9 +48,7 @@ async fn test() {
 }
 
 async fn do_test(cipher: &str, kex: &str, key: &str, mac: &str, ckey: &str) {
-    let mut server = ServerBuilder::default()
-        .build("[::1]:2222")
-        .await.unwrap();
+    let mut server = ServerBuilder::default().build("[::1]:2222").await.unwrap();
 
     let mut handlers = Handlers::<anyhow::Error>::new();
     handlers.on_auth_publickey(|_, _, _| ok(true).boxed());

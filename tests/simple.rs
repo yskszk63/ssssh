@@ -1,14 +1,12 @@
-use tokio::process::Command;
-use futures::prelude::*;
 use futures::future::ok;
+use futures::prelude::*;
+use tokio::process::Command;
 
-use ssssh::{ServerBuilder, Handlers};
+use ssssh::{Handlers, ServerBuilder};
 
 #[tokio::test]
 async fn test() {
-    let mut server = ServerBuilder::default()
-        .build("[::1]:2222")
-        .await.unwrap();
+    let mut server = ServerBuilder::default().build("[::1]:2222").await.unwrap();
 
     let mut handlers = Handlers::<anyhow::Error>::new();
     handlers.on_auth_none(|_| ok(true).boxed());
