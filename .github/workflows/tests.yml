@@ -27,7 +27,7 @@ jobs:
       run: |
         cargo +nightly build
         cargo +nightly test
-        grcov ./target/debug -s . -t lcov --llvm --branch --ignore-not-existing -o lcov.info
+        grcov ./target/debug -s src -t lcov --llvm --branch --ignore-not-existing -o lcov.info
       env:
         CARGO_INCREMENTAL: "0"
         RUSTFLAGS: "-Zprofile -Ccodegen-units=1 -Copt-level=0 -Clink-dead-code -Coverflow-checks=off -Zpanic_abort_tests -Cpanic=abort"
