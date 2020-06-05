@@ -11,6 +11,8 @@ use ssssh::{Handlers, ServerBuilder};
 
 #[tokio::test]
 async fn exec() {
+    simple_logger::init().ok();
+
     let input_name = CString::new("input").unwrap();
     let input_fd = memfd_create(&input_name, MemFdCreateFlag::empty()).unwrap();
     nix::unistd::write(input_fd, b"hello, world!").unwrap();

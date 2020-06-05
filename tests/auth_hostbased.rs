@@ -8,6 +8,8 @@ use ssssh::{Handlers, ServerBuilder};
 
 #[tokio::test]
 async fn hostbased() {
+    simple_logger::init().ok();
+
     let mut server = ServerBuilder::default().build("[::1]:2222").await.unwrap();
 
     let mut handlers = Handlers::<anyhow::Error>::new();

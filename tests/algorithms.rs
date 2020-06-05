@@ -46,6 +46,8 @@ fn algorithms() -> Vec<(
 
 #[tokio::test]
 async fn test() {
+    simple_logger::init().ok();
+
     for ckey in CKEYS {
         set_permissions(ckey, Permissions::from_mode(0o400))
             .await
