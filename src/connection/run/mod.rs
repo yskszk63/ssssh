@@ -112,6 +112,7 @@ where
             }
         }
         debug!("connection done.");
+        self.io.close().await.ok();
         result
     }
 
