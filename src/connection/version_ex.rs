@@ -139,10 +139,80 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::io;
+    use tokio_test::io::Builder;
+    use tokio_test::*;
 
-    #[test]
-    fn test() {
+    #[tokio::test]
+    async fn test_vex() {
         fn assert<P: Send + Unpin + 'static>() {}
         assert::<VersionExchange<tokio::net::TcpStream>>();
+
+        let mock = Builder::new()
+            .read(b"SSH-2.0-ssh\r\n")
+            .write(b"SSH-2.0-ssssh\r\n")
+            .build();
+        let vex = VersionExchange::new(mock, "ssssh".into());
+        let (r, x, _) = vex.await.unwrap();
+        assert_eq!(&r, "SSH-2.0-ssh");
+        assert_eq!(&x, "SSH-2.0-ssssh");
+    }
+
+    #[tokio::test]
+    async fn test_vex_empty() {
+        let mock = Builder::new().read(b"").write(b"SSH-2.0-ssssh\r\n").build();
+        let vex = VersionExchange::new(mock, "ssssh".into());
+        assert_err!(vex.await);
+    }
+
+    #[tokio::test]
+    async fn test_vex_too_long() {
+        let mock = Builder::new()
+            .read(&[0; 256])
+            .write(b"SSH-2.0-ssssh\r\n")
+            .build();
+        let vex = VersionExchange::new(mock, "ssssh".into());
+        assert_err!(vex.await);
+    }
+
+    #[tokio::test]
+    async fn test_vex_ioerr() {
+        let mock = Builder::new()
+            .read_error(io::Error::new(io::ErrorKind::Other, ""))
+            .write(b"SSH-2.0-ssssh\r\n")
+            .build();
+        let vex = VersionExchange::new(mock, "ssssh".into());
+        assert_err!(vex.await);
+    }
+
+    #[tokio::test]
+    async fn test_vex_lf() {
+        let mock = Builder::new()
+            .read(b"SSH-2.0-ssh\n")
+            .write(b"SSH-2.0-ssssh\r\n")
+            .build();
+        let vex = VersionExchange::new(mock, "ssssh".into());
+        let (r, x, _) = vex.await.unwrap();
+        assert_eq!(&r, "SSH-2.0-ssh");
+        assert_eq!(&x, "SSH-2.0-ssssh");
+    }
+
+    #[tokio::test]
+    async fn test_vex_invalid_version() {
+        let mock = Builder::new()
+            .read(b"S\r\n")
+            .write(b"SSH-2.0-ssssh\r\n")
+            .build();
+        let vex = VersionExchange::new(mock, "ssssh".into());
+        assert_err!(vex.await);
+    }
+
+    #[tokio::test]
+    async fn test_vex_ioerr2() {
+        let mock = Builder::new()
+            .write_error(io::Error::new(io::ErrorKind::Other, ""))
+            .build();
+        let vex = VersionExchange::new(mock, "ssssh".into());
+        assert_err!(vex.await);
     }
 }
