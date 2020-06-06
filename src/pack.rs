@@ -126,7 +126,17 @@ pub(crate) struct Mpint(Bytes);
 
 impl Mpint {
     pub(crate) fn new<B: Into<Bytes>>(b: B) -> Self {
-        Self(b.into())
+        let mut b = b.into();
+        if b.is_empty() {
+            b = Bytes::from(&[0][..]);
+        };
+        while b.has_remaining() && b[0] == 0 {
+            b.advance(1);
+        }
+        if b.has_remaining() && b[0] & 0x80 != 0 {
+            b = (&[0x00][..]).chain(b).to_bytes();
+        }
+        Self(b)
     }
 }
 
@@ -138,14 +148,7 @@ impl AsRef<[u8]> for Mpint {
 
 impl Pack for Mpint {
     fn pack<P: Put>(&self, buf: &mut P) {
-        let (head, len) = if !self.0.is_empty() && self.0[0] & 0x80 != 0 {
-            (&b"\x00"[..], self.0.len() + 1)
-        } else {
-            (&b""[..], self.0.len())
-        };
-        (len as u32).pack(buf);
-
-        buf.put(head);
+        (self.0.len() as u32).pack(buf);
         buf.put(&self.0);
     }
 }
@@ -240,11 +243,11 @@ mod tests {
     #[test]
     fn test_u32() {
         let mut b = BytesMut::new();
-        12u32.pack(&mut b);
-        assert_eq!(&*b, &[0, 0, 0, 12][..]);
+        699921578u32.pack(&mut b);
+        assert_eq!(&*b, &[0x29, 0xb7, 0xf4, 0xaa][..]);
 
         let r = u32::unpack(&mut b.freeze()).unwrap();
-        assert_eq!(r, 12);
+        assert_eq!(r, 699921578);
 
         let mut b = Bytes::from("abc");
         let r = u32::unpack(&mut b);
@@ -271,21 +274,27 @@ mod tests {
     #[test]
     fn test_str() {
         let mut b = BytesMut::new();
-        "HELLO".pack(&mut b);
-        assert_eq!(&*b, &[0, 0, 0, 5, b'H', b'E', b'L', b'L', b'O'][..]);
+        "testing".pack(&mut b);
+        assert_eq!(
+            &*b,
+            &[0, 0, 0, 7, b't', b'e', b's', b't', b'i', b'n', b'g'][..]
+        );
 
         let r = String::unpack(&mut b.freeze()).unwrap();
-        assert_eq!(r, "HELLO");
+        assert_eq!(r, "testing");
     }
 
     #[test]
     fn test_string() {
         let mut b = BytesMut::new();
-        "HELLO".to_string().pack(&mut b);
-        assert_eq!(&*b, &[0, 0, 0, 5, b'H', b'E', b'L', b'L', b'O'][..]);
+        "testing".to_string().pack(&mut b);
+        assert_eq!(
+            &*b,
+            &[0, 0, 0, 7, b't', b'e', b's', b't', b'i', b'n', b'g'][..]
+        );
 
         let r = String::unpack(&mut b.freeze()).unwrap();
-        assert_eq!(r, "HELLO");
+        assert_eq!(r, "testing");
 
         let mut b = Bytes::from(vec![0, 0, 0, 1]);
         let r = String::unpack(&mut b);
@@ -299,9 +308,32 @@ mod tests {
     #[test]
     fn test_mpint() {
         let mut b = BytesMut::new();
+        Mpint::new(vec![0]).pack(&mut b);
+        assert_eq!(&*b, &[0, 0, 0, 0][..]);
+        let r = Mpint::unpack(&mut b.freeze()).unwrap();
+        assert_eq!(r, Mpint::new(vec![0]));
+
+        let mut b = BytesMut::new();
+        Mpint::new(vec![0x09, 0xa3, 0x78, 0xf9, 0xb2, 0xe3, 0x32, 0xa7]).pack(&mut b);
+        assert_eq!(
+            &*b,
+            &[0x00, 0x00, 0x00, 0x08, 0x09, 0xa3, 0x78, 0xf9, 0xb2, 0xe3, 0x32, 0xa7][..]
+        );
+        let r = Mpint::unpack(&mut b.freeze()).unwrap();
+        assert_eq!(
+            r,
+            Mpint::new(vec![0x09, 0xa3, 0x78, 0xf9, 0xb2, 0xe3, 0x32, 0xa7])
+        );
+
+        let mut b = BytesMut::new();
+        Mpint::new(vec![0x80]).pack(&mut b);
+        assert_eq!(&*b, &[0, 0, 0, 2, 0, 0x80][..]);
+        let r = Mpint::unpack(&mut b.freeze()).unwrap();
+        assert_eq!(r, Mpint::new(vec![0x80]));
+
+        let mut b = BytesMut::new();
         Mpint::new(vec![1]).pack(&mut b);
         assert_eq!(&*b, &[0, 0, 0, 1, 1][..]);
-
         let r = Mpint::unpack(&mut b.freeze()).unwrap();
         assert_eq!(r, Mpint::new(vec![1]));
 
