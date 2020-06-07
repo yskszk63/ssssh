@@ -370,4 +370,15 @@ mod tests {
         let verifier = Verifier::new(MessageDigest::sha1(), &pubkey).unwrap();
         verifier.verify(&sign).unwrap();
     }
+
+    #[test]
+    fn test_parse() {
+        for name in Algorithm::defaults() {
+            let s = name.as_ref();
+            let a = Algorithm::from_str(s).unwrap();
+            assert_eq!(name, a);
+        }
+
+        Algorithm::from_str("").unwrap_err();
+    }
 }

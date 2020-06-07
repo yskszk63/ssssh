@@ -194,4 +194,15 @@ mod tests {
         let kex = assert(Kex::new(&Algorithm::Curve25519Sha256));
         let _ = assert(kex.kex(&mut io, "", "", &c_kexinit, &s_kexinit, &hostkey));
     }
+
+    #[test]
+    fn test_parse() {
+        for name in Algorithm::defaults() {
+            let s = name.as_ref();
+            let a = Algorithm::from_str(s).unwrap();
+            assert_eq!(name, a);
+        }
+
+        Algorithm::from_str("").unwrap_err();
+    }
 }

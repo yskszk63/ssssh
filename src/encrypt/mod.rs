@@ -197,4 +197,16 @@ mod tests {
 
         assert_eq!(&src, &result);
     }
+
+    #[test]
+    fn test_parse() {
+        for name in Algorithm::defaults() {
+            let s = name.as_ref();
+            let a = Algorithm::from_str(s).unwrap();
+            assert_eq!(name, a);
+        }
+
+        assert_eq!(Algorithm::None, Algorithm::from_str("none").unwrap());
+        Algorithm::from_str("").unwrap_err();
+    }
 }
