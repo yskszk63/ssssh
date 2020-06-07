@@ -21,7 +21,7 @@ pub enum Algorithm {
 impl AsRef<str> for Algorithm {
     fn as_ref(&self) -> &str {
         match self {
-            Self::None => "non",
+            Self::None => "none",
             Self::Aes256Ctr => "aes256-ctr",
         }
     }
@@ -206,7 +206,7 @@ mod tests {
             assert_eq!(name, a);
         }
 
-        assert_eq!(Algorithm::None, Algorithm::from_str("none").unwrap());
+        assert_eq!(Algorithm::None, Algorithm::from_str(Algorithm::None.as_ref()).unwrap());
         Algorithm::from_str("").unwrap_err();
     }
 }
