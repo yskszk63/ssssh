@@ -14,7 +14,7 @@ use log::debug;
 
 use super::{Runner, SshError};
 
-const SUPPORTED_METHODS: &[&'static str] = &["publickey", "password", "hostbased"];
+const SUPPORTED_METHODS: &[&str] = &["publickey", "password", "hostbased"];
 
 #[derive(Debug)]
 pub(super) struct AuthState {
