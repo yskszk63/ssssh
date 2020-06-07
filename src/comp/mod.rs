@@ -2,16 +2,49 @@
 //!
 //! [rfc4253](https://tools.ietf.org/html/rfc4253#section-6.2)
 
+use std::str::FromStr;
+
 use bytes::Bytes;
 
+use crate::negotiate::{AlgorithmName, UnknownNameError};
 use crate::SshError;
 
 mod none;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Algorithm {
+    None,
+}
+
+impl AsRef<str> for Algorithm {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::None => "none",
+        }
+    }
+}
+
+impl FromStr for Algorithm {
+    type Err = UnknownNameError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "none" => Ok(Self::None),
+            x => Err(UnknownNameError(x.into())),
+        }
+    }
+}
+
+impl AlgorithmName for Algorithm {
+    fn defaults() -> Vec<Self> {
+        vec![Self::None]
+    }
+}
+
 /// Compression algorithm trait
 trait CompressionTrait: Sized {
     /// algorithm name
-    const NAME: &'static str;
+    const NAME: Algorithm;
 
     /// Create new instance
     fn new() -> Self;
@@ -30,16 +63,14 @@ pub(crate) enum Compression {
 }
 
 impl Compression {
-    /// Supported compression algorithms
-    pub(crate) fn defaults() -> Vec<String> {
-        vec![none::None::NAME.to_string()]
+    pub(crate) fn new_none() -> Self {
+        Self::new(&Algorithm::None)
     }
 
     /// Create new instance by algorithm name
-    pub(crate) fn new(name: &str) -> Result<Self, SshError> {
+    pub(crate) fn new(name: &Algorithm) -> Self {
         match name {
-            none::None::NAME => Ok(Self::None(none::None::new())),
-            x => Err(SshError::UnknownAlgorithm(x.to_string())),
+            Algorithm::None => Self::None(none::None::new()),
         }
     }
 

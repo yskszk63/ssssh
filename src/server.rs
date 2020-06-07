@@ -37,22 +37,22 @@ impl Builder {
         Default::default()
     }
 
-    pub fn add_kex_algorithm(&mut self, name: &str) -> &mut Self {
+    pub fn add_kex_algorithm(&mut self, name: crate::Kex) -> &mut Self {
         self.preference.add_kex_algorithm(name);
         self
     }
 
-    pub fn add_encryption_algorithm(&mut self, name: &str) -> &mut Self {
+    pub fn add_encryption_algorithm(&mut self, name: crate::Cipher) -> &mut Self {
         self.preference.add_encryption_algorithm(name);
         self
     }
 
-    pub fn add_mac_algorithm(&mut self, name: &str) -> &mut Self {
+    pub fn add_mac_algorithm(&mut self, name: crate::Mac) -> &mut Self {
         self.preference.add_mac_algorithm(name);
         self
     }
 
-    pub fn add_compression_algorithm(&mut self, name: &str) -> &mut Self {
+    pub fn add_compression_algorithm(&mut self, name: crate::Compression) -> &mut Self {
         self.preference.add_compression_algorithm(name);
         self
     }

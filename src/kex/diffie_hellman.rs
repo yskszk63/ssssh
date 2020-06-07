@@ -15,7 +15,7 @@ pub(crate) struct DiffieHellmanGroup14Sha1 {}
 
 #[async_trait]
 impl KexTrait for DiffieHellmanGroup14Sha1 {
-    const NAME: &'static str = "diffie-hellman-group14-sha1";
+    const NAME: Algorithm = Algorithm::DiffieHellmanGroup14Sha1;
 
     fn new() -> Self {
         Self {}
@@ -124,7 +124,7 @@ pub(crate) struct DiffieHellmanGroupExchangeSha256 {}
 
 #[async_trait]
 impl KexTrait for DiffieHellmanGroupExchangeSha256 {
-    const NAME: &'static str = "diffie-hellman-group-exchange-sha256";
+    const NAME: Algorithm = Algorithm::DiffieHellmanGroupExchangeSha256;
 
     fn new() -> Self {
         Self {}
@@ -264,7 +264,7 @@ mod tests {
         let io = tokio::io::BufStream::new(io);
         let mut io = crate::stream::msg::MsgStream::new(io);
 
-        let hostkey = crate::hostkey::HostKey::gen("ssh-rsa").unwrap();
+        let hostkey = crate::hostkey::HostKey::gen(&crate::hostkey::Algorithm::SshRsa).unwrap();
 
         let c_kexinit = crate::preference::PreferenceBuilder::default()
             .build()

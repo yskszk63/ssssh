@@ -14,7 +14,7 @@ pub(crate) struct Curve25519Sha256 {}
 
 #[async_trait]
 impl KexTrait for Curve25519Sha256 {
-    const NAME: &'static str = "curve25519-sha256";
+    const NAME: Algorithm = Algorithm::Curve25519Sha256;
 
     fn new() -> Self {
         Self {}
@@ -112,7 +112,7 @@ mod tests {
         let io = tokio::io::BufStream::new(io);
         let mut io = crate::stream::msg::MsgStream::new(io);
 
-        let hostkey = crate::hostkey::HostKey::gen("ssh-rsa").unwrap();
+        let hostkey = crate::hostkey::HostKey::gen(&crate::hostkey::Algorithm::SshRsa).unwrap();
 
         let c_kexinit = crate::preference::PreferenceBuilder::default()
             .build()

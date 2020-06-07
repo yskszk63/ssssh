@@ -16,7 +16,7 @@ pub(crate) struct Rsa {
 }
 
 impl HostKeyTrait for Rsa {
-    const NAME: &'static str = "ssh-rsa";
+    const NAME: Algorithm = Algorithm::SshRsa;
 
     fn gen() -> Result<Self, SshError> {
         let pair = OpenSslRsa::generate(2048).map_err(SshError::any)?;
@@ -51,7 +51,7 @@ pub(crate) struct RsaVerifier {
 }
 
 impl VerifierTrait for RsaVerifier {
-    const NAME: &'static str = "ssh-rsa";
+    const NAME: Algorithm = Algorithm::SshRsa;
 
     fn new(pk: &[u8]) -> Result<Self, SshError> {
         let mut buf = BytesMut::new();

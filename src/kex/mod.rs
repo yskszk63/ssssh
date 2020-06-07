@@ -1,3 +1,5 @@
+use std::str::FromStr;
+
 use async_trait::async_trait;
 use bytes::{Buf, Bytes, BytesMut};
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -6,12 +8,53 @@ use crate::hash::Hasher;
 use crate::hostkey::HostKey;
 use crate::msg::kexinit::Kexinit;
 use crate::msg::Msg;
+use crate::negotiate::{AlgorithmName, UnknownNameError};
 use crate::pack::Pack;
 use crate::stream::msg::MsgStream;
 use crate::SshError;
 
 mod curve25519;
 mod diffie_hellman;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Algorithm {
+    Curve25519Sha256,
+    DiffieHellmanGroup14Sha1,
+    DiffieHellmanGroupExchangeSha256,
+}
+
+impl AsRef<str> for Algorithm {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::Curve25519Sha256 => "curve25519-sha256",
+            Self::DiffieHellmanGroup14Sha1 => "diffie-hellman-group14-sha1",
+            Self::DiffieHellmanGroupExchangeSha256 => "diffie-hellman-group-exchange-sha256",
+        }
+    }
+}
+
+impl FromStr for Algorithm {
+    type Err = UnknownNameError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "curve25519-sha256" => Ok(Self::Curve25519Sha256),
+            "diffie-hellman-group14-sha1" => Ok(Self::DiffieHellmanGroup14Sha1),
+            "diffie-hellman-group-exchange-sha256" => Ok(Self::DiffieHellmanGroupExchangeSha256),
+            x => Err(UnknownNameError(x.into())),
+        }
+    }
+}
+
+impl AlgorithmName for Algorithm {
+    fn defaults() -> Vec<Self> {
+        vec![
+            Self::Curve25519Sha256,
+            Self::DiffieHellmanGroup14Sha1,
+            Self::DiffieHellmanGroupExchangeSha256,
+        ]
+    }
+}
 
 #[derive(Debug)]
 struct Env<'a> {
@@ -24,7 +67,7 @@ struct Env<'a> {
 
 #[async_trait]
 trait KexTrait: Sized + Into<Kex> {
-    const NAME: &'static str;
+    const NAME: Algorithm;
 
     fn new() -> Self;
 
@@ -54,14 +97,6 @@ pub(crate) enum Kex {
 }
 
 impl Kex {
-    pub(crate) fn defaults() -> Vec<String> {
-        vec![
-            curve25519::Curve25519Sha256::NAME.to_string(),
-            diffie_hellman::DiffieHellmanGroup14Sha1::NAME.to_string(),
-            diffie_hellman::DiffieHellmanGroupExchangeSha256::NAME.to_string(),
-        ]
-    }
-
     pub(crate) fn hasher(&self) -> Hasher {
         match self {
             Self::Curve25519Sha256(..) => curve25519::Curve25519Sha256::hasher(),
@@ -74,17 +109,16 @@ impl Kex {
         }
     }
 
-    pub(crate) fn new(name: &str) -> Result<Self, SshError> {
-        Ok(match name {
-            curve25519::Curve25519Sha256::NAME => curve25519::Curve25519Sha256::new().into(),
-            diffie_hellman::DiffieHellmanGroup14Sha1::NAME => {
+    pub(crate) fn new(name: &Algorithm) -> Self {
+        match name {
+            Algorithm::Curve25519Sha256 => curve25519::Curve25519Sha256::new().into(),
+            Algorithm::DiffieHellmanGroup14Sha1 => {
                 diffie_hellman::DiffieHellmanGroup14Sha1::new().into()
             }
-            diffie_hellman::DiffieHellmanGroupExchangeSha256::NAME => {
+            Algorithm::DiffieHellmanGroupExchangeSha256 => {
                 diffie_hellman::DiffieHellmanGroupExchangeSha256::new().into()
             }
-            v => return Err(SshError::UnknownAlgorithm(v.to_string())),
-        })
+        }
     }
 
     pub(crate) async fn kex<IO>(
@@ -146,7 +180,7 @@ mod tests {
         let io = tokio::io::BufStream::new(io);
         let mut io = crate::stream::msg::MsgStream::new(io);
 
-        let hostkey = crate::hostkey::HostKey::gen("ssh-rsa").unwrap();
+        let hostkey = crate::hostkey::HostKey::gen(&crate::hostkey::Algorithm::SshRsa).unwrap();
 
         let c_kexinit = crate::preference::PreferenceBuilder::default()
             .build()
@@ -157,7 +191,7 @@ mod tests {
             .unwrap()
             .to_kexinit();
 
-        let kex = assert(Kex::new("curve25519-sha256")).unwrap();
+        let kex = assert(Kex::new(&Algorithm::Curve25519Sha256));
         let _ = assert(kex.kex(&mut io, "", "", &c_kexinit, &s_kexinit, &hostkey));
     }
 }

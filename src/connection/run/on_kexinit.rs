@@ -26,7 +26,7 @@ where
             s_kexinit
         };
 
-        let algorithm = negotiate(&c_kexinit, &s_kexinit)?;
+        let algorithm = negotiate(&c_kexinit, &self.preference)?;
         debug!("algorithm: {:?}", algorithm);
 
         let hostkey = self
@@ -34,7 +34,7 @@ where
             .hostkeys()
             .lookup(algorithm.server_host_key_algorithm())
             .unwrap();
-        let kex = Kex::new(algorithm.kex_algorithm())?;
+        let kex = Kex::new(algorithm.kex_algorithm());
 
         debug!("Begin kex.. {:?}", kex);
         let (hash, key) = kex

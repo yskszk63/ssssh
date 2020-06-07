@@ -9,7 +9,7 @@ pub(crate) struct HmacSha256 {
 }
 
 impl MacTrait for HmacSha256 {
-    const NAME: &'static str = "hmac-sha2-256";
+    const NAME: Algorithm = Algorithm::HmacSha256;
     const LEN: usize = 32;
 
     fn new(key: &[u8]) -> Self {
@@ -51,7 +51,7 @@ pub(crate) struct HmacSha1 {
 }
 
 impl MacTrait for HmacSha1 {
-    const NAME: &'static str = "hmac-sha1";
+    const NAME: Algorithm = Algorithm::HmacSha1;
     const LEN: usize = 20;
 
     fn new(key: &[u8]) -> Self {

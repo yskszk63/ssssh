@@ -4,7 +4,7 @@ use super::*;
 pub(crate) struct None {}
 
 impl MacTrait for None {
-    const NAME: &'static str = "none";
+    const NAME: Algorithm = Algorithm::None;
     const LEN: usize = 0;
 
     fn new(_key: &[u8]) -> Self {

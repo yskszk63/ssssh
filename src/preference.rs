@@ -3,43 +3,44 @@ use std::time::Duration;
 
 use getset::Getters;
 
-use crate::comp::Compression;
-use crate::encrypt::Encrypt;
+use crate::comp;
+use crate::encrypt;
 use crate::hostkey::{HostKeys, HostKeysBuilder};
-use crate::kex::Kex;
-use crate::mac::Mac;
+use crate::kex;
+use crate::mac;
 use crate::msg::kexinit::{Kexinit, KexinitBuilder};
+use crate::negotiate::AlgorithmName;
 use crate::SshError;
 
 #[derive(Debug, Default)]
 pub(crate) struct PreferenceBuilder {
-    kex_algorithms: Vec<String>,
+    kex_algorithms: Vec<kex::Algorithm>,
     hostkeys: HostKeysBuilder,
-    encryption_algorithms: Vec<String>,
-    mac_algorithms: Vec<String>,
-    compression_algorithms: Vec<String>,
+    encryption_algorithms: Vec<encrypt::Algorithm>,
+    mac_algorithms: Vec<mac::Algorithm>,
+    compression_algorithms: Vec<comp::Algorithm>,
     name: Option<String>,
     timeout: Option<Duration>,
 }
 
 impl PreferenceBuilder {
-    pub(crate) fn add_kex_algorithm(&mut self, name: &str) -> &mut Self {
-        self.kex_algorithms.push(name.to_string());
+    pub(crate) fn add_kex_algorithm(&mut self, name: kex::Algorithm) -> &mut Self {
+        self.kex_algorithms.push(name);
         self
     }
 
-    pub(crate) fn add_encryption_algorithm(&mut self, name: &str) -> &mut Self {
-        self.encryption_algorithms.push(name.to_string());
+    pub(crate) fn add_encryption_algorithm(&mut self, name: encrypt::Algorithm) -> &mut Self {
+        self.encryption_algorithms.push(name);
         self
     }
 
-    pub(crate) fn add_mac_algorithm(&mut self, name: &str) -> &mut Self {
-        self.mac_algorithms.push(name.to_string());
+    pub(crate) fn add_mac_algorithm(&mut self, name: mac::Algorithm) -> &mut Self {
+        self.mac_algorithms.push(name);
         self
     }
 
-    pub(crate) fn add_compression_algorithm(&mut self, name: &str) -> &mut Self {
-        self.compression_algorithms.push(name.to_string());
+    pub(crate) fn add_compression_algorithm(&mut self, name: comp::Algorithm) -> &mut Self {
+        self.compression_algorithms.push(name);
         self
     }
 
@@ -70,30 +71,26 @@ impl PreferenceBuilder {
 
     pub(crate) fn build(&self) -> Result<Preference, SshError> {
         let kex_algorithms = if self.kex_algorithms.is_empty() {
-            Kex::defaults()
+            kex::Algorithm::defaults()
         } else {
-            // TODO check names
             self.kex_algorithms.clone()
         };
 
         let encryption_algorithms = if self.encryption_algorithms.is_empty() {
-            Encrypt::defaults()
+            encrypt::Algorithm::defaults()
         } else {
-            // TODO check names
             self.encryption_algorithms.clone()
         };
 
         let mac_algorithms = if self.mac_algorithms.is_empty() {
-            Mac::defaults()
+            mac::Algorithm::defaults()
         } else {
-            // TODO check names
             self.mac_algorithms.clone()
         };
 
         let compression_algorithms = if self.compression_algorithms.is_empty() {
-            Compression::defaults()
+            comp::Algorithm::defaults()
         } else {
-            // TODO check names
             self.compression_algorithms.clone()
         };
 
@@ -120,19 +117,19 @@ impl PreferenceBuilder {
 #[derive(Debug, Getters)]
 pub(crate) struct Preference {
     #[get = "pub(crate)"]
-    kex_algorithms: Vec<String>,
+    kex_algorithms: Vec<kex::Algorithm>,
 
     #[get = "pub(crate)"]
     hostkeys: HostKeys,
 
     #[get = "pub(crate)"]
-    encryption_algorithms: Vec<String>,
+    encryption_algorithms: Vec<encrypt::Algorithm>,
 
     #[get = "pub(crate)"]
-    mac_algorithms: Vec<String>,
+    mac_algorithms: Vec<mac::Algorithm>,
 
     #[get = "pub(crate)"]
-    compression_algorithms: Vec<String>,
+    compression_algorithms: Vec<comp::Algorithm>,
 
     #[get = "pub(crate)"]
     name: String,
@@ -154,14 +151,55 @@ impl Preference {
 
         KexinitBuilder::default()
             .cookie(cookie)
-            .kex_algorithms(self.kex_algorithms.clone().into_iter().collect())
-            .server_host_key_algorithms(self.hostkeys.names().into_iter().collect())
-            .encryption_algorithms_c2s(self.encryption_algorithms.clone().into_iter().collect())
-            .encryption_algorithms_s2c(self.encryption_algorithms.clone().into_iter().collect())
-            .mac_algorithms_c2s(self.mac_algorithms.clone().into_iter().collect())
-            .mac_algorithms_s2c(self.mac_algorithms.clone().into_iter().collect())
-            .compression_algorithms_c2s(self.compression_algorithms.clone().into_iter().collect())
-            .compression_algorithms_s2c(self.compression_algorithms.clone().into_iter().collect())
+            .kex_algorithms(
+                self.kex_algorithms
+                    .iter()
+                    .map(AlgorithmName::to_string)
+                    .collect(),
+            )
+            .server_host_key_algorithms(
+                self.hostkeys
+                    .names()
+                    .iter()
+                    .map(AlgorithmName::to_string)
+                    .collect(),
+            )
+            .encryption_algorithms_c2s(
+                self.encryption_algorithms
+                    .iter()
+                    .map(AlgorithmName::to_string)
+                    .collect(),
+            )
+            .encryption_algorithms_s2c(
+                self.encryption_algorithms
+                    .iter()
+                    .map(AlgorithmName::to_string)
+                    .collect(),
+            )
+            .mac_algorithms_c2s(
+                self.mac_algorithms
+                    .iter()
+                    .map(AlgorithmName::to_string)
+                    .collect(),
+            )
+            .mac_algorithms_s2c(
+                self.mac_algorithms
+                    .iter()
+                    .map(AlgorithmName::to_string)
+                    .collect(),
+            )
+            .compression_algorithms_c2s(
+                self.compression_algorithms
+                    .iter()
+                    .map(AlgorithmName::to_string)
+                    .collect(),
+            )
+            .compression_algorithms_s2c(
+                self.compression_algorithms
+                    .iter()
+                    .map(AlgorithmName::to_string)
+                    .collect(),
+            )
             .languages_c2s(Vec::<String>::new().into_iter().collect())
             .languages_s2c(Vec::<String>::new().into_iter().collect())
             .first_kex_packet_follows(false)

@@ -18,7 +18,7 @@ impl fmt::Debug for Aes256Ctr {
 }
 
 impl EncryptTrait for Aes256Ctr {
-    const NAME: &'static str = "aes256-ctr";
+    const NAME: Algorithm = Algorithm::Aes256Ctr;
     const BLOCK_SIZE: usize = 16;
     const KEY_LENGTH: usize = 32;
 

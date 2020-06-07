@@ -2,17 +2,52 @@
 // TODO module name
 use std::fmt;
 use std::path::{Path, PathBuf};
+use std::str::FromStr;
 
 use base64::display::Base64Display;
 use base64::{CharacterSet, Config};
 use bytes::{Buf, Bytes, BytesMut};
 use linked_hash_map::LinkedHashMap;
 
+use crate::negotiate::{AlgorithmName, UnknownNameError};
 use crate::pack::{Pack, Put, Unpack, UnpackError};
 use crate::SshError;
 
 mod ed25519;
 mod rsa;
+
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Algorithm {
+    SshEd25519,
+    SshRsa,
+}
+
+impl AsRef<str> for Algorithm {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::SshEd25519 => "ssh-ed25519",
+            Self::SshRsa => "ssh-rsa",
+        }
+    }
+}
+
+impl FromStr for Algorithm {
+    type Err = UnknownNameError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "ssh-ed25519" => Ok(Self::SshEd25519),
+            "ssh-rsa" => Ok(Self::SshRsa),
+            x => Err(UnknownNameError(x.into())),
+        }
+    }
+}
+
+impl AlgorithmName for Algorithm {
+    fn defaults() -> Vec<Self> {
+        vec![Self::SshEd25519, Self::SshRsa]
+    }
+}
 
 #[derive(Debug)]
 enum BuilderOperation {
@@ -62,7 +97,7 @@ impl HostKeysBuilder {
 /// HostKey collection
 #[derive(Debug)]
 pub(crate) struct HostKeys {
-    hostkeys: LinkedHashMap<String, HostKey>,
+    hostkeys: LinkedHashMap<Algorithm, HostKey>,
 }
 
 impl HostKeys {
@@ -73,19 +108,19 @@ impl HostKeys {
     }
 
     pub(crate) fn insert(&mut self, hostkey: HostKey) {
-        self.hostkeys.insert(hostkey.name().to_string(), hostkey);
+        self.hostkeys.insert(hostkey.name(), hostkey);
     }
 
-    pub(crate) fn lookup(&self, name: &str) -> Option<&HostKey> {
+    pub(crate) fn lookup(&self, name: &Algorithm) -> Option<&HostKey> {
         self.hostkeys.get(name)
     }
 
-    pub(crate) fn names(&self) -> Vec<String> {
-        self.hostkeys.keys().map(ToString::to_string).collect()
+    pub(crate) fn names(&self) -> Vec<Algorithm> {
+        self.hostkeys.keys().cloned().collect()
     }
 
     pub(crate) fn generate(&mut self) -> Result<(), SshError> {
-        for name in &HostKey::defaults() {
+        for name in &Algorithm::defaults() {
             let hostkey = HostKey::gen(name)?;
             self.insert(hostkey);
         }
@@ -119,7 +154,7 @@ impl Unpack for Signature {
 }
 
 trait VerifierTrait: Sized {
-    const NAME: &'static str;
+    const NAME: Algorithm;
 
     fn new(pk: &[u8]) -> Result<Self, SshError>;
 
@@ -136,11 +171,11 @@ pub(crate) enum Verifier {
 
 impl Verifier {
     fn new(name: &str, pk: &[u8]) -> Result<Self, SshError> {
-        Ok(match name {
-            ed25519::Ed25519Verifier::NAME => Self::Ed25519(ed25519::Ed25519Verifier::new(pk)?),
-            rsa::RsaVerifier::NAME => Self::Rsa(rsa::RsaVerifier::new(pk)?),
-            x => return Err(SshError::UnknownAlgorithm(x.to_string())), // FIXME
-        })
+        match Algorithm::from_str(name) {
+            Ok(Algorithm::SshEd25519) => Ok(Self::Ed25519(ed25519::Ed25519Verifier::new(pk)?)),
+            Ok(Algorithm::SshRsa) => Ok(Self::Rsa(rsa::RsaVerifier::new(pk)?)),
+            Err(x) => Err(SshError::UnknownAlgorithm(x.0.to_string())),
+        }
     }
 
     pub(crate) fn verify(&self, signature: &Signature) -> bool {
@@ -206,7 +241,7 @@ impl fmt::Display for PublicKey {
 /// Hostkey algorithm trait
 pub(crate) trait HostKeyTrait: Into<HostKey> + Sized {
     /// Hostkey algorithm name
-    const NAME: &'static str;
+    const NAME: Algorithm;
 
     /// Generate hostkey
     fn gen() -> Result<Self, SshError>;
@@ -229,22 +264,16 @@ pub(crate) enum HostKey {
 }
 
 impl HostKey {
-    /// Supported hostkey algorithms
-    fn defaults() -> Vec<String> {
-        vec![ed25519::Ed25519::NAME.into(), rsa::Rsa::NAME.into()]
-    }
-
     /// Generate hostkey by algorithm name
-    pub(crate) fn gen(name: &str) -> Result<Self, SshError> {
-        Ok(match name {
-            ed25519::Ed25519::NAME => ed25519::Ed25519::gen()?.into(),
-            rsa::Rsa::NAME => rsa::Rsa::gen()?.into(),
-            v => return Err(SshError::UnknownAlgorithm(v.into())),
-        })
+    pub(crate) fn gen(name: &Algorithm) -> Result<Self, SshError> {
+        match name {
+            Algorithm::SshEd25519 => Ok(ed25519::Ed25519::gen()?.into()),
+            Algorithm::SshRsa => Ok(rsa::Rsa::gen()?.into()),
+        }
     }
 
     /// Hostkey algorithm name
-    pub(crate) fn name(&self) -> &str {
+    pub(crate) fn name(&self) -> Algorithm {
         match self {
             Self::Ed25519(..) => ed25519::Ed25519::NAME,
             Self::Rsa(..) => rsa::Rsa::NAME,
@@ -253,17 +282,19 @@ impl HostKey {
 
     /// Get hostkey's public key
     pub(crate) fn publickey(&self) -> PublicKey {
+        let name = self.name().as_ref().into();
         match self {
-            Self::Ed25519(item) => PublicKey(ed25519::Ed25519::NAME.to_string(), item.publickey()),
-            Self::Rsa(item) => PublicKey(rsa::Rsa::NAME.to_string(), item.publickey()),
+            Self::Ed25519(item) => PublicKey(name, item.publickey()),
+            Self::Rsa(item) => PublicKey(name, item.publickey()),
         }
     }
 
     /// Sign by hostkey
     pub(crate) fn sign(&self, target: &Bytes) -> Signature {
+        let name = self.name().as_ref().into();
         match self {
-            Self::Ed25519(item) => Signature(ed25519::Ed25519::NAME.to_string(), item.sign(target)),
-            Self::Rsa(item) => Signature(rsa::Rsa::NAME.to_string(), item.sign(target)),
+            Self::Ed25519(item) => Signature(name, item.sign(target)),
+            Self::Rsa(item) => Signature(name, item.sign(target)),
         }
     }
 }
@@ -283,14 +314,9 @@ mod tests {
     }
 
     #[test]
-    fn test_unknown() {
-        HostKey::gen("-").unwrap_err();
-    }
-
-    #[test]
     fn test_signature() {
         let b = Bytes::from("Hello, World!");
-        let k = HostKey::gen("ssh-ed25519").unwrap();
+        let k = HostKey::gen(&Algorithm::SshEd25519).unwrap();
         let sign = k.sign(&b);
 
         let mut b = BytesMut::new();
@@ -300,7 +326,7 @@ mod tests {
 
     #[test]
     fn test_publickey() {
-        let k = HostKey::gen("ssh-ed25519").unwrap();
+        let k = HostKey::gen(&Algorithm::SshEd25519).unwrap();
         let pubkey = k.publickey();
 
         let mut b = BytesMut::new();
@@ -313,7 +339,7 @@ mod tests {
         use ring::signature::*;
 
         let b = Bytes::from("Hello, World!");
-        let k = HostKey::gen("ssh-ed25519").unwrap();
+        let k = HostKey::gen(&Algorithm::SshEd25519).unwrap();
         let sign = k.sign(&b).1;
         let pubkey = Bytes::unpack(&mut k.publickey().1).unwrap();
 
@@ -330,7 +356,7 @@ mod tests {
         use openssl::sign::Verifier;
 
         let b = Bytes::from("Hello, World!");
-        let k = HostKey::gen("ssh-rsa").unwrap();
+        let k = HostKey::gen(&Algorithm::SshRsa).unwrap();
         let sign = k.sign(&b).1;
 
         let mut pubkey = k.publickey().1;

@@ -2,17 +2,53 @@
 //!
 //! [rfc4253](https://tools.ietf.org/html/rfc4253)
 
+use std::str::FromStr;
+
 use bytes::{Bytes, BytesMut};
 
+use crate::negotiate::{AlgorithmName, UnknownNameError};
 use crate::SshError;
 
 mod aes;
 mod none;
 
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub enum Algorithm {
+    None,
+    Aes256Ctr,
+}
+
+impl AsRef<str> for Algorithm {
+    fn as_ref(&self) -> &str {
+        match self {
+            Self::None => "non",
+            Self::Aes256Ctr => "aes256-ctr",
+        }
+    }
+}
+
+impl FromStr for Algorithm {
+    type Err = UnknownNameError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s {
+            "none" => Ok(Self::None),
+            "aes256-ctr" => Ok(Self::Aes256Ctr),
+            x => Err(UnknownNameError(x.into())),
+        }
+    }
+}
+
+impl AlgorithmName for Algorithm {
+    fn defaults() -> Vec<Self> {
+        vec![Self::Aes256Ctr]
+    }
+}
+
 /// Encrypt algorithm trait
 trait EncryptTrait: Into<Encrypt> + Sized {
     /// Encrypt algorithm name
-    const NAME: &'static str;
+    const NAME: Algorithm;
 
     /// Encrypt block size
     const BLOCK_SIZE: usize;
@@ -41,50 +77,49 @@ pub(crate) enum Encrypt {
 }
 
 impl Encrypt {
-    /// Supported encrypt algorithms
-    pub(crate) fn defaults() -> Vec<String> {
-        vec![aes::Aes256Ctr::NAME.to_string()]
-    }
-
     /// Create `none` instance
     pub(crate) fn new_none() -> Self {
         Encrypt::None(none::None::new())
     }
 
     /// Create new instance for encrypt by name
-    pub(crate) fn new_for_encrypt(name: &str, key: &Bytes, iv: &Bytes) -> Result<Self, SshError> {
-        Ok(match name {
-            none::None::NAME => none::None::new_for_encrypt(key, iv)?.into(),
-            aes::Aes256Ctr::NAME => aes::Aes256Ctr::new_for_encrypt(key, iv)?.into(),
-            v => return Err(SshError::UnknownAlgorithm(v.to_string())),
-        })
+    pub(crate) fn new_for_encrypt(
+        name: &Algorithm,
+        key: &Bytes,
+        iv: &Bytes,
+    ) -> Result<Self, SshError> {
+        match name {
+            Algorithm::None => Ok(none::None::new_for_encrypt(key, iv)?.into()),
+            Algorithm::Aes256Ctr => Ok(aes::Aes256Ctr::new_for_encrypt(key, iv)?.into()),
+        }
     }
 
     /// Create new instance for decrypt by name
-    pub(crate) fn new_for_decrypt(name: &str, key: &Bytes, iv: &Bytes) -> Result<Self, SshError> {
-        Ok(match name {
-            none::None::NAME => none::None::new_for_decrypt(key, iv)?.into(),
-            aes::Aes256Ctr::NAME => aes::Aes256Ctr::new_for_decrypt(key, iv)?.into(),
-            v => return Err(SshError::UnknownAlgorithm(v.to_string())),
-        })
+    pub(crate) fn new_for_decrypt(
+        name: &Algorithm,
+        key: &Bytes,
+        iv: &Bytes,
+    ) -> Result<Self, SshError> {
+        match name {
+            Algorithm::None => Ok(none::None::new_for_decrypt(key, iv)?.into()),
+            Algorithm::Aes256Ctr => Ok(aes::Aes256Ctr::new_for_decrypt(key, iv)?.into()),
+        }
     }
 
     /// Get block size by name
-    pub(crate) fn block_size_by_name(name: &str) -> Result<usize, SshError> {
-        Ok(match name {
-            none::None::NAME => none::None::BLOCK_SIZE,
-            aes::Aes256Ctr::NAME => aes::Aes256Ctr::BLOCK_SIZE,
-            x => return Err(SshError::UnknownAlgorithm(x.into())),
-        })
+    pub(crate) fn block_size_by_name(name: &Algorithm) -> usize {
+        match name {
+            Algorithm::None => none::None::BLOCK_SIZE,
+            Algorithm::Aes256Ctr => aes::Aes256Ctr::BLOCK_SIZE,
+        }
     }
 
     /// Get key length by name
-    pub(crate) fn key_length_by_name(name: &str) -> Result<usize, SshError> {
-        Ok(match name {
-            none::None::NAME => none::None::KEY_LENGTH,
-            aes::Aes256Ctr::NAME => aes::Aes256Ctr::KEY_LENGTH,
-            x => return Err(SshError::UnknownAlgorithm(x.into())),
-        })
+    pub(crate) fn key_length_by_name(name: &Algorithm) -> usize {
+        match name {
+            Algorithm::None => none::None::KEY_LENGTH,
+            Algorithm::Aes256Ctr => aes::Aes256Ctr::KEY_LENGTH,
+        }
     }
 
     /// Get block size
@@ -116,19 +151,11 @@ mod tests {
     }
 
     #[test]
-    fn test_unknown() {
-        let k = Bytes::from("");
-        let iv = Bytes::from("");
-        Encrypt::new_for_encrypt("-", &k, &iv).unwrap_err();
-        Encrypt::new_for_decrypt("-", &k, &iv).unwrap_err();
-    }
-
-    #[test]
     fn test_none() {
-        let name = "none";
+        let name = &Algorithm::None;
 
-        let k = Bytes::from(vec![0; Encrypt::key_length_by_name(name).unwrap()]);
-        let iv = Bytes::from(vec![0; Encrypt::block_size_by_name(name).unwrap()]);
+        let k = Bytes::from(vec![0; Encrypt::key_length_by_name(name)]);
+        let iv = Bytes::from(vec![0; Encrypt::block_size_by_name(name)]);
 
         let src = BytesMut::from("Hello, world!");
         let mut dst = BytesMut::new();
@@ -150,10 +177,10 @@ mod tests {
 
     #[test]
     fn test_aes256ctr() {
-        let name = "aes256-ctr";
+        let name = &Algorithm::Aes256Ctr;
 
-        let k = Bytes::from(vec![0; Encrypt::key_length_by_name(name).unwrap()]);
-        let iv = Bytes::from(vec![0; Encrypt::block_size_by_name(name).unwrap()]);
+        let k = Bytes::from(vec![0; Encrypt::key_length_by_name(name)]);
+        let iv = Bytes::from(vec![0; Encrypt::block_size_by_name(name)]);
 
         let src = BytesMut::from("Hello, world!");
         let mut dst = BytesMut::new();

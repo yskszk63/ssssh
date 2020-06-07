@@ -8,7 +8,7 @@ use super::*;
 pub(crate) struct None {}
 
 impl CompressionTrait for None {
-    const NAME: &'static str = "none";
+    const NAME: Algorithm = Algorithm::None;
 
     fn new() -> Self {
         Self {}

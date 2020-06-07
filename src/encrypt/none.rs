@@ -12,7 +12,7 @@ impl None {
 }
 
 impl EncryptTrait for None {
-    const NAME: &'static str = "none";
+    const NAME: Algorithm = Algorithm::None;
     const BLOCK_SIZE: usize = 8;
     const KEY_LENGTH: usize = 0;
 
