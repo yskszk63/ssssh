@@ -63,6 +63,7 @@ where
     outbound_channel_rx: Fuse<mpsc::UnboundedReceiver<Msg>>,
     completions: CompletionStream<Result<(), HandlerError>>,
     first_kexinit: Option<msg::kexinit::Kexinit>,
+    auth_state: on_userauth_request::AuthState,
 }
 
 impl<IO, E> Runner<IO, E>
@@ -91,6 +92,7 @@ where
             outbound_channel_rx: rx,
             completions: CompletionStream::new(),
             first_kexinit: None,
+            auth_state: on_userauth_request::AuthState::new(),
         }
     }
 

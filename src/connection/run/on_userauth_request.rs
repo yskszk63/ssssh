@@ -14,6 +14,33 @@ use log::debug;
 
 use super::{Runner, SshError};
 
+const SUPPORTED_METHODS: &[&'static str] = &["publickey", "password", "hostbased"];
+
+#[derive(Debug)]
+pub(super) struct AuthState {
+    remaining: Vec<&'static str>,
+}
+
+impl AuthState {
+    pub(super) fn new() -> Self {
+        Self {
+            remaining: Vec::from(SUPPORTED_METHODS),
+        }
+    }
+
+    fn consume(&mut self, method: &str) {
+        self.remaining.retain(|m| *m != method);
+    }
+
+    fn remaining(&self) -> &[&'static str] {
+        &self.remaining
+    }
+
+    fn done(&mut self) {
+        self.remaining.clear();
+    }
+}
+
 impl<IO, E> Runner<IO, E>
 where
     IO: AsyncRead + AsyncWrite + Unpin + Send,
@@ -49,17 +76,22 @@ where
 
             x => {
                 debug!("unknown auth method {:?}", x);
-                self.send_failure(&[]).await
+                self.send_failure(None).await
             }
         }
     }
 
     async fn send_success(&mut self) -> Result<(), SshError> {
+        self.auth_state.done();
         self.send(UserauthSuccess::new()).await?;
         Ok(())
     }
 
-    async fn send_failure(&mut self, methods: &[&str]) -> Result<(), SshError> {
+    async fn send_failure(&mut self, consume: Option<&'static str>) -> Result<(), SshError> {
+        if let Some(consume) = consume {
+            self.auth_state.consume(consume);
+        }
+        let methods = self.auth_state.remaining();
         let msg = UserauthFailure::new(methods.iter().cloned().collect(), false);
         self.send(msg).await?;
         Ok(())
@@ -77,9 +109,7 @@ where
         if r {
             self.send_success().await
         } else {
-            // TODO manage remaining
-            self.send_failure(&["publickey", "password", "hostbased"])
-                .await
+            self.send_failure(None).await
         }
     }
 
@@ -105,7 +135,7 @@ where
             let m = UserauthPkOk::new(item.algorithm().into(), item.blob().clone()).into();
             self.io.context::<UserauthPkMsg>().send(m).await?;
         } else {
-            self.send_failure(&["password", "hostbased"]).await?;
+            self.send_failure(Some("publickey")).await?;
         };
         Ok(())
     }
@@ -152,10 +182,10 @@ where
             if r {
                 self.send_success().await
             } else {
-                self.send_failure(&["password", "hostbased"]).await
+                self.send_failure(Some("publickey")).await
             }
         } else {
-            self.send_failure(&["password", "hostbased"]).await
+            self.send_failure(Some("publickey")).await
         }
     }
 
@@ -179,7 +209,7 @@ where
                 let m = UserauthPasswdChangereq::new(message, "".into());
                 self.send(m).await
             }
-            PasswordResult::Failure => self.send_failure(&["hostbased"]).await,
+            PasswordResult::Failure => self.send_failure(Some("password")).await,
         }
     }
 
@@ -207,7 +237,7 @@ where
                 let m = UserauthPasswdChangereq::new(message, "".into());
                 self.send(m).await
             }
-            PasswordResult::Failure => self.send_failure(&["hostbased"]).await,
+            PasswordResult::Failure => self.send_failure(Some("password")).await,
         }
     }
 
@@ -255,10 +285,10 @@ where
             if r {
                 self.send_success().await
             } else {
-                self.send_failure(&[]).await
+                self.send_failure(Some("hostbased")).await
             }
         } else {
-            self.send_failure(&[]).await
+            self.send_failure(Some("hostbased")).await
         }
     }
 }
