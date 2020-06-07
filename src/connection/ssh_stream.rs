@@ -31,6 +31,7 @@ where
     }
 }
 
+/// SSH data input.
 #[derive(Debug)]
 pub struct SshInput {
     rx: StreamReader<OkStream<mpsc::UnboundedReceiver<Bytes>>, Bytes>,
@@ -72,6 +73,7 @@ enum ShutdownState {
     Done,
 }
 
+/// SSH data output.
 #[derive(Debug)]
 pub struct SshOutput {
     channel: u32,

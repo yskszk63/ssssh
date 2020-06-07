@@ -8,10 +8,16 @@ use crate::SshError;
 mod none;
 mod sha;
 
+/// SSH mac algorithm.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Algorithm {
+    /// `none`
     None,
+
+    /// `hmac-sha2-256`
     HmacSha256,
+
+    /// `hmac-sha1`
     HmacSha1,
 }
 

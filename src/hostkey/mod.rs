@@ -16,9 +16,13 @@ use crate::SshError;
 mod ed25519;
 mod rsa;
 
+/// SSH key algorithms.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Algorithm {
+    /// `ssh-ed25519`
     SshEd25519,
+
+    /// `ssh-rsa`
     SshRsa,
 }
 

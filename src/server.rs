@@ -27,6 +27,7 @@ pub enum BuildError {
     SshError(#[from] SshError),
 }
 
+/// Server instance builder.
 #[derive(Debug, Default)]
 pub struct Builder {
     preference: PreferenceBuilder,
@@ -103,6 +104,7 @@ impl Builder {
     }
 }
 
+/// SSH server instance.
 #[derive(Debug)]
 pub struct Server<L, S> {
     io: L,

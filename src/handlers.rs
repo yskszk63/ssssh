@@ -10,7 +10,7 @@ use crate::{SshInput, SshOutput};
 
 pub(crate) type HandlerError = Box<dyn StdError + Send + Sync + 'static>;
 
-/// Password authentication result
+/// Password authentication result.
 #[derive(Debug)]
 pub enum PasswordResult {
     /// Ok
@@ -237,6 +237,7 @@ where
     }
 }
 
+/// SSH callback handlers collections.
 #[derive(Default)]
 pub struct Handlers<E>
 where
@@ -257,6 +258,7 @@ impl<E> Handlers<E>
 where
     E: Into<HandlerError> + Send + 'static,
 {
+    /// Construct new Handlers instance.
     pub fn new() -> Self {
         Self {
             auth_none: None,
@@ -270,6 +272,9 @@ where
         }
     }
 
+    /// Register None user authentication method handler.
+    ///
+    /// If not registered, return authentication failure.
     pub fn on_auth_none<H>(&mut self, handler: H)
     where
         H: AuthNoneHandler<Error = E> + 'static,
@@ -277,6 +282,9 @@ where
         self.auth_none = Some(Box::new(handler))
     }
 
+    /// Register Publickey user authentication method handler.
+    ///
+    /// If not registered, return authentication failure.
     pub fn on_auth_publickey<H>(&mut self, handler: H)
     where
         H: AuthPublickeyHandler<Error = E> + 'static,
@@ -284,6 +292,9 @@ where
         self.auth_publickey = Some(Box::new(handler))
     }
 
+    /// Register Password user authentication method handler.
+    ///
+    /// If not registered, return authentication failure.
     pub fn on_auth_password<H>(&mut self, handler: H)
     where
         H: AuthPasswordHandler<Error = E> + 'static,
@@ -291,6 +302,9 @@ where
         self.auth_password = Some(Box::new(handler))
     }
 
+    /// Register Change Password user authentication method handler.
+    ///
+    /// If not registered, return authentication failure.
     pub fn on_auth_change_password<H>(&mut self, handler: H)
     where
         H: AuthChangePasswordHandler<Error = E> + 'static,
@@ -298,6 +312,9 @@ where
         self.auth_change_password = Some(Box::new(handler))
     }
 
+    /// Register Hostbased user authentication method handler.
+    ///
+    /// If not registered, return authentication failure.
     pub fn on_auth_hostbased<H>(&mut self, handler: H)
     where
         H: AuthHostbasedHandler<Error = E> + 'static,
@@ -305,6 +322,9 @@ where
         self.auth_hostbased = Some(Box::new(handler))
     }
 
+    /// Register Shell channel handler.
+    ///
+    /// If not registered, channel returns failure.
     pub fn on_channel_shell<H>(&mut self, handler: H)
     where
         H: ChannelShellHandler<Error = E> + 'static,
@@ -312,6 +332,9 @@ where
         self.channel_shell = Some(Box::new(handler))
     }
 
+    /// Register Exec channel handler.
+    ///
+    /// If not registered, channel returns failure.
     pub fn on_channel_exec<H>(&mut self, handler: H)
     where
         H: ChannelExecHandler<Error = E> + 'static,
@@ -319,6 +342,9 @@ where
         self.channel_exec = Some(Box::new(handler))
     }
 
+    /// Register Direct TCP/IP channel handler.
+    ///
+    /// If not registered, channel returns failure.
     pub fn on_channel_direct_tcpip<H>(&mut self, handler: H)
     where
         H: ChannelDirectTcpIpHandler<Error = E> + 'static,

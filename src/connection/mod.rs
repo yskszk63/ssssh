@@ -61,12 +61,17 @@ where
     }
 }
 
+/// SSH connection.
+///
+/// - `Connection<Accept>`: Before handshake (version exchange) SSH connection.
+/// - `Connection<Established>`: After handshake SSH connection.
 #[derive(Debug)]
 pub struct Connection<S> {
     state: S,
 }
 
 impl Connection<Accept<TcpStream>> {
+    /// Get remote IP address.
     pub fn remote_ip(&self) -> io::Result<SocketAddr> {
         self.state.io.peer_addr()
     }
@@ -81,6 +86,7 @@ where
         Self { state }
     }
 
+    ///! Performe SSH version exchange.
     pub async fn accept(self) -> Result<Connection<Established<IO>>, SshError> {
         let Accept { io, preference } = self.state;
         let (c_version, s_version, io) =
@@ -99,6 +105,7 @@ where
         &self.state.c_version
     }
 
+    ///! Run with [`ssssh::Handlers`]
     pub async fn run<E>(self, handler: Handlers<E>) -> Result<(), SshError>
     where
         E: Into<HandlerError> + Send + 'static,

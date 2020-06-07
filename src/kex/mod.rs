@@ -16,10 +16,16 @@ use crate::SshError;
 mod curve25519;
 mod diffie_hellman;
 
+/// SSH key exchange algorithms.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Algorithm {
+    /// `curve25519-sha256`
     Curve25519Sha256,
+
+    /// `diffie-hellman-group14-sha1`
     DiffieHellmanGroup14Sha1,
+
+    /// `diffie-hellman-group-exchange-sha256`
     DiffieHellmanGroupExchangeSha256,
 }
 

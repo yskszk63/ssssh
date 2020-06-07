@@ -12,9 +12,13 @@ use crate::SshError;
 mod aes;
 mod none;
 
+/// SSH cipher algorithms.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Algorithm {
+    /// `none`
     None,
+
+    /// `aes256-ctr`
     Aes256Ctr,
 }
 
@@ -206,7 +210,10 @@ mod tests {
             assert_eq!(name, a);
         }
 
-        assert_eq!(Algorithm::None, Algorithm::from_str(Algorithm::None.as_ref()).unwrap());
+        assert_eq!(
+            Algorithm::None,
+            Algorithm::from_str(Algorithm::None.as_ref()).unwrap()
+        );
         Algorithm::from_str("").unwrap_err();
     }
 }

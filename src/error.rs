@@ -7,6 +7,7 @@ use thiserror::Error;
 use crate::msg::disconnect::ReasonCode;
 use crate::pack::UnpackError;
 
+/// SSH errors.
 #[derive(Debug, Error)]
 pub enum SshError {
     #[error(transparent)]

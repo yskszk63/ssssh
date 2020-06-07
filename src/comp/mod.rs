@@ -11,8 +11,10 @@ use crate::SshError;
 
 mod none;
 
+/// SSH compression algorithms.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Algorithm {
+    /// `none`
     None,
 }
 
