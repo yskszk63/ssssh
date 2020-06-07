@@ -174,7 +174,7 @@ impl Verifier {
         match Algorithm::from_str(name) {
             Ok(Algorithm::SshEd25519) => Ok(Self::Ed25519(ed25519::Ed25519Verifier::new(pk)?)),
             Ok(Algorithm::SshRsa) => Ok(Self::Rsa(rsa::RsaVerifier::new(pk)?)),
-            Err(x) => Err(SshError::UnknownAlgorithm(x.0.to_string())),
+            Err(x) => Err(SshError::UnknownAlgorithm(x.0)),
         }
     }
 
