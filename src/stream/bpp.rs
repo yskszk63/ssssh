@@ -128,7 +128,6 @@ where
                     this.state.ctos().mac().verify(
                         seq,
                         &plain[..(*len + 4)],
-                        &buf[..(*len + 4)],
                         &expect,
                     )?;
 
@@ -190,7 +189,7 @@ where
             .state
             .stoc()
             .mac()
-            .sign(seq, &this.txbuf.1, &this.txbuf.0)?;
+            .sign(seq, &this.txbuf.1)?;
         this.txbuf.0.put_slice(&sign);
         this.txbuf.1.clear();
 

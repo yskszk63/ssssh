@@ -54,8 +54,8 @@ pub(crate) trait MacTrait: Into<Mac> + Sized {
     const NAME: Algorithm;
     const LEN: usize;
     fn new(key: &[u8]) -> Self;
-    fn sign(&self, seq: u32, plain: &[u8], encrypted: &[u8]) -> Result<Bytes, SshError>;
-    fn verify(&self, seq: u32, plain: &[u8], encrypted: &[u8], tag: &[u8]) -> Result<(), SshError>;
+    fn sign(&self, seq: u32, plain: &[u8]) -> Result<Bytes, SshError>;
+    fn verify(&self, seq: u32, plain: &[u8], tag: &[u8]) -> Result<(), SshError>;
 }
 
 #[derive(Debug)]
@@ -94,11 +94,11 @@ impl Mac {
         }
     }
 
-    pub(crate) fn sign(&self, seq: u32, plain: &[u8], encrypted: &[u8]) -> Result<Bytes, SshError> {
+    pub(crate) fn sign(&self, seq: u32, plain: &[u8]) -> Result<Bytes, SshError> {
         match self {
-            Self::None(item) => item.sign(seq, plain, encrypted),
-            Self::HmacSha256(item) => item.sign(seq, plain, encrypted),
-            Self::HmacSha1(item) => item.sign(seq, plain, encrypted),
+            Self::None(item) => item.sign(seq, plain),
+            Self::HmacSha256(item) => item.sign(seq, plain),
+            Self::HmacSha1(item) => item.sign(seq, plain),
         }
     }
 
@@ -106,13 +106,12 @@ impl Mac {
         &self,
         seq: u32,
         plain: &[u8],
-        encrypted: &[u8],
         tag: &[u8],
     ) -> Result<(), SshError> {
         match self {
-            Self::None(item) => item.verify(seq, plain, encrypted, tag),
-            Self::HmacSha256(item) => item.verify(seq, plain, encrypted, tag),
-            Self::HmacSha1(item) => item.verify(seq, plain, encrypted, tag),
+            Self::None(item) => item.verify(seq, plain, tag),
+            Self::HmacSha256(item) => item.verify(seq, plain, tag),
+            Self::HmacSha1(item) => item.verify(seq, plain, tag),
         }
     }
 }
@@ -136,8 +135,8 @@ mod tests {
         let k = Bytes::from(vec![0; Mac::len_by_name(name)]);
 
         let src = BytesMut::from("Hello, world!");
-        let tag = Mac::new(name, &k).sign(0, &src, &src).unwrap();
-        Mac::new(name, &k).verify(0, &src, &src, &tag).unwrap();
+        let tag = Mac::new(name, &k).sign(0, &src).unwrap();
+        Mac::new(name, &k).verify(0, &src, &tag).unwrap();
 
         Mac::new_none();
     }
@@ -149,8 +148,8 @@ mod tests {
         let k = Bytes::from(vec![0; Mac::len_by_name(name)]);
 
         let src = BytesMut::from("Hello, world!");
-        let tag = Mac::new(name, &k).sign(0, &src, &src).unwrap();
-        Mac::new(name, &k).verify(0, &src, &src, &tag).unwrap();
+        let tag = Mac::new(name, &k).sign(0, &src).unwrap();
+        Mac::new(name, &k).verify(0, &src, &tag).unwrap();
 
         Mac::new_none();
     }
@@ -162,8 +161,8 @@ mod tests {
         let k = Bytes::from(vec![0; Mac::len_by_name(name)]);
 
         let src = BytesMut::from("Hello, world!");
-        let tag = Mac::new(name, &k).sign(0, &src, &src).unwrap();
-        Mac::new(name, &k).verify(0, &src, &src, &tag).unwrap();
+        let tag = Mac::new(name, &k).sign(0, &src).unwrap();
+        Mac::new(name, &k).verify(0, &src, &tag).unwrap();
 
         Mac::new_none();
     }

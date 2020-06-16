@@ -17,7 +17,7 @@ impl MacTrait for HmacSha256 {
         Self { key }
     }
 
-    fn sign(&self, seq: u32, plain: &[u8], _encrypted: &[u8]) -> Result<Bytes, SshError> {
+    fn sign(&self, seq: u32, plain: &[u8]) -> Result<Bytes, SshError> {
         let mut cx = Context::with_key(&self.key);
         cx.update(&seq.to_be_bytes());
         cx.update(&plain);
@@ -28,7 +28,6 @@ impl MacTrait for HmacSha256 {
         &self,
         seq: u32,
         plain: &[u8],
-        _encrypted: &[u8],
         tag: &[u8],
     ) -> Result<(), SshError> {
         let mut buf = BytesMut::new();
@@ -59,7 +58,7 @@ impl MacTrait for HmacSha1 {
         Self { key }
     }
 
-    fn sign(&self, seq: u32, plain: &[u8], _encrypted: &[u8]) -> Result<Bytes, SshError> {
+    fn sign(&self, seq: u32, plain: &[u8]) -> Result<Bytes, SshError> {
         let mut cx = Context::with_key(&self.key);
         cx.update(&seq.to_be_bytes());
         cx.update(&plain);
@@ -70,7 +69,6 @@ impl MacTrait for HmacSha1 {
         &self,
         seq: u32,
         plain: &[u8],
-        _encrypted: &[u8],
         tag: &[u8],
     ) -> Result<(), SshError> {
         let mut buf = BytesMut::new();
