@@ -1,6 +1,6 @@
 use std::fmt;
 
-use openssl::bn::BigNum;
+use openssl::bn::{BigNum, BigNumContext};
 use openssl::hash::MessageDigest;
 use openssl::pkey::{PKey, Private, Public};
 use openssl::rsa::{Padding, Rsa as OpenSslRsa};
@@ -36,6 +36,36 @@ impl HostKeyTrait for Rsa {
         signer.set_rsa_padding(Padding::PKCS1).unwrap();
         signer.update(target.as_ref()).unwrap();
         signer.sign_to_vec().unwrap().into()
+    }
+
+    #[allow(clippy::many_single_char_names)]
+    fn parse(mut buf: &[u8]) -> Result<Self, SshError> {
+        let n = BigNum::from_slice(&Bytes::unpack(&mut buf)?).map_err(SshError::any)?;
+        let e = BigNum::from_slice(&Bytes::unpack(&mut buf)?).map_err(SshError::any)?;
+        let d = BigNum::from_slice(&Bytes::unpack(&mut buf)?).map_err(SshError::any)?;
+        let iqmp = BigNum::from_slice(&Bytes::unpack(&mut buf)?).map_err(SshError::any)?;
+        let p = BigNum::from_slice(&Bytes::unpack(&mut buf)?).map_err(SshError::any)?;
+        let q = BigNum::from_slice(&Bytes::unpack(&mut buf)?).map_err(SshError::any)?;
+
+        let mut cx = BigNumContext::new().map_err(SshError::any)?;
+        let mut aux = BigNum::new().map_err(SshError::any)?;
+        let mut dmq1 = BigNum::new().map_err(SshError::any)?;
+        let mut dmp1 = BigNum::new().map_err(SshError::any)?;
+
+        let consttime = (&d).to_owned(); // BN_dup
+
+        aux.checked_sub(&q, BigNum::from_u32(1).map_err(SshError::any)?.as_ref())
+            .map_err(SshError::any)?;
+        dmq1.nnmod(&consttime, &aux, &mut cx)
+            .map_err(SshError::any)?;
+        aux.checked_sub(&p, BigNum::from_u32(1).map_err(SshError::any)?.as_ref())
+            .map_err(SshError::any)?;
+        dmp1.nnmod(&consttime, &aux, &mut cx)
+            .map_err(SshError::any)?;
+
+        let pair = OpenSslRsa::from_private_components(n, e, d, p, q, dmp1, dmq1, iqmp)
+            .map_err(SshError::any)?;
+        Ok(Self { pair })
     }
 }
 

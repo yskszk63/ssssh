@@ -20,6 +20,14 @@ impl HostKeyTrait for Ed25519 {
         Ok(Self { pair })
     }
 
+    fn parse(mut buf: &[u8]) -> Result<Self, SshError> {
+        let pk = Bytes::unpack(&mut buf)?;
+        let sk = Bytes::unpack(&mut buf)?;
+        let pair =
+            Ed25519KeyPair::from_seed_and_public_key(&sk[..32], &pk).map_err(SshError::any)?;
+        Ok(Self { pair })
+    }
+
     fn publickey(&self) -> Bytes {
         let mut b = BytesMut::new();
         self.pair.public_key().as_ref().to_bytes().pack(&mut b);

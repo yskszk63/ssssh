@@ -141,8 +141,8 @@ mod tests {
         assert!(matches!(r, Err(SshError::NegotiateNotMatched(..))));
     }
 
-    #[test]
-    fn test_negotiate() {
+    #[tokio::test]
+    async fn test_negotiate() {
         let c_kexinit = crate::msg::kexinit::KexinitBuilder::default()
             .cookie(0)
             .kex_algorithms(list(["curve25519-sha256"]))
@@ -161,6 +161,7 @@ mod tests {
 
         let preference = crate::preference::PreferenceBuilder::default()
             .build()
+            .await
             .unwrap();
 
         negotiate(&c_kexinit, &preference).unwrap();

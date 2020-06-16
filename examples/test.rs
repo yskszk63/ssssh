@@ -12,7 +12,11 @@ use ssssh::SshOutput;
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    let mut server = ServerBuilder::new().build("[::1]:2222").await?;
+    let mut server = ServerBuilder::new()
+        .hostkeys_from_path("tests/ed25519")
+        .hostkeys_from_path("tests/rsa")
+        .build("[::1]:2222")
+        .await?;
     while let Some(conn) = server.try_next().await? {
         tokio::spawn(
             async move {

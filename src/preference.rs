@@ -54,13 +54,8 @@ impl PreferenceBuilder {
         self
     }
 
-    pub(crate) fn hostkeys_from_dir<P: AsRef<Path>>(&mut self, dir: P) -> &mut Self {
-        self.hostkeys.load_from_dir(dir);
-        self
-    }
-
-    pub(crate) fn hostkeys_from_path<P: AsRef<Path>>(&mut self, name: &str, file: P) -> &mut Self {
-        self.hostkeys.load_from_file(name, file);
+    pub(crate) fn hostkeys_from_path<P: AsRef<Path>>(&mut self, file: P) -> &mut Self {
+        self.hostkeys.load_from_file(file);
         self
     }
 
@@ -69,7 +64,7 @@ impl PreferenceBuilder {
         self
     }
 
-    pub(crate) fn build(&self) -> Result<Preference, SshError> {
+    pub(crate) async fn build(&self) -> Result<Preference, SshError> {
         let kex_algorithms = if self.kex_algorithms.is_empty() {
             kex::Algorithm::defaults()
         } else {
@@ -97,7 +92,7 @@ impl PreferenceBuilder {
         let name = self.name.clone().unwrap_or_else(|| "sssh".into());
         let timeout = self.timeout;
 
-        let mut hostkeys = self.hostkeys.build()?;
+        let mut hostkeys = self.hostkeys.build().await?;
         if hostkeys.names().is_empty() {
             hostkeys.generate()?;
         }

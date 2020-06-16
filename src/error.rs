@@ -67,6 +67,9 @@ pub enum SshError {
     #[error("handler error: {0}")]
     HandlerError(#[source] Box<dyn Error + Send + Sync + 'static>),
 
+    #[error("unsupported key file format")]
+    UnsupportedKeyFileFormat,
+
     #[error(transparent)]
     Any(Box<dyn Error + Send + Sync + 'static>),
 }
@@ -93,6 +96,7 @@ impl SshError {
             Self::ChannelError(..) => Some(ReasonCode::ServiceNotAvailable),
             Self::UnacceptableService(..) => Some(ReasonCode::ServiceNotAvailable),
             Self::HandlerError(..) => Some(ReasonCode::ByApplication),
+            Self::UnsupportedKeyFileFormat => None,
             Self::Any(..) => None,
         }
     }

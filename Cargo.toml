@@ -5,7 +5,7 @@ authors = ["yskszk63 <yskszk63@gmail.com>"]
 edition = "2018"
 
 [dependencies]
-tokio = { version="0.2", features=["tcp", "time", "stream", "macros", "io-util", "sync"] }
+tokio = { version="0.2", features=["tcp", "time", "stream", "macros", "io-util", "sync", "fs"] }
 futures = "0.3"
 bytes = "0.5"
 openssl = { version = "0.10", features = ["vendored"] }
@@ -20,7 +20,7 @@ linked-hash-map = "0.5.3"
 base64 = "0.12"
 
 [dev-dependencies]
-tokio = { version="0.2", features=["rt-threaded", "process", "dns", "fs", "blocking"] }
+tokio = { version="0.2", features=["rt-threaded", "process", "dns", "blocking"] }
 env_logger = "0.6"
 anyhow = "1.0"
 ssh2 = "0.8"

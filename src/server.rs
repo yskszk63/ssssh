@@ -63,13 +63,8 @@ impl Builder {
         self
     }
 
-    pub fn hostkeys_from_dir<P: AsRef<Path>>(&mut self, dir: P) -> &mut Self {
-        self.preference.hostkeys_from_dir(dir);
-        self
-    }
-
-    pub fn hostkeys_from_path<P: AsRef<Path>>(&mut self, name: &str, file: P) -> &mut Self {
-        self.preference.hostkeys_from_path(name, file);
+    pub fn hostkeys_from_path<P: AsRef<Path>>(&mut self, file: P) -> &mut Self {
+        self.preference.hostkeys_from_path(file);
         self
     }
 
@@ -87,7 +82,7 @@ impl Builder {
     where
         A: ToSocketAddrs,
     {
-        let preference = self.preference.build()?;
+        let preference = self.preference.build().await?;
         let preference = Arc::new(preference);
 
         let addr = addr.to_socket_addrs().await?.next();

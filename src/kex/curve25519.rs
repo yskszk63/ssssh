@@ -116,10 +116,12 @@ mod tests {
 
         let c_kexinit = crate::preference::PreferenceBuilder::default()
             .build()
+            .await
             .unwrap()
             .to_kexinit();
         let s_kexinit = crate::preference::PreferenceBuilder::default()
             .build()
+            .await
             .unwrap()
             .to_kexinit();
 

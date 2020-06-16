@@ -6,8 +6,13 @@ use std::str::FromStr;
 
 use base64::display::Base64Display;
 use base64::{CharacterSet, Config};
+use bytes::buf::BufExt as _;
 use bytes::{Buf, Bytes, BytesMut};
+use futures::future::{ok, ready};
+use futures::stream::{StreamExt as _, TryStreamExt as _};
 use linked_hash_map::LinkedHashMap;
+use tokio::fs::File;
+use tokio::io::{AsyncBufReadExt as _, BufReader};
 
 use crate::negotiate::{AlgorithmName, UnknownNameError};
 use crate::pack::{Pack, Put, Unpack, UnpackError};
@@ -55,8 +60,7 @@ impl AlgorithmName for Algorithm {
 
 #[derive(Debug)]
 enum BuilderOperation {
-    LoadFromDir(PathBuf),
-    LoadFromFile(String, PathBuf),
+    LoadFromFile(PathBuf),
     Generate,
 }
 
@@ -66,17 +70,9 @@ pub(crate) struct HostKeysBuilder {
 }
 
 impl HostKeysBuilder {
-    pub(crate) fn load_from_file<P: AsRef<Path>>(&mut self, name: &str, path: P) -> &mut Self {
-        self.operations.push(BuilderOperation::LoadFromFile(
-            name.to_string(),
-            path.as_ref().to_path_buf(),
-        ));
-        self
-    }
-
-    pub(crate) fn load_from_dir<P: AsRef<Path>>(&mut self, dir: P) -> &mut Self {
+    pub(crate) fn load_from_file<P: AsRef<Path>>(&mut self, path: P) -> &mut Self {
         self.operations
-            .push(BuilderOperation::LoadFromDir(dir.as_ref().to_path_buf()));
+            .push(BuilderOperation::LoadFromFile(path.as_ref().to_path_buf()));
         self
     }
 
@@ -85,12 +81,11 @@ impl HostKeysBuilder {
         self
     }
 
-    pub(crate) fn build(&self) -> Result<HostKeys, SshError> {
+    pub(crate) async fn build(&self) -> Result<HostKeys, SshError> {
         let mut hostkeys = HostKeys::new();
         for op in &self.operations {
             match op {
-                BuilderOperation::LoadFromDir(_dir) => todo!(),
-                BuilderOperation::LoadFromFile(_alg, _path) => todo!(),
+                BuilderOperation::LoadFromFile(path) => hostkeys.load(path).await?,
                 BuilderOperation::Generate => hostkeys.generate()?,
             }
         }
@@ -131,7 +126,59 @@ impl HostKeys {
         Ok(())
     }
 
-    // TODO implement load public interface
+    pub(crate) async fn load(&mut self, path: &PathBuf) -> Result<(), SshError> {
+        // https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL.key?annotate=HEAD
+
+        const AUTH_MAGIC: &[u8] = b"openssh-key-v1\0";
+        const MARK_BEGIN: &str = "-----BEGIN OPENSSH PRIVATE KEY-----";
+        const MARK_END: &str = "-----END OPENSSH PRIVATE KEY-----";
+
+        let f = File::open(path).await?;
+        let f = BufReader::new(f);
+
+        let data = f
+            .lines()
+            .try_skip_while(|l| ok(l != MARK_BEGIN))
+            .skip(1)
+            .take_while(|l| ready(l.is_ok() && l.as_ref().unwrap() != MARK_END))
+            .try_collect::<Vec<_>>()
+            .await?
+            .join("");
+        let data = base64::decode(&data).map_err(|_| SshError::UnsupportedKeyFileFormat)?;
+        let mut data = Bytes::from(data);
+
+        let auth_magic = (&mut data).take(AUTH_MAGIC.len()).to_bytes();
+        if auth_magic != AUTH_MAGIC {
+            return Err(SshError::UnsupportedKeyFileFormat);
+        }
+
+        let cipher = String::unpack(&mut data)?;
+        let kdf_name = String::unpack(&mut data)?;
+        let kdf = String::unpack(&mut data)?;
+        if (cipher.as_str(), kdf_name.as_str(), kdf.as_str()) != ("none", "none", "") {
+            return Err(SshError::UnsupportedKeyFileFormat);
+        }
+
+        let num_keys = u32::unpack(&mut data)?;
+        for _ in 0..num_keys {
+            let _ = PublicKey::unpack(&mut data)?;
+        }
+        for _ in 0..num_keys {
+            let mut data = Bytes::unpack(&mut data)?;
+            let check1 = u32::unpack(&mut data)?;
+            let check2 = u32::unpack(&mut data)?;
+            if check1 != check2 {
+                return Err(SshError::UnsupportedKeyFileFormat);
+            }
+
+            let alg = String::unpack(&mut data)?;
+            let name = Algorithm::from_str(&alg).map_err(|e| SshError::UnknownAlgorithm(e.0))?;
+            let key = HostKey::parse(&name, &data)?;
+            self.insert(key);
+        }
+
+        Ok(())
+    }
 }
 
 /// Sign by hostkey
@@ -255,6 +302,8 @@ pub(crate) trait HostKeyTrait: Into<HostKey> + Sized {
 
     /// Sign by hostkey
     fn sign(&self, target: &Bytes) -> Bytes;
+
+    fn parse(buf: &[u8]) -> Result<Self, SshError>;
 }
 
 /// Hostkey algorithms
@@ -273,6 +322,13 @@ impl HostKey {
         match name {
             Algorithm::SshEd25519 => Ok(ed25519::Ed25519::gen()?.into()),
             Algorithm::SshRsa => Ok(rsa::Rsa::gen()?.into()),
+        }
+    }
+
+    fn parse(name: &Algorithm, data: &[u8]) -> Result<Self, SshError> {
+        match name {
+            Algorithm::SshEd25519 => Ok(ed25519::Ed25519::parse(data)?.into()),
+            Algorithm::SshRsa => Ok(rsa::Rsa::parse(data)?.into()),
         }
     }
 
