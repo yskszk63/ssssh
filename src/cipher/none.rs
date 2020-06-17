@@ -1,7 +1,7 @@
-//! `none` encrypt
+//! `none` cipher
 use super::*;
 
-/// `none` encrypt
+/// `none` cipher
 #[derive(Debug)]
 pub struct None {}
 
@@ -11,7 +11,7 @@ impl None {
     }
 }
 
-impl EncryptTrait for None {
+impl CipherTrait for None {
     const NAME: Algorithm = Algorithm::None;
     const BLOCK_SIZE: usize = 8;
     const KEY_LENGTH: usize = 0;
@@ -29,7 +29,7 @@ impl EncryptTrait for None {
     }
 }
 
-impl From<None> for Encrypt {
+impl From<None> for Cipher {
     fn from(v: None) -> Self {
         Self::None(v)
     }

@@ -9,7 +9,7 @@ use crate::msg::kexinit::Kexinit;
 use crate::pack::NameList;
 use crate::preference::Preference;
 use crate::SshError;
-use crate::{comp, encrypt, hostkey, kex, mac};
+use crate::{cipher, comp, hostkey, kex, mac};
 
 #[derive(Debug, Error)]
 #[error("unknown algorithm name {0}")]
@@ -32,9 +32,9 @@ pub(crate) struct Algorithm {
     #[get = "pub(crate)"]
     server_host_key_algorithm: hostkey::Algorithm,
     #[get = "pub(crate)"]
-    encryption_algorithm_c2s: encrypt::Algorithm,
+    cipher_algorithm_c2s: cipher::Algorithm,
     #[get = "pub(crate)"]
-    encryption_algorithm_s2c: encrypt::Algorithm,
+    cipher_algorithm_s2c: cipher::Algorithm,
     #[get = "pub(crate)"]
     mac_algorithm_c2s: mac::Algorithm,
     #[get = "pub(crate)"]
@@ -74,17 +74,17 @@ pub(crate) fn negotiate(
     )?;
     builder.server_host_key_algorithm(server_host_key_algorithm);
 
-    let encryption_algorithm_c2s = decide(
-        preference.encryption_algorithms(),
-        c_kexinit.encryption_algorithms_c2s(),
+    let cipher_algorithm_c2s = decide(
+        preference.cipher_algorithms(),
+        c_kexinit.cipher_algorithms_c2s(),
     )?;
-    builder.encryption_algorithm_c2s(encryption_algorithm_c2s);
+    builder.cipher_algorithm_c2s(cipher_algorithm_c2s);
 
-    let encryption_algorithm_s2c = decide(
-        preference.encryption_algorithms(),
-        c_kexinit.encryption_algorithms_s2c(),
+    let cipher_algorithm_s2c = decide(
+        preference.cipher_algorithms(),
+        c_kexinit.cipher_algorithms_s2c(),
     )?;
-    builder.encryption_algorithm_s2c(encryption_algorithm_s2c);
+    builder.cipher_algorithm_s2c(cipher_algorithm_s2c);
 
     let mac_algorithm_c2s = decide(preference.mac_algorithms(), c_kexinit.mac_algorithms_c2s())?;
     builder.mac_algorithm_c2s(mac_algorithm_c2s);
@@ -147,8 +147,8 @@ mod tests {
             .cookie(0)
             .kex_algorithms(list(["curve25519-sha256"]))
             .server_host_key_algorithms(list(["ssh-ed25519"]))
-            .encryption_algorithms_c2s(list(["aes256-ctr"]))
-            .encryption_algorithms_s2c(list(["aes256-ctr"]))
+            .cipher_algorithms_c2s(list(["aes256-ctr"]))
+            .cipher_algorithms_s2c(list(["aes256-ctr"]))
             .mac_algorithms_c2s(list(["hmac-sha2-256"]))
             .mac_algorithms_s2c(list(["hmac-sha2-256"]))
             .compression_algorithms_c2s(list(["none"]))

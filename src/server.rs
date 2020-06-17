@@ -43,8 +43,8 @@ impl Builder {
         self
     }
 
-    pub fn add_encryption_algorithm(&mut self, name: crate::Cipher) -> &mut Self {
-        self.preference.add_encryption_algorithm(name);
+    pub fn add_cipher_algorithm(&mut self, name: crate::Cipher) -> &mut Self {
+        self.preference.add_cipher_algorithm(name);
         self
     }
 

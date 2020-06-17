@@ -1,11 +1,11 @@
-//! `aes256-ctr` encrypt algorithm
+//! `aes256-ctr` cipher algorithm
 use std::fmt;
 
 use openssl::symm::{Cipher, Crypter, Mode};
 
 use super::*;
 
-/// `aes256-ctr` encrypt algorithm
+/// `aes256-ctr` cipher algorithm
 pub(crate) struct Aes256Ctr {
     crypter: Crypter,
 }
@@ -13,7 +13,7 @@ pub(crate) struct Aes256Ctr {
 impl Aes256Ctr {
     fn new(key: &[u8], iv: &[u8], mode: Mode) -> Result<Self, SshError> {
         let crypter = Crypter::new(Cipher::aes_256_ctr(), mode, key, Some(&iv))
-            .map_err(SshError::encrypt_error)?;
+            .map_err(SshError::cipher_error)?;
         Ok(Self { crypter })
     }
 }
@@ -24,7 +24,7 @@ impl fmt::Debug for Aes256Ctr {
     }
 }
 
-impl EncryptTrait for Aes256Ctr {
+impl CipherTrait for Aes256Ctr {
     const NAME: Algorithm = Algorithm::Aes256Ctr;
     const BLOCK_SIZE: usize = 16;
     const KEY_LENGTH: usize = 32;
@@ -45,13 +45,13 @@ impl EncryptTrait for Aes256Ctr {
             b.clone_from_slice(chunk);
             self.crypter
                 .update(&b, chunk)
-                .map_err(SshError::encrypt_error)?;
+                .map_err(SshError::cipher_error)?;
         }
         Ok(())
     }
 }
 
-impl From<Aes256Ctr> for Encrypt {
+impl From<Aes256Ctr> for super::Cipher {
     fn from(v: Aes256Ctr) -> Self {
         Self::Aes256Ctr(v)
     }

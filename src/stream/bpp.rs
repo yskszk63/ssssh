@@ -78,7 +78,7 @@ where
 
     fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
         let this = self.get_mut();
-        let bs = this.state.ctos().encrypt().block_size();
+        let bs = this.state.ctos().cipher().block_size();
         let mac_length = this.state.ctos().mac().len();
 
         this.rxbuf.reserve(MAXIMUM_PACKET_SIZE);
@@ -99,7 +99,7 @@ where
 
                     this.state
                         .ctos_mut()
-                        .encrypt_mut()
+                        .cipher_mut()
                         .update(&mut this.rxbuf[..bs])?;
 
                     let len = (&this.rxbuf[..4]).get_u32() as usize;
@@ -118,7 +118,7 @@ where
 
                     this.state
                         .ctos_mut()
-                        .encrypt_mut()
+                        .cipher_mut()
                         .update(&mut buf[bs..(*len + 4)])?;
 
                     let expect = &buf[(*len + 4)..];
@@ -164,7 +164,7 @@ where
 
         let item = this.state.stoc().comp().compress(item)?;
         let len = item.len();
-        let bs = this.state.stoc().encrypt().block_size();
+        let bs = this.state.stoc().cipher().block_size();
         let padding_length = pad_len(len, bs);
         let len = len + padding_length + 1;
 
@@ -181,7 +181,7 @@ where
         let seq = this.state.stoc_mut().get_and_inc_seq();
         let sign = this.state.stoc().mac().sign(seq, &buf)?;
 
-        this.state.stoc_mut().encrypt_mut().update(&mut buf)?;
+        this.state.stoc_mut().cipher_mut().update(&mut buf)?;
 
         buf.put_slice(&sign);
 

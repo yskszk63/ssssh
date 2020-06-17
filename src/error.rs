@@ -37,8 +37,8 @@ pub enum SshError {
     #[error("compression error: {0}")]
     CompressionError(#[source] Box<dyn Error + Send + Sync + 'static>),
 
-    #[error("encrypt error: {0}")]
-    EncryptError(#[source] Box<dyn Error + Send + Sync + 'static>),
+    #[error("cipher error: {0}")]
+    CipherError(#[source] Box<dyn Error + Send + Sync + 'static>),
 
     #[error("mac error: {0}")]
     MacError(#[source] Box<dyn Error + Send + Sync + 'static>),
@@ -86,7 +86,7 @@ impl SshError {
             Self::NegotiateNotMatched(..) => Some(ReasonCode::KeyExchangeFailed),
             Self::UnknownAlgorithm(..) => Some(ReasonCode::ProtocolError),
             Self::CompressionError(..) => Some(ReasonCode::CompressionError),
-            Self::EncryptError(..) => Some(ReasonCode::ProtocolError),
+            Self::CipherError(..) => Some(ReasonCode::ProtocolError),
             Self::MacError(..) => Some(ReasonCode::MacError),
             Self::KexUnexpectedMsg(..) => Some(ReasonCode::KeyExchangeFailed),
             Self::KexUnexpectedEof => Some(ReasonCode::KeyExchangeFailed),
@@ -101,11 +101,11 @@ impl SshError {
         }
     }
 
-    pub(crate) fn encrypt_error<E>(err: E) -> Self
+    pub(crate) fn cipher_error<E>(err: E) -> Self
     where
         E: Error + Send + Sync + 'static,
     {
-        Self::EncryptError(Box::new(err))
+        Self::CipherError(Box::new(err))
     }
 
     pub(crate) fn mac_error<E>(err: E) -> Self

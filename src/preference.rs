@@ -3,8 +3,8 @@ use std::time::Duration;
 
 use getset::Getters;
 
+use crate::cipher;
 use crate::comp;
-use crate::encrypt;
 use crate::hostkey::{HostKeys, HostKeysBuilder};
 use crate::kex;
 use crate::mac;
@@ -16,7 +16,7 @@ use crate::SshError;
 pub(crate) struct PreferenceBuilder {
     kex_algorithms: Vec<kex::Algorithm>,
     hostkeys: HostKeysBuilder,
-    encryption_algorithms: Vec<encrypt::Algorithm>,
+    cipher_algorithms: Vec<cipher::Algorithm>,
     mac_algorithms: Vec<mac::Algorithm>,
     compression_algorithms: Vec<comp::Algorithm>,
     name: Option<String>,
@@ -29,8 +29,8 @@ impl PreferenceBuilder {
         self
     }
 
-    pub(crate) fn add_encryption_algorithm(&mut self, name: encrypt::Algorithm) -> &mut Self {
-        self.encryption_algorithms.push(name);
+    pub(crate) fn add_cipher_algorithm(&mut self, name: cipher::Algorithm) -> &mut Self {
+        self.cipher_algorithms.push(name);
         self
     }
 
@@ -71,10 +71,10 @@ impl PreferenceBuilder {
             self.kex_algorithms.clone()
         };
 
-        let encryption_algorithms = if self.encryption_algorithms.is_empty() {
-            encrypt::Algorithm::defaults()
+        let cipher_algorithms = if self.cipher_algorithms.is_empty() {
+            cipher::Algorithm::defaults()
         } else {
-            self.encryption_algorithms.clone()
+            self.cipher_algorithms.clone()
         };
 
         let mac_algorithms = if self.mac_algorithms.is_empty() {
@@ -100,7 +100,7 @@ impl PreferenceBuilder {
         Ok(Preference {
             kex_algorithms,
             hostkeys,
-            encryption_algorithms,
+            cipher_algorithms,
             mac_algorithms,
             compression_algorithms,
             name,
@@ -118,7 +118,7 @@ pub(crate) struct Preference {
     hostkeys: HostKeys,
 
     #[get = "pub(crate)"]
-    encryption_algorithms: Vec<encrypt::Algorithm>,
+    cipher_algorithms: Vec<cipher::Algorithm>,
 
     #[get = "pub(crate)"]
     mac_algorithms: Vec<mac::Algorithm>,
@@ -159,14 +159,14 @@ impl Preference {
                     .map(AlgorithmName::to_string)
                     .collect(),
             )
-            .encryption_algorithms_c2s(
-                self.encryption_algorithms
+            .cipher_algorithms_c2s(
+                self.cipher_algorithms
                     .iter()
                     .map(AlgorithmName::to_string)
                     .collect(),
             )
-            .encryption_algorithms_s2c(
-                self.encryption_algorithms
+            .cipher_algorithms_s2c(
+                self.cipher_algorithms
                     .iter()
                     .map(AlgorithmName::to_string)
                     .collect(),

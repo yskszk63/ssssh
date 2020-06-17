@@ -36,9 +36,9 @@ pub(crate) struct Kexinit {
     #[get = "pub(crate)"]
     server_host_key_algorithms: NameList,
     #[get = "pub(crate)"]
-    encryption_algorithms_c2s: NameList,
+    cipher_algorithms_c2s: NameList,
     #[get = "pub(crate)"]
-    encryption_algorithms_s2c: NameList,
+    cipher_algorithms_s2c: NameList,
     #[get = "pub(crate)"]
     mac_algorithms_c2s: NameList,
     #[get = "pub(crate)"]
@@ -64,8 +64,8 @@ impl Pack for Kexinit {
         self.cookie.pack(buf);
         self.kex_algorithms.pack(buf);
         self.server_host_key_algorithms.pack(buf);
-        self.encryption_algorithms_c2s.pack(buf);
-        self.encryption_algorithms_s2c.pack(buf);
+        self.cipher_algorithms_c2s.pack(buf);
+        self.cipher_algorithms_s2c.pack(buf);
         self.mac_algorithms_c2s.pack(buf);
         self.mac_algorithms_s2c.pack(buf);
         self.compression_algorithms_c2s.pack(buf);
@@ -82,8 +82,8 @@ impl Unpack for Kexinit {
         let cookie = Unpack::unpack(buf)?;
         let kex_algorithms = Unpack::unpack(buf)?;
         let server_host_key_algorithms = Unpack::unpack(buf)?;
-        let encryption_algorithms_c2s = Unpack::unpack(buf)?;
-        let encryption_algorithms_s2c = Unpack::unpack(buf)?;
+        let cipher_algorithms_c2s = Unpack::unpack(buf)?;
+        let cipher_algorithms_s2c = Unpack::unpack(buf)?;
         let mac_algorithms_c2s = Unpack::unpack(buf)?;
         let mac_algorithms_s2c = Unpack::unpack(buf)?;
         let compression_algorithms_c2s = Unpack::unpack(buf)?;
@@ -97,8 +97,8 @@ impl Unpack for Kexinit {
             cookie,
             kex_algorithms,
             server_host_key_algorithms,
-            encryption_algorithms_c2s,
-            encryption_algorithms_s2c,
+            cipher_algorithms_c2s,
+            cipher_algorithms_s2c,
             mac_algorithms_c2s,
             mac_algorithms_s2c,
             compression_algorithms_c2s,

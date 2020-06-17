@@ -40,9 +40,9 @@
 //! }
 //! ```
 
+pub use cipher::Algorithm as Cipher;
 pub use comp::Algorithm as Compression;
 pub use connection::{Connection, SshInput, SshOutput};
-pub use encrypt::Algorithm as Cipher;
 pub use error::SshError;
 pub use handlers::*;
 pub use hostkey::Algorithm as Key;
@@ -50,9 +50,9 @@ pub use kex::Algorithm as Kex;
 pub use mac::Algorithm as Mac;
 pub use server::{Builder as ServerBuilder, Server};
 
+mod cipher;
 mod comp;
 mod connection;
-mod encrypt;
 mod error;
 mod handlers;
 mod hash;

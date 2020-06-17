@@ -1,4 +1,4 @@
-//! Encrypt
+//! Cipher
 //!
 //! [rfc4253](https://tools.ietf.org/html/rfc4253)
 
@@ -49,15 +49,15 @@ impl AlgorithmName for Algorithm {
     }
 }
 
-/// Encrypt algorithm trait
-trait EncryptTrait: Into<Encrypt> + Sized {
-    /// Encrypt algorithm name
+/// Cipher algorithm trait
+trait CipherTrait: Into<Cipher> + Sized {
+    /// Cipher algorithm name
     const NAME: Algorithm;
 
-    /// Encrypt block size
+    /// Cipher block size
     const BLOCK_SIZE: usize;
 
-    /// Encrypt key length
+    /// Cipher key length
     const KEY_LENGTH: usize;
 
     /// Create new instance for encrypt
@@ -70,9 +70,9 @@ trait EncryptTrait: Into<Encrypt> + Sized {
     fn update(&mut self, target: &mut [u8]) -> Result<(), SshError>;
 }
 
-/// Encrypt algorithms
+/// Cipher algorithms
 #[derive(Debug)]
-pub(crate) enum Encrypt {
+pub(crate) enum Cipher {
     /// `none` algorithm
     None(none::None),
 
@@ -80,10 +80,10 @@ pub(crate) enum Encrypt {
     Aes256Ctr(aes::Aes256Ctr),
 }
 
-impl Encrypt {
+impl Cipher {
     /// Create `none` instance
     pub(crate) fn new_none() -> Self {
-        Encrypt::None(none::None::new())
+        Self::None(none::None::new())
     }
 
     /// Create new instance for encrypt by name
@@ -152,48 +152,48 @@ mod tests {
     fn test_send() {
         fn assert<T: Send + Sync + 'static>() {}
 
-        assert::<Encrypt>();
+        assert::<Cipher>();
     }
 
     #[test]
     fn test_none() {
         let name = &Algorithm::None;
 
-        let k = Bytes::from(vec![0; Encrypt::key_length_by_name(name)]);
-        let iv = Bytes::from(vec![0; Encrypt::block_size_by_name(name)]);
+        let k = Bytes::from(vec![0; Cipher::key_length_by_name(name)]);
+        let iv = Bytes::from(vec![0; Cipher::block_size_by_name(name)]);
 
         let src = BytesMut::from("Hello, world!");
         let mut result = src.clone();
 
-        Encrypt::new_for_encrypt(name, &k, &iv)
+        Cipher::new_for_encrypt(name, &k, &iv)
             .unwrap()
             .update(&mut result)
             .unwrap();
-        Encrypt::new_for_decrypt(name, &k, &iv)
+        Cipher::new_for_decrypt(name, &k, &iv)
             .unwrap()
             .update(&mut result)
             .unwrap();
 
         assert_eq!(&src, &result);
 
-        Encrypt::new_none();
+        Cipher::new_none();
     }
 
     #[test]
     fn test_aes256ctr() {
         let name = &Algorithm::Aes256Ctr;
 
-        let k = Bytes::from(vec![0; Encrypt::key_length_by_name(name)]);
-        let iv = Bytes::from(vec![0; Encrypt::block_size_by_name(name)]);
+        let k = Bytes::from(vec![0; Cipher::key_length_by_name(name)]);
+        let iv = Bytes::from(vec![0; Cipher::block_size_by_name(name)]);
 
         let src = BytesMut::from("Hello, world!");
         let mut result = src.clone();
 
-        Encrypt::new_for_encrypt(name, &k, &iv)
+        Cipher::new_for_encrypt(name, &k, &iv)
             .unwrap()
             .update(&mut result)
             .unwrap();
-        Encrypt::new_for_decrypt(name, &k, &iv)
+        Cipher::new_for_decrypt(name, &k, &iv)
             .unwrap()
             .update(&mut result)
             .unwrap();

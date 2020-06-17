@@ -3,8 +3,8 @@ use std::num::Wrapping;
 use bytes::{Bytes, BytesMut};
 use getset::{Getters, MutGetters};
 
+use crate::cipher::Cipher;
 use crate::comp::Compression;
-use crate::encrypt::Encrypt;
 use crate::kex::Kex;
 use crate::mac::Mac;
 use crate::negotiate::Algorithm;
@@ -17,7 +17,7 @@ pub(crate) struct OneWayState {
 
     #[get = "pub(crate)"]
     #[get_mut = "pub(crate)"]
-    encrypt: Encrypt,
+    cipher: Cipher,
 
     #[get = "pub(crate)"]
     mac: Mac,
@@ -30,7 +30,7 @@ impl OneWayState {
     fn new() -> Self {
         Self {
             seq: Wrapping(0),
-            encrypt: Encrypt::new_none(),
+            cipher: Cipher::new_none(),
             mac: Mac::new_none(),
             comp: Compression::new_none(),
         }
@@ -111,14 +111,14 @@ impl State {
     ) -> Result<(), SshError> {
         let session_id = self.session_id.as_ref().unwrap_or_else(|| &hash);
 
-        let iv_ctos_len = Encrypt::block_size_by_name(algorithm.encryption_algorithm_c2s());
+        let iv_ctos_len = Cipher::block_size_by_name(algorithm.cipher_algorithm_c2s());
         let iv_ctos = compute_hash(hash, secret, b'A', session_id, kex, iv_ctos_len);
-        let iv_stoc_len = Encrypt::block_size_by_name(algorithm.encryption_algorithm_c2s());
+        let iv_stoc_len = Cipher::block_size_by_name(algorithm.cipher_algorithm_c2s());
         let iv_stoc = compute_hash(hash, secret, b'B', session_id, kex, iv_stoc_len);
 
-        let key_ctos_len = Encrypt::key_length_by_name(algorithm.encryption_algorithm_c2s());
+        let key_ctos_len = Cipher::key_length_by_name(algorithm.cipher_algorithm_c2s());
         let key_ctos = compute_hash(hash, secret, b'C', session_id, kex, key_ctos_len);
-        let key_stoc_len = Encrypt::key_length_by_name(algorithm.encryption_algorithm_c2s());
+        let key_stoc_len = Cipher::key_length_by_name(algorithm.cipher_algorithm_c2s());
         let key_stoc = compute_hash(hash, secret, b'D', session_id, kex, key_stoc_len);
 
         let intk_ctos_len = Mac::len_by_name(algorithm.mac_algorithm_c2s());
@@ -126,10 +126,10 @@ impl State {
         let intk_stoc_len = Mac::len_by_name(algorithm.mac_algorithm_c2s());
         let intk_stoc = compute_hash(hash, secret, b'F', session_id, kex, intk_stoc_len);
 
-        self.ctos.encrypt =
-            Encrypt::new_for_decrypt(algorithm.encryption_algorithm_c2s(), &key_ctos, &iv_ctos)?;
-        self.stoc.encrypt =
-            Encrypt::new_for_encrypt(algorithm.encryption_algorithm_s2c(), &key_stoc, &iv_stoc)?;
+        self.ctos.cipher =
+            Cipher::new_for_decrypt(algorithm.cipher_algorithm_c2s(), &key_ctos, &iv_ctos)?;
+        self.stoc.cipher =
+            Cipher::new_for_encrypt(algorithm.cipher_algorithm_s2c(), &key_stoc, &iv_stoc)?;
 
         self.ctos.mac = Mac::new(algorithm.mac_algorithm_c2s(), &intk_ctos);
         self.stoc.mac = Mac::new(algorithm.mac_algorithm_s2c(), &intk_stoc);
