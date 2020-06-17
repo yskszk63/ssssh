@@ -18,7 +18,7 @@ const KEXS: &'static [&'static str] = &[
 
 const KEYS: &'static [&'static str] = &["ssh-ed25519", "ssh-rsa"];
 
-const MACS: &'static [&'static str] = &["hmac-sha1", "hmac-sha2-256"];
+const MACS: &'static [&'static str] = &["hmac-sha1", "hmac-sha2-256", "hmac-sha2-512"];
 
 const CKEYS: &'static [&'static str] = &["tests/ed25519", "tests/rsa"];
 

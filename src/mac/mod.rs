@@ -17,6 +17,9 @@ pub enum Algorithm {
     /// `hmac-sha2-256`
     HmacSha256,
 
+    /// `hmac-sha2-512`
+    HmacSha512,
+
     /// `hmac-sha1`
     HmacSha1,
 }
@@ -26,6 +29,7 @@ impl AsRef<str> for Algorithm {
         match self {
             Self::None => "none",
             Self::HmacSha256 => "hmac-sha2-256",
+            Self::HmacSha512 => "hmac-sha2-512",
             Self::HmacSha1 => "hmac-sha1",
         }
     }
@@ -38,6 +42,7 @@ impl FromStr for Algorithm {
         match s {
             "none" => Ok(Self::None),
             "hmac-sha2-256" => Ok(Self::HmacSha256),
+            "hmac-sha2-512" => Ok(Self::HmacSha512),
             "hmac-sha1" => Ok(Self::HmacSha1),
             x => Err(UnknownNameError(x.into())),
         }
@@ -46,12 +51,11 @@ impl FromStr for Algorithm {
 
 impl AlgorithmName for Algorithm {
     fn defaults() -> Vec<Self> {
-        vec![Self::HmacSha256, Self::HmacSha1]
+        vec![Self::HmacSha512, Self::HmacSha256, Self::HmacSha1]
     }
 }
 
-pub(crate) trait MacTrait: Into<Mac> + Sized {
-    const NAME: Algorithm;
+pub(crate) trait MacTrait: Sized {
     const LEN: usize;
     fn new(key: &[u8]) -> Self;
     fn sign(&self, seq: u32, plain: &[u8]) -> Result<Bytes, SshError>;
@@ -62,19 +66,21 @@ pub(crate) trait MacTrait: Into<Mac> + Sized {
 pub(crate) enum Mac {
     None(none::None),
     HmacSha256(sha::HmacSha256),
+    HmacSha512(sha::HmacSha512),
     HmacSha1(sha::HmacSha1),
 }
 
 impl Mac {
     pub(crate) fn new_none() -> Self {
-        none::None {}.into()
+        Self::None(none::None {})
     }
 
     pub(crate) fn new(name: &Algorithm, key: &[u8]) -> Self {
         match name {
-            Algorithm::None => none::None::new(key).into(),
-            Algorithm::HmacSha256 => sha::HmacSha256::new(key).into(),
-            Algorithm::HmacSha1 => sha::HmacSha1::new(key).into(),
+            Algorithm::None => Self::None(none::None::new(key)),
+            Algorithm::HmacSha256 => Self::HmacSha256(sha::HmacSha256::new(key)),
+            Algorithm::HmacSha512 => Self::HmacSha512(sha::HmacSha512::new(key)),
+            Algorithm::HmacSha1 => Self::HmacSha1(sha::HmacSha1::new(key)),
         }
     }
 
@@ -82,6 +88,7 @@ impl Mac {
         match name {
             Algorithm::None => none::None::LEN,
             Algorithm::HmacSha256 => sha::HmacSha256::LEN,
+            Algorithm::HmacSha512 => sha::HmacSha512::LEN,
             Algorithm::HmacSha1 => sha::HmacSha1::LEN,
         }
     }
@@ -90,6 +97,7 @@ impl Mac {
         match self {
             Self::None(..) => none::None::LEN,
             Self::HmacSha256(..) => sha::HmacSha256::LEN,
+            Self::HmacSha512(..) => sha::HmacSha512::LEN,
             Self::HmacSha1(..) => sha::HmacSha1::LEN,
         }
     }
@@ -98,6 +106,7 @@ impl Mac {
         match self {
             Self::None(item) => item.sign(seq, plain),
             Self::HmacSha256(item) => item.sign(seq, plain),
+            Self::HmacSha512(item) => item.sign(seq, plain),
             Self::HmacSha1(item) => item.sign(seq, plain),
         }
     }
@@ -106,6 +115,7 @@ impl Mac {
         match self {
             Self::None(item) => item.verify(seq, plain, tag),
             Self::HmacSha256(item) => item.verify(seq, plain, tag),
+            Self::HmacSha512(item) => item.verify(seq, plain, tag),
             Self::HmacSha1(item) => item.verify(seq, plain, tag),
         }
     }
