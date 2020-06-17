@@ -4,7 +4,7 @@
 
 use std::str::FromStr;
 
-use bytes::{Bytes, BytesMut};
+use bytes::Bytes;
 
 use crate::negotiate::{AlgorithmName, UnknownNameError};
 use crate::SshError;
@@ -67,7 +67,7 @@ trait EncryptTrait: Into<Encrypt> + Sized {
     fn new_for_decrypt(key: &[u8], iv: &[u8]) -> Result<Self, SshError>;
 
     /// Update encrypt or decrypt block
-    fn update(&mut self, src: &[u8], dst: &mut BytesMut) -> Result<(), SshError>;
+    fn update(&mut self, target: &mut [u8]) -> Result<(), SshError>;
 }
 
 /// Encrypt algorithms
@@ -135,10 +135,10 @@ impl Encrypt {
     }
 
     /// Update encrypt or decrypt block
-    pub(crate) fn update(&mut self, src: &[u8], dst: &mut BytesMut) -> Result<(), SshError> {
+    pub(crate) fn update(&mut self, target: &mut [u8]) -> Result<(), SshError> {
         match self {
-            Self::None(item) => item.update(src, dst),
-            Self::Aes256Ctr(item) => item.update(src, dst),
+            Self::None(item) => item.update(target),
+            Self::Aes256Ctr(item) => item.update(target),
         }
     }
 }
@@ -146,6 +146,7 @@ impl Encrypt {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use bytes::BytesMut;
 
     #[test]
     fn test_send() {
@@ -162,16 +163,15 @@ mod tests {
         let iv = Bytes::from(vec![0; Encrypt::block_size_by_name(name)]);
 
         let src = BytesMut::from("Hello, world!");
-        let mut dst = BytesMut::new();
-        let mut result = BytesMut::new();
+        let mut result = src.clone();
 
         Encrypt::new_for_encrypt(name, &k, &iv)
             .unwrap()
-            .update(&src, &mut dst)
+            .update(&mut result)
             .unwrap();
         Encrypt::new_for_decrypt(name, &k, &iv)
             .unwrap()
-            .update(&dst, &mut result)
+            .update(&mut result)
             .unwrap();
 
         assert_eq!(&src, &result);
@@ -187,16 +187,15 @@ mod tests {
         let iv = Bytes::from(vec![0; Encrypt::block_size_by_name(name)]);
 
         let src = BytesMut::from("Hello, world!");
-        let mut dst = BytesMut::new();
-        let mut result = BytesMut::new();
+        let mut result = src.clone();
 
         Encrypt::new_for_encrypt(name, &k, &iv)
             .unwrap()
-            .update(&src, &mut dst)
+            .update(&mut result)
             .unwrap();
         Encrypt::new_for_decrypt(name, &k, &iv)
             .unwrap()
-            .update(&dst, &mut result)
+            .update(&mut result)
             .unwrap();
 
         assert_eq!(&src, &result);

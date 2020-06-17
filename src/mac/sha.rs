@@ -24,12 +24,7 @@ impl MacTrait for HmacSha256 {
         Ok(cx.sign().as_ref().to_bytes())
     }
 
-    fn verify(
-        &self,
-        seq: u32,
-        plain: &[u8],
-        tag: &[u8],
-    ) -> Result<(), SshError> {
+    fn verify(&self, seq: u32, plain: &[u8], tag: &[u8]) -> Result<(), SshError> {
         let mut buf = BytesMut::new();
         buf.extend_from_slice(&seq.to_be_bytes());
         buf.extend_from_slice(&plain);
@@ -65,12 +60,7 @@ impl MacTrait for HmacSha1 {
         Ok(cx.sign().as_ref().to_bytes())
     }
 
-    fn verify(
-        &self,
-        seq: u32,
-        plain: &[u8],
-        tag: &[u8],
-    ) -> Result<(), SshError> {
+    fn verify(&self, seq: u32, plain: &[u8], tag: &[u8]) -> Result<(), SshError> {
         let mut buf = BytesMut::new();
         buf.extend_from_slice(&seq.to_be_bytes());
         buf.extend_from_slice(&plain);

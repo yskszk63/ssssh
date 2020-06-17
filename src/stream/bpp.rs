@@ -40,8 +40,8 @@ where
 {
     state: State,
     io: IO,
-    txbuf: (BytesMut, BytesMut), // enc, plain
-    rxbuf: (BytesMut, BytesMut), // enc, plain
+    txbuf: BytesMut,
+    rxbuf: BytesMut,
     rxstate: DecryptState,
 }
 
@@ -55,8 +55,8 @@ where
         Self {
             state,
             io,
-            txbuf: (BytesMut::new(), BytesMut::new()),
-            rxbuf: (BytesMut::new(), BytesMut::new()),
+            txbuf: BytesMut::new(),
+            rxbuf: BytesMut::new(),
             rxstate,
         }
     }
@@ -81,28 +81,28 @@ where
         let bs = this.state.ctos().encrypt().block_size();
         let mac_length = this.state.ctos().mac().len();
 
-        this.rxbuf.0.reserve(MAXIMUM_PACKET_SIZE);
-        match Pin::new(&mut this.io).poll_read_buf(cx, &mut this.rxbuf.0) {
+        this.rxbuf.reserve(MAXIMUM_PACKET_SIZE);
+        match Pin::new(&mut this.io).poll_read_buf(cx, &mut this.rxbuf) {
             Poll::Ready(Ok(0)) => return Poll::Ready(None),
             Poll::Ready(Ok(_)) => {}
             Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e.into()))),
-            Poll::Pending if this.rxbuf.0.has_remaining() => {}
+            Poll::Pending if this.rxbuf.has_remaining() => {}
             Poll::Pending => return Poll::Pending,
         }
 
         loop {
             match &mut this.rxstate {
                 DecryptState::FillFirst => {
-                    if this.rxbuf.0.remaining() < bs {
+                    if this.rxbuf.remaining() < bs {
                         return Poll::Pending;
                     }
 
                     this.state
                         .ctos_mut()
                         .encrypt_mut()
-                        .update(&this.rxbuf.0[..bs], &mut this.rxbuf.1)?;
+                        .update(&mut this.rxbuf[..bs])?;
 
-                    let len = (&this.rxbuf.1[..4]).get_u32() as usize;
+                    let len = (&this.rxbuf[..4]).get_u32() as usize;
                     if len + 4 + mac_length > MAXIMUM_PACKET_SIZE {
                         return Poll::Ready(Some(Err(SshError::TooLargePacket(
                             len + 4 + mac_length,
@@ -111,28 +111,25 @@ where
                     this.rxstate = DecryptState::FillRemaining { len };
                 }
                 DecryptState::FillRemaining { len } => {
-                    if this.rxbuf.0.remaining() < *len + 4 + mac_length {
+                    if this.rxbuf.remaining() < *len + 4 + mac_length {
                         return Poll::Pending;
                     }
-                    let buf = this.rxbuf.0.split_to(*len + 4 + mac_length);
+                    let mut buf = this.rxbuf.split_to(*len + 4 + mac_length);
 
                     this.state
                         .ctos_mut()
                         .encrypt_mut()
-                        .update(&buf[bs..(*len + 4)], &mut this.rxbuf.1)?;
-
-                    let plain = this.rxbuf.1.split();
+                        .update(&mut buf[bs..(*len + 4)])?;
 
                     let expect = &buf[(*len + 4)..];
                     let seq = this.state.ctos_mut().get_and_inc_seq();
-                    this.state.ctos().mac().verify(
-                        seq,
-                        &plain[..(*len + 4)],
-                        &expect,
-                    )?;
+                    this.state
+                        .ctos()
+                        .mac()
+                        .verify(seq, &buf[..(*len + 4)], &expect)?;
 
-                    let pad = plain[4] as usize;
-                    let mut payload = &plain[5..(*len + 4 - pad)];
+                    let pad = buf[4] as usize;
+                    let mut payload = &buf[5..(*len + 4 - pad)];
                     let payload = this
                         .state
                         .ctos_mut()
@@ -155,7 +152,7 @@ where
     type Error = SshError;
 
     fn poll_ready(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        if self.txbuf.0.remaining() > MAXIMUM_PACKET_SIZE {
+        if self.txbuf.remaining() > MAXIMUM_PACKET_SIZE {
             self.as_mut().poll_flush(cx)
         } else {
             Poll::Ready(Ok(()))
@@ -174,40 +171,38 @@ where
         let mut pad = vec![0; padding_length];
         SystemRandom::new().fill(&mut pad).map_err(SshError::any)?;
 
-        this.txbuf.1.put_u32(len as u32);
-        this.txbuf.1.put_u8(pad.len() as u8);
-        this.txbuf.1.put_slice(&item);
-        this.txbuf.1.put_slice(&pad);
+        let mut buf = this.txbuf.split();
 
-        this.state
-            .stoc_mut()
-            .encrypt_mut()
-            .update(&this.txbuf.1, &mut this.txbuf.0)?;
+        buf.put_u32(len as u32);
+        buf.put_u8(pad.len() as u8);
+        buf.put_slice(&item);
+        buf.put_slice(&pad);
 
         let seq = this.state.stoc_mut().get_and_inc_seq();
-        let sign = this
-            .state
-            .stoc()
-            .mac()
-            .sign(seq, &this.txbuf.1)?;
-        this.txbuf.0.put_slice(&sign);
-        this.txbuf.1.clear();
+        let sign = this.state.stoc().mac().sign(seq, &buf)?;
+
+        this.state.stoc_mut().encrypt_mut().update(&mut buf)?;
+
+        buf.put_slice(&sign);
+
+        this.txbuf.unsplit(buf);
 
         Ok(())
     }
 
     fn poll_flush(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
         let this = self.get_mut();
-        while this.txbuf.0.has_remaining() {
-            ready!(Pin::new(&mut this.io).poll_write_buf(cx, &mut this.txbuf.0))?;
+        while this.txbuf.has_remaining() {
+            ready!(Pin::new(&mut this.io).poll_write_buf(cx, &mut this.txbuf))?;
         }
+        this.txbuf.clear();
         ready!(Pin::new(&mut this.io).poll_flush(cx))?;
         Poll::Ready(Ok(()))
     }
 
     fn poll_close(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Result<(), Self::Error>> {
-        let this = self.get_mut();
-        ready!(Pin::new(&mut this.io).poll_flush(cx))?;
+        let mut this = self.get_mut();
+        ready!(Pin::new(&mut this).poll_flush(cx))?;
         ready!(Pin::new(&mut this.io).poll_shutdown(cx))?;
         Poll::Ready(Ok(()))
     }

@@ -102,12 +102,7 @@ impl Mac {
         }
     }
 
-    pub(crate) fn verify(
-        &self,
-        seq: u32,
-        plain: &[u8],
-        tag: &[u8],
-    ) -> Result<(), SshError> {
+    pub(crate) fn verify(&self, seq: u32, plain: &[u8], tag: &[u8]) -> Result<(), SshError> {
         match self {
             Self::None(item) => item.verify(seq, plain, tag),
             Self::HmacSha256(item) => item.verify(seq, plain, tag),

@@ -24,8 +24,7 @@ impl EncryptTrait for None {
         Ok(Self::new())
     }
 
-    fn update(&mut self, src: &[u8], dst: &mut BytesMut) -> Result<(), SshError> {
-        dst.extend_from_slice(src);
+    fn update(&mut self, _target: &mut [u8]) -> Result<(), SshError> {
         Ok(())
     }
 }

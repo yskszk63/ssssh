@@ -15,12 +15,7 @@ impl MacTrait for None {
         Ok(Bytes::new())
     }
 
-    fn verify(
-        &self,
-        _seq: u32,
-        _plain: &[u8],
-        _tag: &[u8],
-    ) -> Result<(), SshError> {
+    fn verify(&self, _seq: u32, _plain: &[u8], _tag: &[u8]) -> Result<(), SshError> {
         Ok(())
     }
 }
