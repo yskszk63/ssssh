@@ -264,7 +264,7 @@ mod tests {
         let io = tokio::io::BufStream::new(io);
         let mut io = crate::stream::msg::MsgStream::new(io);
 
-        let hostkey = crate::hostkey::HostKey::gen(&crate::hostkey::Algorithm::SshRsa).unwrap();
+        let hostkey = crate::key::Key::gen(&crate::key::Algorithm::SshRsa).unwrap();
 
         let c_kexinit = crate::preference::PreferenceBuilder::default()
             .build()

@@ -11,7 +11,7 @@ pub(crate) struct Ed25519 {
     pair: Ed25519KeyPair,
 }
 
-impl HostKeyTrait for Ed25519 {
+impl KeyTrait for Ed25519 {
     const NAME: Algorithm = Algorithm::SshEd25519;
 
     fn gen() -> Result<Self, SshError> {
@@ -40,7 +40,7 @@ impl HostKeyTrait for Ed25519 {
     }
 }
 
-impl From<Ed25519> for HostKey {
+impl From<Ed25519> for Key {
     fn from(v: Ed25519) -> Self {
         Self::Ed25519(v)
     }

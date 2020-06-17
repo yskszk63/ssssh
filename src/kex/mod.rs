@@ -5,7 +5,7 @@ use bytes::{Buf, Bytes, BytesMut};
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::hash::Hasher;
-use crate::hostkey::HostKey;
+use crate::key::Key;
 use crate::msg::kexinit::Kexinit;
 use crate::msg::Msg;
 use crate::negotiate::{AlgorithmName, UnknownNameError};
@@ -68,7 +68,7 @@ struct Env<'a> {
     s_version: &'a str,
     c_kexinit: &'a Bytes,
     s_kexinit: &'a Bytes,
-    hostkey: &'a HostKey,
+    hostkey: &'a Key,
 }
 
 #[async_trait]
@@ -134,7 +134,7 @@ impl Kex {
         s_version: &str,
         c_kexinit: &Kexinit,
         s_kexinit: &Kexinit,
-        hostkey: &HostKey,
+        hostkey: &Key,
     ) -> Result<(Bytes, Bytes), SshError>
     where
         IO: AsyncRead + AsyncWrite + Unpin + Send,
@@ -186,7 +186,7 @@ mod tests {
         let io = tokio::io::BufStream::new(io);
         let mut io = crate::stream::msg::MsgStream::new(io);
 
-        let hostkey = crate::hostkey::HostKey::gen(&crate::hostkey::Algorithm::SshRsa).unwrap();
+        let hostkey = Key::gen(&crate::key::Algorithm::SshRsa).unwrap();
 
         let c_kexinit = crate::preference::PreferenceBuilder::default()
             .build()

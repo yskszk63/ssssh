@@ -15,7 +15,7 @@ pub(crate) struct Rsa {
     pair: OpenSslRsa<Private>,
 }
 
-impl HostKeyTrait for Rsa {
+impl KeyTrait for Rsa {
     const NAME: Algorithm = Algorithm::SshRsa;
 
     fn gen() -> Result<Self, SshError> {
@@ -69,7 +69,7 @@ impl HostKeyTrait for Rsa {
     }
 }
 
-impl From<Rsa> for HostKey {
+impl From<Rsa> for Key {
     fn from(v: Rsa) -> Self {
         Self::Rsa(v)
     }

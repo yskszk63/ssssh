@@ -9,7 +9,7 @@ use crate::msg::kexinit::Kexinit;
 use crate::pack::NameList;
 use crate::preference::Preference;
 use crate::SshError;
-use crate::{cipher, comp, hostkey, kex, mac};
+use crate::{cipher, comp, kex, key, mac};
 
 #[derive(Debug, Error)]
 #[error("unknown algorithm name {0}")]
@@ -30,7 +30,7 @@ pub(crate) struct Algorithm {
     #[get = "pub(crate)"]
     kex_algorithm: kex::Algorithm,
     #[get = "pub(crate)"]
-    server_host_key_algorithm: hostkey::Algorithm,
+    server_host_key_algorithm: key::Algorithm,
     #[get = "pub(crate)"]
     cipher_algorithm_c2s: cipher::Algorithm,
     #[get = "pub(crate)"]

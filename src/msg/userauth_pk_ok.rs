@@ -1,7 +1,7 @@
 use derive_new::new;
 
 use super::*;
-use crate::hostkey::PublicKey;
+use crate::key::PublicKey;
 
 #[derive(Debug, new)]
 pub(crate) struct UserauthPkOk {

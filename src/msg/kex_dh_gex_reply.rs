@@ -4,7 +4,7 @@
 use derive_new::new;
 use getset::Getters;
 
-use crate::hostkey::{PublicKey, Signature};
+use crate::key::{PublicKey, Signature};
 
 use super::*;
 

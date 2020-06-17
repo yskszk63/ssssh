@@ -1,7 +1,7 @@
 use getset::Getters;
 
 use super::*;
-use crate::hostkey::{PublicKey as Pk, Signature};
+use crate::key::{PublicKey as Pk, Signature};
 
 #[derive(Debug, Getters)]
 pub(crate) struct Publickey {

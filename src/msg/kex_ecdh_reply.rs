@@ -3,7 +3,7 @@
 //! [ECDH Key Exchange](https://tools.ietf.org/html/rfc5656#section-4)
 use derive_new::new;
 
-use crate::hostkey::{PublicKey, Signature};
+use crate::key::{PublicKey, Signature};
 
 use super::*;
 
