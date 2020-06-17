@@ -18,6 +18,12 @@ pub enum Algorithm {
     /// `none`
     None,
 
+    /// `aes128-ctr`
+    Aes128Ctr,
+
+    /// `aes192-ctr`
+    Aes192Ctr,
+
     /// `aes256-ctr`
     Aes256Ctr,
 }
@@ -26,6 +32,8 @@ impl AsRef<str> for Algorithm {
     fn as_ref(&self) -> &str {
         match self {
             Self::None => "none",
+            Self::Aes128Ctr => "aes128-ctr",
+            Self::Aes192Ctr => "aes192-ctr",
             Self::Aes256Ctr => "aes256-ctr",
         }
     }
@@ -37,6 +45,8 @@ impl FromStr for Algorithm {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "none" => Ok(Self::None),
+            "aes128-ctr" => Ok(Self::Aes128Ctr),
+            "aes192-ctr" => Ok(Self::Aes192Ctr),
             "aes256-ctr" => Ok(Self::Aes256Ctr),
             x => Err(UnknownNameError(x.into())),
         }
@@ -45,15 +55,12 @@ impl FromStr for Algorithm {
 
 impl AlgorithmName for Algorithm {
     fn defaults() -> Vec<Self> {
-        vec![Self::Aes256Ctr]
+        vec![Self::Aes256Ctr, Self::Aes192Ctr, Self::Aes128Ctr]
     }
 }
 
 /// Cipher algorithm trait
-trait CipherTrait: Into<Cipher> + Sized {
-    /// Cipher algorithm name
-    const NAME: Algorithm;
-
+trait CipherTrait: Sized {
     /// Cipher block size
     const BLOCK_SIZE: usize;
 
@@ -76,6 +83,12 @@ pub(crate) enum Cipher {
     /// `none` algorithm
     None(none::None),
 
+    /// `aes128-ctr` algorithm
+    Aes128Ctr(aes::Aes128Ctr),
+
+    /// `aes192-ctr` algorithm
+    Aes192Ctr(aes::Aes192Ctr),
+
     /// `aes256-ctr` algorithm
     Aes256Ctr(aes::Aes256Ctr),
 }
@@ -93,8 +106,10 @@ impl Cipher {
         iv: &Bytes,
     ) -> Result<Self, SshError> {
         match name {
-            Algorithm::None => Ok(none::None::new_for_encrypt(key, iv)?.into()),
-            Algorithm::Aes256Ctr => Ok(aes::Aes256Ctr::new_for_encrypt(key, iv)?.into()),
+            Algorithm::None => Ok(Self::None(none::None::new_for_encrypt(key, iv)?)),
+            Algorithm::Aes128Ctr => Ok(Self::Aes128Ctr(aes::Aes128Ctr::new_for_encrypt(key, iv)?)),
+            Algorithm::Aes192Ctr => Ok(Self::Aes192Ctr(aes::Aes192Ctr::new_for_encrypt(key, iv)?)),
+            Algorithm::Aes256Ctr => Ok(Self::Aes256Ctr(aes::Aes256Ctr::new_for_encrypt(key, iv)?)),
         }
     }
 
@@ -105,8 +120,10 @@ impl Cipher {
         iv: &Bytes,
     ) -> Result<Self, SshError> {
         match name {
-            Algorithm::None => Ok(none::None::new_for_decrypt(key, iv)?.into()),
-            Algorithm::Aes256Ctr => Ok(aes::Aes256Ctr::new_for_decrypt(key, iv)?.into()),
+            Algorithm::None => Ok(Self::None(none::None::new_for_decrypt(key, iv)?)),
+            Algorithm::Aes128Ctr => Ok(Self::Aes128Ctr(aes::Aes128Ctr::new_for_decrypt(key, iv)?)),
+            Algorithm::Aes192Ctr => Ok(Self::Aes192Ctr(aes::Aes192Ctr::new_for_decrypt(key, iv)?)),
+            Algorithm::Aes256Ctr => Ok(Self::Aes256Ctr(aes::Aes256Ctr::new_for_decrypt(key, iv)?)),
         }
     }
 
@@ -114,6 +131,8 @@ impl Cipher {
     pub(crate) fn block_size_by_name(name: &Algorithm) -> usize {
         match name {
             Algorithm::None => none::None::BLOCK_SIZE,
+            Algorithm::Aes128Ctr => aes::Aes128Ctr::BLOCK_SIZE,
+            Algorithm::Aes192Ctr => aes::Aes192Ctr::BLOCK_SIZE,
             Algorithm::Aes256Ctr => aes::Aes256Ctr::BLOCK_SIZE,
         }
     }
@@ -122,6 +141,8 @@ impl Cipher {
     pub(crate) fn key_length_by_name(name: &Algorithm) -> usize {
         match name {
             Algorithm::None => none::None::KEY_LENGTH,
+            Algorithm::Aes128Ctr => aes::Aes128Ctr::KEY_LENGTH,
+            Algorithm::Aes192Ctr => aes::Aes192Ctr::KEY_LENGTH,
             Algorithm::Aes256Ctr => aes::Aes256Ctr::KEY_LENGTH,
         }
     }
@@ -130,6 +151,8 @@ impl Cipher {
     pub(crate) fn block_size(&self) -> usize {
         match self {
             Self::None(..) => none::None::BLOCK_SIZE,
+            Self::Aes128Ctr(..) => aes::Aes128Ctr::BLOCK_SIZE,
+            Self::Aes192Ctr(..) => aes::Aes192Ctr::BLOCK_SIZE,
             Self::Aes256Ctr(..) => aes::Aes256Ctr::BLOCK_SIZE,
         }
     }
@@ -138,6 +161,8 @@ impl Cipher {
     pub(crate) fn update(&mut self, target: &mut [u8]) -> Result<(), SshError> {
         match self {
             Self::None(item) => item.update(target),
+            Self::Aes128Ctr(item) => item.update(target),
+            Self::Aes192Ctr(item) => item.update(target),
             Self::Aes256Ctr(item) => item.update(target),
         }
     }

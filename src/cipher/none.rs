@@ -12,7 +12,6 @@ impl None {
 }
 
 impl CipherTrait for None {
-    const NAME: Algorithm = Algorithm::None;
     const BLOCK_SIZE: usize = 8;
     const KEY_LENGTH: usize = 0;
 
@@ -26,11 +25,5 @@ impl CipherTrait for None {
 
     fn update(&mut self, _target: &mut [u8]) -> Result<(), SshError> {
         Ok(())
-    }
-}
-
-impl From<None> for Cipher {
-    fn from(v: None) -> Self {
-        Self::None(v)
     }
 }

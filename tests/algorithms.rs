@@ -8,7 +8,7 @@ use tokio::process::Command;
 
 use ssssh::{Handlers, ServerBuilder};
 
-const CIPHERS: &'static [&'static str] = &["aes256-ctr"];
+const CIPHERS: &'static [&'static str] = &["aes128-ctr", "aes192-ctr", "aes256-ctr"];
 
 const KEXS: &'static [&'static str] = &[
     "diffie-hellman-group14-sha1",
