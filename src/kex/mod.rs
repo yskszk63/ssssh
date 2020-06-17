@@ -1,7 +1,7 @@
 use std::str::FromStr;
 
-use async_trait::async_trait;
 use bytes::{Buf, Bytes, BytesMut};
+use futures::future::BoxFuture;
 use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::hash::Hasher;
@@ -22,8 +22,23 @@ pub enum Algorithm {
     /// `curve25519-sha256`
     Curve25519Sha256,
 
+    /// `diffie-hellman-group1-sha1`
+    DiffieHellmanGroup1Sha1,
+
     /// `diffie-hellman-group14-sha1`
     DiffieHellmanGroup14Sha1,
+
+    /// `diffie-hellman-group14-sha256`
+    DiffieHellmanGroup14Sha256,
+
+    /// `diffie-hellman-group16-sha512`
+    DiffieHellmanGroup16Sha512,
+
+    /// `diffie-hellman-group18-sha512`
+    DiffieHellmanGroup18Sha512,
+
+    /// `diffie-hellman-group-exchange-sha1`
+    DiffieHellmanGroupExchangeSha1,
 
     /// `diffie-hellman-group-exchange-sha256`
     DiffieHellmanGroupExchangeSha256,
@@ -33,7 +48,12 @@ impl AsRef<str> for Algorithm {
     fn as_ref(&self) -> &str {
         match self {
             Self::Curve25519Sha256 => "curve25519-sha256",
+            Self::DiffieHellmanGroup1Sha1 => "diffie-hellman-group1-sha1",
             Self::DiffieHellmanGroup14Sha1 => "diffie-hellman-group14-sha1",
+            Self::DiffieHellmanGroup14Sha256 => "diffie-hellman-group14-sha256",
+            Self::DiffieHellmanGroup16Sha512 => "diffie-hellman-group16-sha512",
+            Self::DiffieHellmanGroup18Sha512 => "diffie-hellman-group18-sha512",
+            Self::DiffieHellmanGroupExchangeSha1 => "diffie-hellman-group-exchange-sha1",
             Self::DiffieHellmanGroupExchangeSha256 => "diffie-hellman-group-exchange-sha256",
         }
     }
@@ -45,7 +65,12 @@ impl FromStr for Algorithm {
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s {
             "curve25519-sha256" => Ok(Self::Curve25519Sha256),
+            "diffie-hellman-group1-sha1" => Ok(Self::DiffieHellmanGroup1Sha1),
             "diffie-hellman-group14-sha1" => Ok(Self::DiffieHellmanGroup14Sha1),
+            "diffie-hellman-group14-sha256" => Ok(Self::DiffieHellmanGroup14Sha256),
+            "diffie-hellman-group16-sha512" => Ok(Self::DiffieHellmanGroup16Sha512),
+            "diffie-hellman-group18-sha512" => Ok(Self::DiffieHellmanGroup18Sha512),
+            "diffie-hellman-group-exchange-sha1" => Ok(Self::DiffieHellmanGroupExchangeSha1),
             "diffie-hellman-group-exchange-sha256" => Ok(Self::DiffieHellmanGroupExchangeSha256),
             x => Err(UnknownNameError(x.into())),
         }
@@ -56,7 +81,12 @@ impl AlgorithmName for Algorithm {
     fn defaults() -> Vec<Self> {
         vec![
             Self::Curve25519Sha256,
+            //Self::DiffieHellmanGroup1Sha1,
             Self::DiffieHellmanGroup14Sha1,
+            Self::DiffieHellmanGroup14Sha256,
+            Self::DiffieHellmanGroup16Sha512,
+            Self::DiffieHellmanGroup18Sha512,
+            Self::DiffieHellmanGroupExchangeSha1,
             Self::DiffieHellmanGroupExchangeSha256,
         ]
     }
@@ -71,19 +101,16 @@ struct Env<'a> {
     hostkey: &'a Key,
 }
 
-#[async_trait]
-trait KexTrait: Sized + Into<Kex> {
-    const NAME: Algorithm;
-
+trait KexTrait: Sized {
     fn new() -> Self;
 
     fn hasher() -> Hasher;
 
-    async fn kex<IO>(
+    fn kex<'a, IO>(
         &self,
-        io: &mut MsgStream<IO>,
-        env: Env<'_>,
-    ) -> Result<(Bytes, Bytes), SshError>
+        io: &'a mut MsgStream<IO>,
+        env: Env<'a>,
+    ) -> BoxFuture<'a, Result<(Bytes, Bytes), SshError>>
     where
         IO: AsyncRead + AsyncWrite + Unpin + Send;
 }
@@ -98,7 +125,12 @@ fn to_msg_bytes(kexinit: &Kexinit) -> Bytes {
 #[derive(Debug)]
 pub(crate) enum Kex {
     Curve25519Sha256(curve25519::Curve25519Sha256),
+    DiffieHellmanGroup1Sha1(diffie_hellman::DiffieHellmanGroup1Sha1),
     DiffieHellmanGroup14Sha1(diffie_hellman::DiffieHellmanGroup14Sha1),
+    DiffieHellmanGroup14Sha256(diffie_hellman::DiffieHellmanGroup14Sha256),
+    DiffieHellmanGroup16Sha512(diffie_hellman::DiffieHellmanGroup16Sha512),
+    DiffieHellmanGroup18Sha512(diffie_hellman::DiffieHellmanGroup18Sha512),
+    DiffieHellmanGroupExchangeSha1(diffie_hellman::DiffieHellmanGroupExchangeSha1),
     DiffieHellmanGroupExchangeSha256(diffie_hellman::DiffieHellmanGroupExchangeSha256),
 }
 
@@ -106,8 +138,21 @@ impl Kex {
     pub(crate) fn hasher(&self) -> Hasher {
         match self {
             Self::Curve25519Sha256(..) => curve25519::Curve25519Sha256::hasher(),
+            Self::DiffieHellmanGroup1Sha1(..) => diffie_hellman::DiffieHellmanGroup1Sha1::hasher(),
             Self::DiffieHellmanGroup14Sha1(..) => {
                 diffie_hellman::DiffieHellmanGroup14Sha1::hasher()
+            }
+            Self::DiffieHellmanGroup14Sha256(..) => {
+                diffie_hellman::DiffieHellmanGroup14Sha256::hasher()
+            }
+            Self::DiffieHellmanGroup16Sha512(..) => {
+                diffie_hellman::DiffieHellmanGroup16Sha512::hasher()
+            }
+            Self::DiffieHellmanGroup18Sha512(..) => {
+                diffie_hellman::DiffieHellmanGroup18Sha512::hasher()
+            }
+            Self::DiffieHellmanGroupExchangeSha1(..) => {
+                diffie_hellman::DiffieHellmanGroupExchangeSha1::hasher()
             }
             Self::DiffieHellmanGroupExchangeSha256(..) => {
                 diffie_hellman::DiffieHellmanGroupExchangeSha256::hasher()
@@ -117,13 +162,30 @@ impl Kex {
 
     pub(crate) fn new(name: &Algorithm) -> Self {
         match name {
-            Algorithm::Curve25519Sha256 => curve25519::Curve25519Sha256::new().into(),
+            Algorithm::Curve25519Sha256 => {
+                Self::Curve25519Sha256(curve25519::Curve25519Sha256::new())
+            }
+            Algorithm::DiffieHellmanGroup1Sha1 => {
+                Self::DiffieHellmanGroup1Sha1(diffie_hellman::DiffieHellmanGroup1Sha1::new())
+            }
             Algorithm::DiffieHellmanGroup14Sha1 => {
-                diffie_hellman::DiffieHellmanGroup14Sha1::new().into()
+                Self::DiffieHellmanGroup14Sha1(diffie_hellman::DiffieHellmanGroup14Sha1::new())
             }
-            Algorithm::DiffieHellmanGroupExchangeSha256 => {
-                diffie_hellman::DiffieHellmanGroupExchangeSha256::new().into()
+            Algorithm::DiffieHellmanGroup14Sha256 => {
+                Self::DiffieHellmanGroup14Sha256(diffie_hellman::DiffieHellmanGroup14Sha256::new())
             }
+            Algorithm::DiffieHellmanGroup16Sha512 => {
+                Self::DiffieHellmanGroup16Sha512(diffie_hellman::DiffieHellmanGroup16Sha512::new())
+            }
+            Algorithm::DiffieHellmanGroup18Sha512 => {
+                Self::DiffieHellmanGroup18Sha512(diffie_hellman::DiffieHellmanGroup18Sha512::new())
+            }
+            Algorithm::DiffieHellmanGroupExchangeSha1 => Self::DiffieHellmanGroupExchangeSha1(
+                diffie_hellman::DiffieHellmanGroupExchangeSha1::new(),
+            ),
+            Algorithm::DiffieHellmanGroupExchangeSha256 => Self::DiffieHellmanGroupExchangeSha256(
+                diffie_hellman::DiffieHellmanGroupExchangeSha256::new(),
+            ),
         }
     }
 
@@ -151,7 +213,12 @@ impl Kex {
 
         Ok(match self {
             Self::Curve25519Sha256(item) => item.kex(io, env).await?,
+            Self::DiffieHellmanGroup1Sha1(item) => item.kex(io, env).await?,
             Self::DiffieHellmanGroup14Sha1(item) => item.kex(io, env).await?,
+            Self::DiffieHellmanGroup14Sha256(item) => item.kex(io, env).await?,
+            Self::DiffieHellmanGroup16Sha512(item) => item.kex(io, env).await?,
+            Self::DiffieHellmanGroup18Sha512(item) => item.kex(io, env).await?,
+            Self::DiffieHellmanGroupExchangeSha1(item) => item.kex(io, env).await?,
             Self::DiffieHellmanGroupExchangeSha256(item) => item.kex(io, env).await?,
         })
     }

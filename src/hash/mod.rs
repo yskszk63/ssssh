@@ -14,6 +14,7 @@ trait HasherTrait: Put + Sized {
 pub(crate) enum Hasher {
     Sha1(sha::Sha1),
     Sha256(sha::Sha256),
+    Sha512(sha::Sha512),
 }
 
 impl Hasher {
@@ -25,10 +26,15 @@ impl Hasher {
         Self::Sha256(sha::Sha256::new())
     }
 
+    pub(crate) fn sha512() -> Self {
+        Self::Sha512(sha::Sha512::new())
+    }
+
     pub(crate) fn finish(self) -> Bytes {
         match self {
             Self::Sha1(item) => item.finish(),
             Self::Sha256(item) => item.finish(),
+            Self::Sha512(item) => item.finish(),
         }
     }
 }
@@ -38,6 +44,7 @@ impl Put for Hasher {
         match self {
             Self::Sha1(item) => item.put(src),
             Self::Sha256(item) => item.put(src),
+            Self::Sha512(item) => item.put(src),
         }
     }
 }

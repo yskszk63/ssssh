@@ -1,4 +1,4 @@
-use ring::digest::{Context, SHA1_FOR_LEGACY_USE_ONLY as SHA1, SHA256};
+use ring::digest::{Context, SHA1_FOR_LEGACY_USE_ONLY as SHA1, SHA256, SHA512};
 use std::fmt;
 
 use super::*;
@@ -48,5 +48,29 @@ impl HasherTrait for Sha256 {
 impl fmt::Debug for Sha256 {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "Sha256")
+    }
+}
+
+pub(crate) struct Sha512(Context);
+
+impl Put for Sha512 {
+    fn put(&mut self, src: &[u8]) {
+        self.0.update(src)
+    }
+}
+
+impl HasherTrait for Sha512 {
+    fn new() -> Self {
+        Self(Context::new(&SHA512))
+    }
+
+    fn finish(self) -> Bytes {
+        self.0.finish().as_ref().to_bytes()
+    }
+}
+
+impl fmt::Debug for Sha512 {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        write!(f, "Sha512")
     }
 }

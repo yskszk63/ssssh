@@ -1,3 +1,6 @@
+use std::marker::PhantomData;
+
+use futures::future::FutureExt as _;
 use futures::sink::SinkExt as _;
 use openssl::bn::{BigNum, BigNumContext, MsbOption};
 use tokio::stream::StreamExt as _;
@@ -10,80 +13,159 @@ use crate::pack::{Mpint, Pack};
 
 use super::*;
 
+pub(crate) type DiffieHellmanGroup1Sha1 = DiffieHellman<Group1, Sha1>;
+pub(crate) type DiffieHellmanGroup14Sha1 = DiffieHellman<Group14, Sha1>;
+pub(crate) type DiffieHellmanGroup14Sha256 = DiffieHellman<Group14, Sha256>;
+pub(crate) type DiffieHellmanGroup16Sha512 = DiffieHellman<Group16, Sha512>;
+pub(crate) type DiffieHellmanGroup18Sha512 = DiffieHellman<Group18, Sha512>;
+pub(crate) type DiffieHellmanGroupExchangeSha1 = DiffieHellmanGroupExchange<Sha1>;
+pub(crate) type DiffieHellmanGroupExchangeSha256 = DiffieHellmanGroupExchange<Sha256>;
+
+pub(crate) trait Group {
+    const P: u32;
+}
+
+pub(crate) trait Sha {
+    fn hasher() -> Hasher;
+}
+
 #[derive(Debug)]
-pub(crate) struct DiffieHellmanGroup14Sha1 {}
+pub(crate) enum Group1 {}
 
-#[async_trait]
-impl KexTrait for DiffieHellmanGroup14Sha1 {
-    const NAME: Algorithm = Algorithm::DiffieHellmanGroup14Sha1;
+impl Group for Group1 {
+    const P: u32 = 1;
+}
 
-    fn new() -> Self {
-        Self {}
-    }
+#[derive(Debug)]
+pub(crate) enum Group14 {}
 
+impl Group for Group14 {
+    const P: u32 = 14;
+}
+
+#[derive(Debug)]
+pub(crate) enum Group16 {}
+
+impl Group for Group16 {
+    const P: u32 = 16;
+}
+
+#[derive(Debug)]
+pub(crate) enum Group18 {}
+
+impl Group for Group18 {
+    const P: u32 = 18;
+}
+
+#[derive(Debug)]
+pub(crate) enum Sha1 {}
+
+impl Sha for Sha1 {
     fn hasher() -> Hasher {
         Hasher::sha1()
     }
+}
+
+#[derive(Debug)]
+pub(crate) enum Sha256 {}
+
+impl Sha for Sha256 {
+    fn hasher() -> Hasher {
+        Hasher::sha256()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) enum Sha512 {}
+
+impl Sha for Sha512 {
+    fn hasher() -> Hasher {
+        Hasher::sha512()
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct DiffieHellman<G, H> {
+    _phantom: PhantomData<(G, H)>,
+}
+
+impl<G, H> KexTrait for DiffieHellman<G, H>
+where
+    G: Group,
+    H: Sha,
+{
+    fn new() -> Self {
+        Self {
+            _phantom: PhantomData,
+        }
+    }
+
+    fn hasher() -> Hasher {
+        H::hasher()
+    }
 
     #[allow(clippy::many_single_char_names)]
-    async fn kex<IO>(
+    fn kex<'a, IO>(
         &self,
-        io: &mut MsgStream<IO>,
-        env: Env<'_>,
-    ) -> Result<(Bytes, Bytes), SshError>
+        io: &'a mut MsgStream<IO>,
+        env: Env<'a>,
+    ) -> BoxFuture<'a, Result<(Bytes, Bytes), SshError>>
     where
         IO: AsyncRead + AsyncWrite + Unpin + Send,
     {
-        let mut hasher = Self::hasher();
-        env.c_version.pack(&mut hasher);
-        env.s_version.pack(&mut hasher);
-        env.c_kexinit.pack(&mut hasher);
-        env.s_kexinit.pack(&mut hasher);
-        env.hostkey.publickey().pack(&mut hasher);
+        async move {
+            let mut hasher = Self::hasher();
+            env.c_version.pack(&mut hasher);
+            env.s_version.pack(&mut hasher);
+            env.c_kexinit.pack(&mut hasher);
+            env.s_kexinit.pack(&mut hasher);
+            env.hostkey.publickey().pack(&mut hasher);
 
-        // FIXME use kexdh_init
-        let kexdh_init = match io.next().await {
-            Some(Ok(Msg::KexEcdhInit(msg))) => msg,
-            Some(Ok(msg)) => return Err(SshError::KexUnexpectedMsg(format!("{:?}", msg))),
-            Some(Err(e)) => return Err(e),
-            None => return Err(SshError::KexUnexpectedEof),
-        };
+            // FIXME use kexdh_init
+            let kexdh_init = match io.next().await {
+                Some(Ok(Msg::KexEcdhInit(msg))) => msg,
+                Some(Ok(msg)) => return Err(SshError::KexUnexpectedMsg(format!("{:?}", msg))),
+                Some(Err(e)) => return Err(e),
+                None => return Err(SshError::KexUnexpectedEof),
+            };
 
-        let e = kexdh_init.ephemeral_public_key();
-        e.pack(&mut hasher);
-        let e = BigNum::from_slice(e).map_err(SshError::kex_error)?;
+            let e = kexdh_init.ephemeral_public_key();
+            e.pack(&mut hasher);
+            let e = BigNum::from_slice(e).map_err(SshError::kex_error)?;
 
-        let p = get_p(14)?;
-        let y = gen_y()?;
-        let g = get_g()?;
+            let p = get_p(G::P)?;
+            let y = gen_y()?;
+            let g = get_g()?;
 
-        let mut ctx = BigNumContext::new().map_err(SshError::kex_error)?;
-        let mut f = BigNum::new().map_err(SshError::kex_error)?;
-        f.mod_exp(&g, &y, &p, &mut ctx)
-            .map_err(SshError::kex_error)?;
-        let mut f = f.to_vec();
-        if f[0] & 0x80 != 0 {
-            f.insert(0, 0);
+            let mut ctx = BigNumContext::new().map_err(SshError::kex_error)?;
+            let mut f = BigNum::new().map_err(SshError::kex_error)?;
+            f.mod_exp(&g, &y, &p, &mut ctx)
+                .map_err(SshError::kex_error)?;
+            let mut f = f.to_vec();
+            if f[0] & 0x80 != 0 {
+                f.insert(0, 0);
+            }
+            let f = Bytes::from(f);
+            f.clone().pack(&mut hasher);
+
+            let mut ctx = BigNumContext::new().map_err(SshError::kex_error)?;
+            let mut k = BigNum::new().map_err(SshError::kex_error)?;
+            k.mod_exp(&e, &y, &p, &mut ctx)
+                .map_err(SshError::kex_error)?;
+            let k = Bytes::from(k.to_vec());
+            Mpint::new(k.clone()).pack(&mut hasher);
+
+            let h = hasher.finish();
+
+            let signature = env.hostkey.sign(&h);
+
+            let reply = KexEcdhReply::new(env.hostkey.publickey(), f, signature);
+
+            io.send(reply.into()).await?;
+
+            Ok((h, k))
         }
-        let f = Bytes::from(f);
-        f.clone().pack(&mut hasher);
-
-        let mut ctx = BigNumContext::new().map_err(SshError::kex_error)?;
-        let mut k = BigNum::new().map_err(SshError::kex_error)?;
-        k.mod_exp(&e, &y, &p, &mut ctx)
-            .map_err(SshError::kex_error)?;
-        let k = Bytes::from(k.to_vec());
-        Mpint::new(k.clone()).pack(&mut hasher);
-
-        let h = hasher.finish();
-
-        let signature = env.hostkey.sign(&h);
-
-        let reply = KexEcdhReply::new(env.hostkey.publickey(), f, signature);
-
-        io.send(reply.into()).await?;
-
-        Ok((h, k))
+        .boxed()
     }
 }
 
@@ -113,135 +195,130 @@ fn gen_y() -> Result<BigNum, SshError> {
     Ok(y)
 }
 
-impl From<DiffieHellmanGroup14Sha1> for Kex {
-    fn from(v: DiffieHellmanGroup14Sha1) -> Self {
-        Self::DiffieHellmanGroup14Sha1(v)
-    }
+#[derive(Debug)]
+pub(crate) struct DiffieHellmanGroupExchange<H> {
+    _phantom: PhantomData<H>,
 }
 
-#[derive(Debug)]
-pub(crate) struct DiffieHellmanGroupExchangeSha256 {}
-
-#[async_trait]
-impl KexTrait for DiffieHellmanGroupExchangeSha256 {
-    const NAME: Algorithm = Algorithm::DiffieHellmanGroupExchangeSha256;
-
+impl<H> KexTrait for DiffieHellmanGroupExchange<H>
+where
+    H: Sha,
+{
     fn new() -> Self {
-        Self {}
+        Self {
+            _phantom: PhantomData,
+        }
     }
 
     fn hasher() -> Hasher {
-        Hasher::sha256()
+        H::hasher()
     }
 
     #[allow(clippy::many_single_char_names)]
-    async fn kex<IO>(
+    fn kex<'a, IO>(
         &self,
-        io: &mut MsgStream<IO>,
-        env: Env<'_>,
-    ) -> Result<(Bytes, Bytes), SshError>
+        io: &'a mut MsgStream<IO>,
+        env: Env<'a>,
+    ) -> BoxFuture<'a, Result<(Bytes, Bytes), SshError>>
     where
         IO: AsyncRead + AsyncWrite + Unpin + Send,
     {
-        let mut io = io.context::<GexMsg>();
-        let mut hasher = Self::hasher();
+        async move {
+            let mut io = io.context::<GexMsg>();
+            let mut hasher = Self::hasher();
 
-        env.c_version.pack(&mut hasher);
-        env.s_version.pack(&mut hasher);
-        env.c_kexinit.pack(&mut hasher);
-        env.s_kexinit.pack(&mut hasher);
-        env.hostkey.publickey().pack(&mut hasher);
+            env.c_version.pack(&mut hasher);
+            env.s_version.pack(&mut hasher);
+            env.c_kexinit.pack(&mut hasher);
+            env.s_kexinit.pack(&mut hasher);
+            env.hostkey.publickey().pack(&mut hasher);
 
-        let range = match io.next().await {
-            Some(Ok(GexMsg::KexDhGexRequestOld(msg))) => {
-                msg.n().pack(&mut hasher);
-                *msg.n()..=*msg.n()
+            let range = match io.next().await {
+                Some(Ok(GexMsg::KexDhGexRequestOld(msg))) => {
+                    msg.n().pack(&mut hasher);
+                    *msg.n()..=*msg.n()
+                }
+                Some(Ok(GexMsg::KexDhGexRequest(msg))) => {
+                    msg.min().pack(&mut hasher);
+                    msg.n().pack(&mut hasher);
+                    msg.max().pack(&mut hasher);
+                    *msg.min()..=*msg.max()
+                }
+                Some(Ok(msg)) => return Err(SshError::KexUnexpectedMsg(format!("{:?}", msg))),
+                Some(Err(e)) => return Err(e),
+                None => return Err(SshError::KexUnexpectedEof),
+            };
+
+            let p = if range.contains(&8192) {
+                get_p(18)
+            } else if range.contains(&6144) {
+                get_p(17)
+            } else if range.contains(&4096) {
+                get_p(16)
+            } else if range.contains(&3072) {
+                get_p(15)
+            } else if range.contains(&2048) {
+                get_p(14)
+            } else if range.contains(&1536) {
+                get_p(5)
+            } else if range.contains(&1024) {
+                get_p(2)
+            } else if range.contains(&768) {
+                get_p(1)
+            } else {
+                todo!()
+            }?;
+            Mpint::new(p.to_vec()).pack(&mut hasher);
+
+            let g = get_g()?;
+            Mpint::new(g.to_vec()).pack(&mut hasher);
+
+            let group = KexDhGexGroup::new(Mpint::new(p.to_vec()), Mpint::new(g.to_vec()));
+            io.send(group.into()).await?;
+
+            let kex_dh_gex_init = match io.next().await {
+                Some(Ok(GexMsg::KexDhGexInit(msg))) => msg,
+                Some(Ok(msg)) => return Err(SshError::KexUnexpectedMsg(format!("{:?}", msg))),
+                Some(Err(e)) => return Err(e),
+                None => return Err(SshError::KexUnexpectedEof),
+            };
+
+            let e = kex_dh_gex_init.e();
+            e.pack(&mut hasher);
+            let e = BigNum::from_slice(e.as_ref()).map_err(SshError::kex_error)?;
+
+            let y = gen_y()?;
+
+            let mut ctx = BigNumContext::new().map_err(SshError::kex_error)?;
+            let mut f = BigNum::new().map_err(SshError::kex_error)?;
+            f.mod_exp(&g, &y, &p, &mut ctx)
+                .map_err(SshError::kex_error)?;
+            let mut f = f.to_vec();
+            if f[0] & 0x80 != 0 {
+                f.insert(0, 0);
             }
-            Some(Ok(GexMsg::KexDhGexRequest(msg))) => {
-                msg.min().pack(&mut hasher);
-                msg.n().pack(&mut hasher);
-                msg.max().pack(&mut hasher);
-                *msg.min()..=*msg.max()
+            Mpint::new(f.clone()).pack(&mut hasher);
+
+            let mut ctx = BigNumContext::new().map_err(SshError::kex_error)?;
+            let mut k = BigNum::new().map_err(SshError::kex_error)?;
+            k.mod_exp(&e, &y, &p, &mut ctx)
+                .map_err(SshError::kex_error)?;
+            let mut k = k.to_vec();
+            if k[0] & 0x80 != 0 {
+                k.insert(0, 0);
             }
-            Some(Ok(msg)) => return Err(SshError::KexUnexpectedMsg(format!("{:?}", msg))),
-            Some(Err(e)) => return Err(e),
-            None => return Err(SshError::KexUnexpectedEof),
-        };
+            Mpint::new(k.clone()).pack(&mut hasher);
 
-        let p = if range.contains(&8192) {
-            get_p(18)
-        } else if range.contains(&6144) {
-            get_p(17)
-        } else if range.contains(&4096) {
-            get_p(16)
-        } else if range.contains(&3072) {
-            get_p(15)
-        } else if range.contains(&2048) {
-            get_p(14)
-        } else if range.contains(&1536) {
-            get_p(5)
-        } else if range.contains(&1024) {
-            get_p(2)
-        } else if range.contains(&768) {
-            get_p(1)
-        } else {
-            todo!()
-        }?;
-        Mpint::new(p.to_vec()).pack(&mut hasher);
+            let h = hasher.finish();
 
-        let g = get_g()?;
-        Mpint::new(g.to_vec()).pack(&mut hasher);
+            let signature = env.hostkey.sign(&h);
 
-        let group = KexDhGexGroup::new(Mpint::new(p.to_vec()), Mpint::new(g.to_vec()));
-        io.send(group.into()).await?;
+            let reply = KexDhGexReply::new(env.hostkey.publickey(), f.into(), signature);
+            io.send(reply.into()).await?;
 
-        let kex_dh_gex_init = match io.next().await {
-            Some(Ok(GexMsg::KexDhGexInit(msg))) => msg,
-            Some(Ok(msg)) => return Err(SshError::KexUnexpectedMsg(format!("{:?}", msg))),
-            Some(Err(e)) => return Err(e),
-            None => return Err(SshError::KexUnexpectedEof),
-        };
-
-        let e = kex_dh_gex_init.e();
-        e.pack(&mut hasher);
-        let e = BigNum::from_slice(e.as_ref()).map_err(SshError::kex_error)?;
-
-        let y = gen_y()?;
-
-        let mut ctx = BigNumContext::new().map_err(SshError::kex_error)?;
-        let mut f = BigNum::new().map_err(SshError::kex_error)?;
-        f.mod_exp(&g, &y, &p, &mut ctx)
-            .map_err(SshError::kex_error)?;
-        let mut f = f.to_vec();
-        if f[0] & 0x80 != 0 {
-            f.insert(0, 0);
+            Ok((h, k.into()))
         }
-        Mpint::new(f.clone()).pack(&mut hasher);
-
-        let mut ctx = BigNumContext::new().map_err(SshError::kex_error)?;
-        let mut k = BigNum::new().map_err(SshError::kex_error)?;
-        k.mod_exp(&e, &y, &p, &mut ctx)
-            .map_err(SshError::kex_error)?;
-        let mut k = k.to_vec();
-        if k[0] & 0x80 != 0 {
-            k.insert(0, 0);
-        }
-        Mpint::new(k.clone()).pack(&mut hasher);
-
-        let h = hasher.finish();
-
-        let signature = env.hostkey.sign(&h);
-
-        let reply = KexDhGexReply::new(env.hostkey.publickey(), f.into(), signature);
-        io.send(reply.into()).await?;
-
-        Ok((h, k.into()))
-    }
-}
-
-impl From<DiffieHellmanGroupExchangeSha256> for Kex {
-    fn from(v: DiffieHellmanGroupExchangeSha256) -> Self {
-        Self::DiffieHellmanGroupExchangeSha256(v)
+        .boxed()
     }
 }
 
