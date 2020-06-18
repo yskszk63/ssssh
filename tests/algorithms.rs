@@ -73,7 +73,9 @@ async fn do_test(cipher: &str, kex: &str, key: &str, mac: &str, ckey: &str) {
         .name("testcase")
         .generate_hostkeys()
         .timeout(std::time::Duration::from_secs(10))
-        .build("[::1]:2222").await.unwrap();
+        .build("[::1]:2222")
+        .await
+        .unwrap();
 
     let mut handlers = Handlers::<anyhow::Error>::new();
     handlers.on_auth_publickey(|_, _, _| ok(true).boxed());
