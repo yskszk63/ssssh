@@ -81,7 +81,7 @@ impl AlgorithmName for Algorithm {
     fn defaults() -> Vec<Self> {
         vec![
             Self::Curve25519Sha256,
-            //Self::DiffieHellmanGroup1Sha1,
+            Self::DiffieHellmanGroup1Sha1,
             Self::DiffieHellmanGroup14Sha1,
             Self::DiffieHellmanGroup14Sha256,
             Self::DiffieHellmanGroup16Sha512,

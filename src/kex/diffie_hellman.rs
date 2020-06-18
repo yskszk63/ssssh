@@ -34,7 +34,7 @@ pub(crate) trait Sha {
 pub(crate) enum Group1 {}
 
 impl Group for Group1 {
-    const P: fn() -> Result<BigNum, ErrorStack> = BigNum::get_rfc2409_prime_768;
+    const P: fn() -> Result<BigNum, ErrorStack> = BigNum::get_rfc2409_prime_1024;
 }
 
 #[derive(Debug)]

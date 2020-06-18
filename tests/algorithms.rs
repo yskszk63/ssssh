@@ -11,7 +11,7 @@ use ssssh::{Handlers, ServerBuilder};
 const CIPHERS: &'static [&'static str] = &["aes128-ctr", "aes192-ctr", "aes256-ctr"];
 
 const KEXS: &'static [&'static str] = &[
-    //"diffie-hellman-group1-sha1",
+    "diffie-hellman-group1-sha1",
     "diffie-hellman-group14-sha1",
     "diffie-hellman-group14-sha256",
     "diffie-hellman-group16-sha512",
