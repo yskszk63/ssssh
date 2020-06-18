@@ -34,10 +34,6 @@ pub struct Builder {
 }
 
 impl Builder {
-    pub fn new() -> Self {
-        Default::default()
-    }
-
     pub fn add_kex_algorithm(&mut self, name: crate::Kex) -> &mut Self {
         self.preference.add_kex_algorithm(name);
         self

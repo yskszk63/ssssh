@@ -65,7 +65,15 @@ async fn test() {
 }
 
 async fn do_test(cipher: &str, kex: &str, key: &str, mac: &str, ckey: &str) {
-    let mut server = ServerBuilder::default().build("[::1]:2222").await.unwrap();
+    let mut server = ServerBuilder::default()
+        .add_kex_algorithm(kex.parse().unwrap())
+        .add_cipher_algorithm(cipher.parse().unwrap())
+        .add_mac_algorithm(mac.parse().unwrap())
+        .add_compression_algorithm("none".parse().unwrap())
+        .name("testcase")
+        .generate_hostkeys()
+        .timeout(std::time::Duration::from_secs(10))
+        .build("[::1]:2222").await.unwrap();
 
     let mut handlers = Handlers::<anyhow::Error>::new();
     handlers.on_auth_publickey(|_, _, _| ok(true).boxed());
