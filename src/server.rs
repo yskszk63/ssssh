@@ -120,3 +120,50 @@ where
         }
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_incorrect_hostkey() {
+        let err = Builder::default()
+            .hostkeys_from_path("Cargo.toml")
+            .build("")
+            .await;
+        assert!(err.is_err())
+    }
+
+    #[tokio::test]
+    async fn test_incorrect_listen_addr() {
+        let err = Builder::default().build("").await;
+        assert!(err.is_err())
+    }
+
+    #[tokio::test]
+    async fn test_end() {
+        use futures::prelude::*;
+
+        let stream = futures::stream::empty::<io::Result<tokio_test::io::Mock>>();
+        let mut server = Server {
+            io: stream,
+            preference: Arc::new(PreferenceBuilder::default().build().await.unwrap()),
+            _stream: PhantomData,
+        };
+        assert!(server.next().await.is_none())
+    }
+
+    #[tokio::test]
+    async fn test_err() {
+        use futures::prelude::*;
+
+        let err = Err::<tokio_test::io::Mock, _>(io::ErrorKind::Other.into());
+        let stream = futures::stream::once(async { err }.boxed());
+        let mut server = Server {
+            io: stream,
+            preference: Arc::new(PreferenceBuilder::default().build().await.unwrap()),
+            _stream: PhantomData,
+        };
+        assert!(server.next().await.unwrap().is_err())
+    }
+}
