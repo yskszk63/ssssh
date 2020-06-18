@@ -162,30 +162,24 @@ impl Kex {
 
     pub(crate) fn new(name: &Algorithm) -> Self {
         match name {
-            Algorithm::Curve25519Sha256 => {
-                Self::Curve25519Sha256(curve25519::Curve25519Sha256::new())
-            }
-            Algorithm::DiffieHellmanGroup1Sha1 => {
-                Self::DiffieHellmanGroup1Sha1(diffie_hellman::DiffieHellmanGroup1Sha1::new())
-            }
-            Algorithm::DiffieHellmanGroup14Sha1 => {
-                Self::DiffieHellmanGroup14Sha1(diffie_hellman::DiffieHellmanGroup14Sha1::new())
-            }
+            Algorithm::Curve25519Sha256 => Self::Curve25519Sha256(KexTrait::new()),
+            Algorithm::DiffieHellmanGroup1Sha1 => Self::DiffieHellmanGroup1Sha1(KexTrait::new()),
+            Algorithm::DiffieHellmanGroup14Sha1 => Self::DiffieHellmanGroup14Sha1(KexTrait::new()),
             Algorithm::DiffieHellmanGroup14Sha256 => {
-                Self::DiffieHellmanGroup14Sha256(diffie_hellman::DiffieHellmanGroup14Sha256::new())
+                Self::DiffieHellmanGroup14Sha256(KexTrait::new())
             }
             Algorithm::DiffieHellmanGroup16Sha512 => {
-                Self::DiffieHellmanGroup16Sha512(diffie_hellman::DiffieHellmanGroup16Sha512::new())
+                Self::DiffieHellmanGroup16Sha512(KexTrait::new())
             }
             Algorithm::DiffieHellmanGroup18Sha512 => {
-                Self::DiffieHellmanGroup18Sha512(diffie_hellman::DiffieHellmanGroup18Sha512::new())
+                Self::DiffieHellmanGroup18Sha512(KexTrait::new())
             }
-            Algorithm::DiffieHellmanGroupExchangeSha1 => Self::DiffieHellmanGroupExchangeSha1(
-                diffie_hellman::DiffieHellmanGroupExchangeSha1::new(),
-            ),
-            Algorithm::DiffieHellmanGroupExchangeSha256 => Self::DiffieHellmanGroupExchangeSha256(
-                diffie_hellman::DiffieHellmanGroupExchangeSha256::new(),
-            ),
+            Algorithm::DiffieHellmanGroupExchangeSha1 => {
+                Self::DiffieHellmanGroupExchangeSha1(KexTrait::new())
+            }
+            Algorithm::DiffieHellmanGroupExchangeSha256 => {
+                Self::DiffieHellmanGroupExchangeSha256(KexTrait::new())
+            }
         }
     }
 

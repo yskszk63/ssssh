@@ -2,7 +2,8 @@ use std::marker::PhantomData;
 
 use futures::future::FutureExt as _;
 use futures::sink::SinkExt as _;
-use openssl::bn::{BigNum, BigNumContext, MsbOption};
+use openssl::bn::{BigNum, BigNumContext, BigNumContextRef, BigNumRef, MsbOption};
+use openssl::error::ErrorStack;
 use tokio::stream::StreamExt as _;
 
 use crate::msg::kex_dh_gex_group::KexDhGexGroup;
@@ -22,66 +23,60 @@ pub(crate) type DiffieHellmanGroupExchangeSha1 = DiffieHellmanGroupExchange<Sha1
 pub(crate) type DiffieHellmanGroupExchangeSha256 = DiffieHellmanGroupExchange<Sha256>;
 
 pub(crate) trait Group {
-    const P: u32;
+    const P: fn() -> Result<BigNum, ErrorStack>;
 }
 
 pub(crate) trait Sha {
-    fn hasher() -> Hasher;
+    const HASHER: fn() -> Hasher;
 }
 
 #[derive(Debug)]
 pub(crate) enum Group1 {}
 
 impl Group for Group1 {
-    const P: u32 = 1;
+    const P: fn() -> Result<BigNum, ErrorStack> = BigNum::get_rfc2409_prime_768;
 }
 
 #[derive(Debug)]
 pub(crate) enum Group14 {}
 
 impl Group for Group14 {
-    const P: u32 = 14;
+    const P: fn() -> Result<BigNum, ErrorStack> = BigNum::get_rfc3526_prime_2048;
 }
 
 #[derive(Debug)]
 pub(crate) enum Group16 {}
 
 impl Group for Group16 {
-    const P: u32 = 16;
+    const P: fn() -> Result<BigNum, ErrorStack> = BigNum::get_rfc3526_prime_4096;
 }
 
 #[derive(Debug)]
 pub(crate) enum Group18 {}
 
 impl Group for Group18 {
-    const P: u32 = 18;
+    const P: fn() -> Result<BigNum, ErrorStack> = BigNum::get_rfc3526_prime_8192;
 }
 
 #[derive(Debug)]
 pub(crate) enum Sha1 {}
 
 impl Sha for Sha1 {
-    fn hasher() -> Hasher {
-        Hasher::sha1()
-    }
+    const HASHER: fn() -> Hasher = Hasher::sha1;
 }
 
 #[derive(Debug)]
 pub(crate) enum Sha256 {}
 
 impl Sha for Sha256 {
-    fn hasher() -> Hasher {
-        Hasher::sha256()
-    }
+    const HASHER: fn() -> Hasher = Hasher::sha256;
 }
 
 #[derive(Debug)]
 pub(crate) enum Sha512 {}
 
 impl Sha for Sha512 {
-    fn hasher() -> Hasher {
-        Hasher::sha512()
-    }
+    const HASHER: fn() -> Hasher = Hasher::sha512;
 }
 
 #[derive(Debug)]
@@ -101,7 +96,7 @@ where
     }
 
     fn hasher() -> Hasher {
-        H::hasher()
+        H::HASHER()
     }
 
     #[allow(clippy::many_single_char_names)]
@@ -133,27 +128,17 @@ where
             e.pack(&mut hasher);
             let e = BigNum::from_slice(e).map_err(SshError::kex_error)?;
 
-            let p = get_p(G::P)?;
+            let p = (G::P()).map_err(SshError::kex_error)?;
             let y = gen_y()?;
             let g = get_g()?;
 
             let mut ctx = BigNumContext::new().map_err(SshError::kex_error)?;
-            let mut f = BigNum::new().map_err(SshError::kex_error)?;
-            f.mod_exp(&g, &y, &p, &mut ctx)
-                .map_err(SshError::kex_error)?;
-            let mut f = f.to_vec();
-            if f[0] & 0x80 != 0 {
-                f.insert(0, 0);
-            }
-            let f = Bytes::from(f);
-            f.clone().pack(&mut hasher);
 
-            let mut ctx = BigNumContext::new().map_err(SshError::kex_error)?;
-            let mut k = BigNum::new().map_err(SshError::kex_error)?;
-            k.mod_exp(&e, &y, &p, &mut ctx)
-                .map_err(SshError::kex_error)?;
-            let k = Bytes::from(k.to_vec());
-            Mpint::new(k.clone()).pack(&mut hasher);
+            let f = mod_exp(&g, &y, &p, &mut ctx)?;
+            f.pack(&mut hasher);
+
+            let k = mod_exp(&e, &y, &p, &mut ctx)?;
+            k.pack(&mut hasher);
 
             let h = hasher.finish();
 
@@ -169,19 +154,16 @@ where
     }
 }
 
-fn get_p(n: u32) -> Result<BigNum, SshError> {
-    match n {
-        1 => BigNum::get_rfc2409_prime_768(),
-        2 => BigNum::get_rfc2409_prime_1024(),
-        5 => BigNum::get_rfc3526_prime_1536(),
-        14 => BigNum::get_rfc3526_prime_2048(),
-        15 => BigNum::get_rfc3526_prime_3072(),
-        16 => BigNum::get_rfc3526_prime_4096(),
-        17 => BigNum::get_rfc3526_prime_6144(),
-        18 => BigNum::get_rfc3526_prime_8192(),
-        x => panic!("out of range {}", x),
-    }
-    .map_err(SshError::kex_error)
+fn mod_exp(
+    a: &BigNumRef,
+    p: &BigNumRef,
+    m: &BigNumRef,
+    cx: &mut BigNumContextRef,
+) -> Result<Bytes, SshError> {
+    let mut r = BigNum::new().map_err(SshError::kex_error)?;
+    r.mod_exp(a, p, m, cx).map_err(SshError::kex_error)?;
+    let r = Mpint::new(r.to_vec()).as_ref().to_bytes();
+    Ok(r)
 }
 
 fn get_g() -> Result<BigNum, SshError> {
@@ -211,7 +193,7 @@ where
     }
 
     fn hasher() -> Hasher {
-        H::hasher()
+        H::HASHER()
     }
 
     #[allow(clippy::many_single_char_names)]
@@ -250,24 +232,25 @@ where
             };
 
             let p = if range.contains(&8192) {
-                get_p(18)
+                BigNum::get_rfc3526_prime_8192()
             } else if range.contains(&6144) {
-                get_p(17)
+                BigNum::get_rfc3526_prime_6144()
             } else if range.contains(&4096) {
-                get_p(16)
+                BigNum::get_rfc3526_prime_4096()
             } else if range.contains(&3072) {
-                get_p(15)
+                BigNum::get_rfc3526_prime_3072()
             } else if range.contains(&2048) {
-                get_p(14)
+                BigNum::get_rfc3526_prime_2048()
             } else if range.contains(&1536) {
-                get_p(5)
+                BigNum::get_rfc3526_prime_1536()
             } else if range.contains(&1024) {
-                get_p(2)
+                BigNum::get_rfc2409_prime_1024()
             } else if range.contains(&768) {
-                get_p(1)
+                BigNum::get_rfc2409_prime_768()
             } else {
                 todo!()
-            }?;
+            }
+            .map_err(SshError::kex_error)?;
             Mpint::new(p.to_vec()).pack(&mut hasher);
 
             let g = get_g()?;
@@ -290,33 +273,21 @@ where
             let y = gen_y()?;
 
             let mut ctx = BigNumContext::new().map_err(SshError::kex_error)?;
-            let mut f = BigNum::new().map_err(SshError::kex_error)?;
-            f.mod_exp(&g, &y, &p, &mut ctx)
-                .map_err(SshError::kex_error)?;
-            let mut f = f.to_vec();
-            if f[0] & 0x80 != 0 {
-                f.insert(0, 0);
-            }
-            Mpint::new(f.clone()).pack(&mut hasher);
 
-            let mut ctx = BigNumContext::new().map_err(SshError::kex_error)?;
-            let mut k = BigNum::new().map_err(SshError::kex_error)?;
-            k.mod_exp(&e, &y, &p, &mut ctx)
-                .map_err(SshError::kex_error)?;
-            let mut k = k.to_vec();
-            if k[0] & 0x80 != 0 {
-                k.insert(0, 0);
-            }
-            Mpint::new(k.clone()).pack(&mut hasher);
+            let f = mod_exp(&g, &y, &p, &mut ctx)?;
+            f.pack(&mut hasher);
+
+            let k = mod_exp(&e, &y, &p, &mut ctx)?;
+            k.pack(&mut hasher);
 
             let h = hasher.finish();
 
             let signature = env.hostkey.sign(&h);
 
-            let reply = KexDhGexReply::new(env.hostkey.publickey(), f.into(), signature);
+            let reply = KexDhGexReply::new(env.hostkey.publickey(), f, signature);
             io.send(reply.into()).await?;
 
-            Ok((h, k.into()))
+            Ok((h, k))
         }
         .boxed()
     }
