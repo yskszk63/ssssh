@@ -12,7 +12,7 @@ use ssssh::SshOutput;
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
-    let mut server = ServerBuilder::new()
+    let mut server = ServerBuilder::default()
         .hostkeys_from_path("tests/ed25519")
         .hostkeys_from_path("tests/rsa")
         .build("[::1]:2222")
