@@ -70,6 +70,9 @@ pub enum SshError {
     #[error("unsupported key file format")]
     UnsupportedKeyFileFormat,
 
+    #[error("timeout")]
+    Timeout,
+
     #[error(transparent)]
     Any(Box<dyn Error + Send + Sync + 'static>),
 }
@@ -97,6 +100,7 @@ impl SshError {
             Self::UnacceptableService(..) => Some(ReasonCode::ServiceNotAvailable),
             Self::HandlerError(..) => Some(ReasonCode::ByApplication),
             Self::UnsupportedKeyFileFormat => None,
+            Self::Timeout => Some(ReasonCode::ConnectionLost),
             Self::Any(..) => None,
         }
     }

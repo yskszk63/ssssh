@@ -2,23 +2,22 @@ use std::fmt;
 use std::future::Future;
 use std::mem;
 use std::pin::Pin;
-use std::task::{Context, Poll};
+use std::task::{Context, Poll, Waker};
 
 use futures::stream::Stream;
-use tokio::sync::Notify;
 
-pub(crate) struct CompletionStream<O> {
-    tasks: Vec<Pin<Box<dyn Future<Output = O> + Send + 'static>>>,
-    waker: Notify,
+pub(crate) struct CompletionStream<A, O> {
+    tasks: Vec<(A, Pin<Box<dyn Future<Output = O> + Send + 'static>>)>,
+    waker: Option<Waker>,
 }
 
-impl<O> fmt::Debug for CompletionStream<O> {
+impl<A, O> fmt::Debug for CompletionStream<A, O> {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "CompletionStream")
     }
 }
 
-impl<O> CompletionStream<O> {
+impl<A, O> CompletionStream<A, O> {
     pub(crate) fn new() -> Self {
         Self {
             tasks: Default::default(),
@@ -26,34 +25,49 @@ impl<O> CompletionStream<O> {
         }
     }
 
-    pub(crate) fn push<F>(&mut self, task: F)
+    pub(crate) fn push<F>(&mut self, attachment: A, task: F)
     where
         F: Future<Output = O> + Send + 'static,
     {
-        self.tasks.push(Box::pin(task));
-        self.waker.notify();
+        self.tasks.push((attachment, Box::pin(task)));
+        if let Some(waker) = self.waker.take() {
+            waker.wake();
+        }
     }
 }
 
-impl<O> Stream for CompletionStream<O> {
-    type Item = O;
+impl<A, O> Stream for CompletionStream<A, O>
+where
+    A: Unpin,
+    O: Unpin,
+{
+    type Item = (A, O);
 
-    fn poll_next(mut self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<O>> {
+    fn poll_next(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Option<Self::Item>> {
+        let Self {
+            ref mut tasks,
+            ref mut waker,
+        } = self.get_mut();
+
         let mut cur = vec![];
-        mem::swap(&mut cur, &mut self.tasks);
+        mem::swap(&mut cur, tasks);
 
-        let mut ready = None;
-        for mut task in cur {
-            match Pin::new(&mut task).poll(cx) {
-                Poll::Ready(x) if ready.is_none() => ready = Some(x),
-                _ => self.tasks.push(task),
+        let mut result = None;
+        for (attachment, mut task) in cur {
+            if result.is_none() {
+                match Pin::new(&mut task).poll(cx) {
+                    Poll::Ready(x) => result = Some((attachment, x)),
+                    _ => tasks.push((attachment, task)),
+                }
+            } else {
+                tasks.push((attachment, task))
             }
         }
 
-        if ready.is_some() {
-            Poll::Ready(ready)
+        if let Some(result) = result {
+            Poll::Ready(Some(result))
         } else {
-            let _ = Box::pin(self.waker.notified()).as_mut().poll(cx);
+            *waker = Some(cx.waker().clone());
             Poll::Pending
         }
     }
@@ -71,6 +85,6 @@ mod tests {
         {
         }
 
-        assert(CompletionStream::<()>::new());
+        assert(CompletionStream::<(), ()>::new());
     }
 }
