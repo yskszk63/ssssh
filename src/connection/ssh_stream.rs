@@ -1,4 +1,5 @@
 use std::mem::MaybeUninit;
+use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
@@ -41,6 +42,18 @@ impl AsyncRead for SshInput {
     }
 }
 
+impl AsRawFd for SshInput {
+    fn as_raw_fd(&self) -> RawFd {
+        self.0.as_raw_fd()
+    }
+}
+
+impl IntoRawFd for SshInput {
+    fn into_raw_fd(self) -> RawFd {
+        self.0.into_raw_fd()
+    }
+}
+
 /// SSH data output.
 #[derive(Debug)]
 pub struct SshOutput(PipeWrite);
@@ -80,5 +93,17 @@ impl AsyncWrite for SshOutput {
         Self: Sized,
     {
         Pin::new(&mut self.0).poll_write_buf(cx, buf)
+    }
+}
+
+impl AsRawFd for SshOutput {
+    fn as_raw_fd(&self) -> RawFd {
+        self.0.as_raw_fd()
+    }
+}
+
+impl IntoRawFd for SshOutput {
+    fn into_raw_fd(self) -> RawFd {
+        self.0.into_raw_fd()
     }
 }
