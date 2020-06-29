@@ -129,12 +129,8 @@ where
                         .verify(seq, &buf[..(*len + 4)], &expect)?;
 
                     let pad = buf[4] as usize;
-                    let mut payload = &buf[5..(*len + 4 - pad)];
-                    let payload = this
-                        .state
-                        .ctos_mut()
-                        .comp()
-                        .decompress(&payload.to_bytes())?;
+                    let payload = &buf[5..(*len + 4 - pad)];
+                    let payload = this.state.ctos_mut().comp().decompress(payload)?;
 
                     this.rxstate = DecryptState::FillFirst;
 
@@ -209,7 +205,7 @@ where
 }
 
 #[cfg(test)]
-mod test {
+mod tests {
     use super::*;
 
     #[test]

@@ -11,6 +11,7 @@ use crate::SshError;
 pub use ssh_stream::{SshInput, SshOutput};
 
 mod completion_stream;
+mod reader_map;
 mod run;
 mod ssh_stream;
 mod version_ex;

@@ -2,7 +2,7 @@ use derive_new::new;
 
 use super::*;
 
-#[derive(Debug, Clone)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub(crate) enum DataTypeCode {
     Stderr,
     Unknown(u32),

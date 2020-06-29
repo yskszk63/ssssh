@@ -1,25 +1,30 @@
+use std::pin::Pin;
+use std::task::{Context, Poll};
+
 use std::collections::HashMap;
 use std::future::Future;
 use std::sync::Arc;
 
-use bytes::Bytes;
-use futures::channel::mpsc;
-use futures::future::Either;
+use futures::channel::{mpsc, oneshot};
+use futures::future::{Either, TryFutureExt as _};
+use futures::lock::Mutex;
 use futures::sink::SinkExt as _;
-use futures::stream::Fuse;
+use futures::stream::Stream;
 use futures::stream::StreamExt as _;
-use futures::stream::TryStreamExt as _;
 use log::{debug, error, warn};
 use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::time;
+use tokio_pipe::{PipeRead, PipeWrite};
 
 use crate::handlers::{HandlerError, Handlers};
+use crate::msg::channel_extended_data::DataTypeCode;
 use crate::msg::{self, Msg};
 use crate::preference::Preference;
 use crate::stream::msg::MsgStream;
 use crate::SshError;
 
 use super::completion_stream::CompletionStream;
+use super::reader_map::ReaderMap;
 use super::ssh_stream::{SshInput, SshOutput};
 
 mod on_channel_close;
@@ -33,10 +38,43 @@ mod on_kexinit;
 mod on_service_request;
 mod on_userauth_request;
 
+struct LockNext<'a, S> {
+    inner: &'a mut S,
+}
+
+impl<'a, S> Future for LockNext<'a, Arc<Mutex<S>>>
+where
+    S: Stream + Unpin,
+{
+    type Output = Option<<S as Stream>::Item>;
+    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
+        use std::ops::DerefMut;
+
+        let mut item = match Pin::new(&mut self.get_mut().inner.lock()).poll(cx) {
+            Poll::Ready(item) => item,
+            Poll::Pending => return Poll::Pending,
+        };
+        match Pin::new(item.deref_mut()).poll_next(cx) {
+            Poll::Ready(item) => Poll::Ready(item),
+            Poll::Pending => Poll::Pending,
+        }
+    }
+}
+
+trait MutexStream: Sized {
+    fn lock_next(&mut self) -> LockNext<Self>;
+}
+
+impl<S> MutexStream for Arc<Mutex<S>> {
+    fn lock_next(&mut self) -> LockNext<Self> {
+        LockNext { inner: self }
+    }
+}
+
 #[derive(Debug)]
 enum Channel {
-    Session(u32, Option<mpsc::UnboundedSender<Bytes>>, Option<SshInput>),
-    DirectTcpip(u32, Option<mpsc::UnboundedSender<Bytes>>),
+    Session(u32, Option<PipeWrite>, Option<SshInput>),
+    DirectTcpip(u32, Option<PipeWrite>),
 }
 
 fn maybe_timeout(preference: &Preference) -> impl Future<Output = ()> {
@@ -59,9 +97,17 @@ where
     preference: Arc<Preference>,
     handlers: Handlers<E>,
     channels: HashMap<u32, Channel>,
-    outbound_channel_tx: mpsc::UnboundedSender<Msg>,
-    outbound_channel_rx: Fuse<mpsc::UnboundedReceiver<Msg>>,
-    completions: CompletionStream<Result<(), HandlerError>>,
+    output_readers: Arc<Mutex<ReaderMap<(u32, Option<DataTypeCode>), PipeRead>>>,
+    completions: Arc<
+        Mutex<
+            CompletionStream<
+                (u32, bool, Vec<oneshot::Receiver<()>>),
+                Result<Option<u32>, HandlerError>,
+            >,
+        >,
+    >,
+    msg_queue_tx: mpsc::UnboundedSender<Msg>,
+    msg_queue_rx: mpsc::UnboundedReceiver<Msg>,
     first_kexinit: Option<msg::kexinit::Kexinit>,
     auth_state: on_userauth_request::AuthState,
 }
@@ -78,8 +124,7 @@ where
         preference: Arc<Preference>,
         handlers: Handlers<E>,
     ) -> Self {
-        let (tx, rx) = mpsc::unbounded();
-        let rx = rx.fuse();
+        let (msg_queue_tx, msg_queue_rx) = mpsc::unbounded();
 
         Self {
             io,
@@ -88,9 +133,10 @@ where
             preference,
             handlers,
             channels: Default::default(),
-            outbound_channel_tx: tx,
-            outbound_channel_rx: rx,
-            completions: CompletionStream::new(),
+            output_readers: Arc::new(Mutex::new(ReaderMap::new())),
+            completions: Arc::new(Mutex::new(CompletionStream::new())),
+            msg_queue_tx,
+            msg_queue_rx,
             first_kexinit: None,
             auth_state: on_userauth_request::AuthState::new(),
         }
@@ -100,15 +146,77 @@ where
         self.io.send(msg.into()).await
     }
 
+    async fn new_output(
+        &mut self,
+        channel: u32,
+        type_code: Option<DataTypeCode>,
+    ) -> Result<(SshOutput, oneshot::Receiver<()>), SshError> {
+        let output_readers = self.output_readers.clone();
+        let mut output_readers = output_readers.lock().await;
+
+        let (r, w) = tokio_pipe::pipe()?;
+        let output = SshOutput::new(w);
+        debug!(
+            "channel: {}, type: {:?} output: {:?} opened.",
+            channel, &type_code, output
+        );
+        let closed = output_readers.insert((channel, type_code), r);
+
+        Ok((output, closed))
+    }
+
+    async fn spawn_shell_handler<F, ERR>(
+        &mut self,
+        channel: u32,
+        stdout_closed: oneshot::Receiver<()>,
+        stderr_closed: oneshot::Receiver<()>,
+        fut: F,
+    ) where
+        F: Future<Output = Result<u32, ERR>> + Send + 'static,
+        ERR: Into<HandlerError>,
+    {
+        let completions = self.completions.clone();
+        let mut completions = completions.lock().await;
+
+        let fut = async move {
+            debug!("spawn handler {}", channel);
+            let r = fut.map_err(Into::into).await?;
+            debug!("done spawn handler {}", channel);
+            Ok::<_, HandlerError>(Some(r))
+        };
+        completions.push((channel, true, vec![stdout_closed, stderr_closed]), fut);
+    }
+
+    async fn spawn_handler<F, ERR>(
+        &mut self,
+        channel: u32,
+        output_closed: oneshot::Receiver<()>,
+        fut: F,
+    ) where
+        F: Future<Output = Result<(), ERR>> + Send + 'static,
+        ERR: Into<HandlerError>,
+    {
+        let completions = self.completions.clone();
+        let mut completions = completions.lock().await;
+
+        let fut = async move {
+            debug!("spawn handler {}", channel);
+            fut.map_err(Into::into).await?;
+            debug!("done spawn handler {}", channel);
+            Ok(None)
+        };
+        completions.push((channel, true, vec![output_closed]), fut);
+    }
+
     pub(super) async fn run(mut self) -> Result<(), SshError> {
+        use msg::disconnect::{Disconnect, ReasonCode};
+
         debug!("connection running...");
         let result = self.r#loop().await;
         if let Err(e) = &result {
             error!("error ocurred {}", e);
-            let t = e
-                .reason_code()
-                .unwrap_or_else(|| msg::disconnect::ReasonCode::ProtocolError);
-            let msg = msg::disconnect::Disconnect::new(t, "error occurred".into(), "".into());
+            let t = e.reason_code().unwrap_or_else(|| ReasonCode::ProtocolError);
+            let msg = Disconnect::new(t, "error occurred".into(), "".into());
             if let Err(e) = self.send(msg).await {
                 error!("failed to send disconnect: {}", e)
             }
@@ -123,39 +231,103 @@ where
         self.send(first_kexinit.clone()).await?;
         self.first_kexinit = Some(first_kexinit);
 
-        let mut connected = true;
+        let reader = self.output_readers.clone();
+        let tasks = self.completions.clone();
+        let msg_queue_tx = self.msg_queue_tx.clone();
 
-        while connected {
+        tokio::select! {
+            result = self.msg_loop() => result,
+            result = Self::data_output_loop(reader, msg_queue_tx.clone()) => result,
+            result = Self::task_loop(tasks, msg_queue_tx) => result,
+        }
+    }
+
+    async fn msg_loop(&mut self) -> Result<(), SshError> {
+        loop {
             let mut timeout = maybe_timeout(&self.preference);
 
             tokio::select! {
-                Ok(msg) = self.io.try_next() => {
-                    if let Some(msg) = msg {
-                        self.handle_msg(&msg, &mut connected).await?;
-                    } else {
-                        connected = false;
-                    }
-                }
-                Some(msg) = self.outbound_channel_rx.next() => self.send(msg).await?,
-                Some(completed) = self.completions.next() => completed.map_err(SshError::HandlerError)?,
-                _ = &mut timeout => {
-                    let t = msg::disconnect::ReasonCode::ConnectionLost;
-                    let msg = msg::disconnect::Disconnect::new(
-                        t,
-                        "timedout".into(),
-                        "".into(),
-                    );
-                    if let Err(e) = self.send(msg).await {
-                        warn!("failed to send disconnect: {}", e);
-                    }
-                    connected = false
-                }
+                msg = self.io.next() => {match msg {
+                    Some(msg) => self.handle_msg(&msg?).await?,
+                    None => return Ok(()),
+                }}
+                Some(msg) = self.msg_queue_rx.next() => self.send(msg).await?,
+                _ = &mut timeout => return Err(SshError::Timeout)
             }
+        }
+    }
+
+    async fn data_output_loop(
+        mut read: Arc<Mutex<ReaderMap<(u32, Option<DataTypeCode>), PipeRead>>>,
+        mut queue: mpsc::UnboundedSender<Msg>,
+    ) -> Result<(), SshError> {
+        use msg::channel_data::ChannelData;
+        use msg::channel_extended_data::ChannelExtendedData;
+
+        while let Some(result) = read.lock_next().await {
+            let ((channel_id, type_code), buf) = result?;
+
+            match (type_code, buf) {
+                (Some(data_type), Some(buf)) => {
+                    let msg = ChannelExtendedData::new(channel_id, data_type, buf).into();
+                    queue.send(msg).await?;
+                }
+                (None, Some(buf)) => {
+                    let msg = ChannelData::new(channel_id, buf).into();
+                    queue.send(msg).await?;
+                }
+                (type_code, None) => {
+                    debug!("channel: {}, type: {:?} reach eof.", channel_id, type_code)
+                }
+            };
         }
         Ok(())
     }
 
-    async fn handle_msg(&mut self, msg: &msg::Msg, connected: &mut bool) -> Result<(), SshError> {
+    async fn task_loop(
+        mut tasks: Arc<
+            Mutex<
+                CompletionStream<
+                    (u32, bool, Vec<oneshot::Receiver<()>>),
+                    Result<Option<u32>, HandlerError>,
+                >,
+            >,
+        >,
+        mut queue: mpsc::UnboundedSender<Msg>,
+    ) -> Result<(), SshError> {
+        use msg::channel_close::ChannelClose;
+        use msg::channel_eof::ChannelEof;
+        use msg::channel_request::{ChannelRequest, Type};
+
+        while let Some(completed) = tasks.lock_next().await {
+            let ((channel_id, notify_status, output_closed), status) = completed;
+
+            for f in output_closed {
+                f.await.ok();
+            }
+
+            let msg = ChannelEof::new(channel_id).into();
+            queue.send(msg).await?;
+
+            if notify_status {
+                let status = match status {
+                    Ok(Some(status)) => status,
+                    Err(_) | Ok(None) => 255,
+                };
+                let typ = Type::ExitStatus(status);
+                let msg = ChannelRequest::new(channel_id, false, typ).into();
+                queue.send(msg).await?;
+            }
+
+            let msg = ChannelClose::new(channel_id).into();
+            queue.send(msg).await?;
+
+            status.map_err(SshError::HandlerError)?;
+        }
+        Ok(())
+    }
+
+    async fn handle_msg(&mut self, msg: &msg::Msg) -> Result<(), SshError> {
         match &msg {
             Msg::Kexinit(msg) => self.on_kexinit(msg).await?,
             Msg::ServiceRequest(msg) => self.on_service_request(msg).await?,
@@ -167,7 +339,7 @@ where
             Msg::ChannelClose(msg) => self.on_channel_close(msg).await?,
             Msg::ChannelWindowAdjust(msg) => self.on_channel_window_adjust(msg).await?,
             Msg::ChannelRequest(msg) => self.on_channel_request(msg).await?,
-            Msg::Disconnect(..) => *connected = false,
+            Msg::Disconnect(..) => {}
             Msg::Ignore(..) => {}
             Msg::Unimplemented(..) => {}
             x => {

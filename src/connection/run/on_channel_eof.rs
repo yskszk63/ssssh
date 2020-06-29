@@ -1,4 +1,4 @@
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt as _};
 
 use crate::msg::channel_eof::ChannelEof;
 use crate::HandlerError;
@@ -18,8 +18,8 @@ where
         if let Some(channel) = self.channels.get_mut(chid) {
             match channel {
                 Channel::Session(_, stdin, _) | Channel::DirectTcpip(_, stdin) => {
-                    if let Some(stdin) = stdin.take() {
-                        stdin.close_channel()
+                    if let Some(mut stdin) = stdin.take() {
+                        stdin.shutdown().await?;
                     }
                 }
             }

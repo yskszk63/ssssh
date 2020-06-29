@@ -1,18 +1,14 @@
 use std::collections::hash_map::Entry;
 
-use futures::channel::mpsc;
-use futures::future::TryFutureExt as _;
-use futures::sink::SinkExt as _;
 use log::debug;
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use crate::msg::channel_close::ChannelClose;
 use crate::msg::channel_open::{ChannelOpen, DirectTcpip, Type};
 use crate::msg::channel_open_confirmation::ChannelOpenConfirmation;
 use crate::msg::channel_open_failure::{ChannelOpenFailure, ReasonCode};
 use crate::HandlerError;
 
-use super::{Channel, Runner, SshError, SshInput, SshOutput};
+use super::{Channel, Runner, SshError, SshInput};
 
 impl<IO, E> Runner<IO, E>
 where
@@ -46,10 +42,10 @@ where
         channel_open: &ChannelOpen,
     ) -> Result<(), SshError> {
         let chid = *channel_open.sender_channel();
-        let (stdin_tx, stdin_rx) = mpsc::unbounded();
-        let stdin_rx = SshInput::new(stdin_rx);
+        let (r, w) = tokio_pipe::pipe()?;
+        let stdin_rx = SshInput::new(r);
 
-        let channel = Channel::Session(chid, Some(stdin_tx), Some(stdin_rx));
+        let channel = Channel::Session(chid, Some(w), Some(stdin_rx));
         if let Entry::Vacant(entry) = self.channels.entry(chid) {
             entry.insert(channel);
 
@@ -80,27 +76,18 @@ where
         _item: &DirectTcpip,
     ) -> Result<(), SshError> {
         let chid = *channel_open.sender_channel();
-        let (stdin_tx, stdin_rx) = mpsc::unbounded();
 
-        let input = SshInput::new(stdin_rx);
-        let output = SshOutput::new(chid, self.outbound_channel_tx.clone());
+        let (input_r, input_w) = tokio_pipe::pipe()?;
+        let input = SshInput::new(input_r);
 
-        let channel = Channel::DirectTcpip(chid, Some(stdin_tx));
+        let (output, output_closed) = self.new_output(chid, None).await?;
+
+        let channel = Channel::DirectTcpip(chid, Some(input_w));
         if let Entry::Vacant(entry) = self.channels.entry(chid) {
             entry.insert(channel);
 
-            let mut tx = self.outbound_channel_tx.clone();
             if let Some(fut) = self.handlers.dispatch_direct_tcpip(input, output) {
-                self.completions.push(
-                    fut.and_then(move |_| async move {
-                        let msg = ChannelClose::new(chid).into();
-                        tx.send(msg).await.ok(); // FIXME
-
-                        Ok(())
-                    })
-                    .map_err(Into::into),
-                );
-
+                self.spawn_handler(chid, output_closed, fut).await;
                 let msg = ChannelOpenConfirmation::new(
                     *channel_open.sender_channel(),
                     *channel_open.sender_channel(),
