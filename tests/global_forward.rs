@@ -13,7 +13,6 @@ async fn exec() {
     let mut server = ServerBuilder::default().build("[::1]:2222").await.unwrap();
 
     let mut handlers = Handlers::<anyhow::Error>::new();
-    handlers.on_channel_shell(|_, _, _| async move { Ok(0) }.boxed());
     handlers.on_auth_none(|_| ok(true).boxed());
 
     let proc = Command::new("ssh")
@@ -24,6 +23,7 @@ async fn exec() {
         .arg("-p2222")
         .arg("-q")
         .arg("-R8080:localhost:8080")
+        .arg("-N")
         .arg("::1")
         .stdin(Stdio::null())
         .stdout(Stdio::inherit())
