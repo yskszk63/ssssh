@@ -2,14 +2,14 @@ use std::process::Stdio;
 
 use futures::future::ok;
 use futures::prelude::*;
-use tokio::prelude::*;
+use tokio::io;
 use tokio::process::Command;
 
 use ssssh::{Handlers, ServerBuilder};
 
 #[tokio::test]
 async fn shell() {
-    simple_logger::init().ok();
+    simple_logger::SimpleLogger::new().init().ok();
 
     let mut server = ServerBuilder::default().build("[::1]:2222").await.unwrap();
 

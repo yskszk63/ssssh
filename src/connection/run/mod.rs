@@ -79,7 +79,7 @@ enum Channel {
 
 fn maybe_timeout(preference: &Preference) -> impl Future<Output = ()> {
     if let Some(timeout) = preference.timeout() {
-        Either::Left(time::delay_for(*timeout))
+        Either::Left(time::sleep(*timeout))
     } else {
         Either::Right(futures::future::pending())
     }
@@ -244,7 +244,8 @@ where
 
     async fn msg_loop(&mut self) -> Result<(), SshError> {
         loop {
-            let mut timeout = maybe_timeout(&self.preference);
+            let timeout = maybe_timeout(&self.preference);
+            tokio::pin!(timeout);
 
             tokio::select! {
                 msg = self.io.next() => {match msg {

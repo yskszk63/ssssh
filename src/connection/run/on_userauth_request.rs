@@ -9,7 +9,7 @@ use crate::msg::userauth_success::UserauthSuccess;
 use crate::msg::UserauthPkMsg;
 use crate::pack::Pack;
 use crate::{HandlerError, PasswordResult};
-use bytes::Buf as _;
+use bytes::Bytes;
 use log::debug;
 
 use super::{Runner, SshError};
@@ -155,7 +155,9 @@ where
             .get_ref()
             .state()
             .session_id()
-            .to_bytes()
+            .iter()
+            .cloned()
+            .collect::<Bytes>()
             .pack(&mut verifier);
         50u8.pack(&mut verifier);
         user_name.pack(&mut verifier);
@@ -256,7 +258,9 @@ where
             .get_ref()
             .state()
             .session_id()
-            .to_bytes()
+            .iter()
+            .cloned()
+            .collect::<Bytes>()
             .pack(&mut verifier);
         50u8.pack(&mut verifier);
         user_name.pack(&mut verifier);

@@ -15,10 +15,10 @@ impl CompressionTrait for None {
     }
 
     fn compress(&self, mut target: &[u8]) -> Result<Bytes, SshError> {
-        Ok(target.to_bytes())
+        Ok(target.copy_to_bytes(target.remaining()))
     }
 
     fn decompress(&self, mut target: &[u8]) -> Result<Bytes, SshError> {
-        Ok(target.to_bytes())
+        Ok(target.copy_to_bytes(target.remaining()))
     }
 }

@@ -31,7 +31,7 @@ impl Unpack for ChannelOpenConfirmation {
         let sender_channel = Unpack::unpack(buf)?;
         let initial_window_size = Unpack::unpack(buf)?;
         let maximum_packet_size = Unpack::unpack(buf)?;
-        let additional_data = buf.to_bytes();
+        let additional_data = buf.copy_to_bytes(buf.remaining());
         Ok(Self {
             recipient_channel,
             sender_channel,

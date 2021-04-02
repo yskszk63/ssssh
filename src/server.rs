@@ -8,8 +8,9 @@ use std::time::Duration;
 use futures::ready;
 use thiserror::Error;
 use tokio::io;
-use tokio::net::{TcpListener, TcpStream, ToSocketAddrs};
-use tokio::stream::Stream;
+use tokio::net::{lookup_host, TcpListener, TcpStream, ToSocketAddrs};
+use tokio_stream::wrappers::TcpListenerStream;
+use tokio_stream::Stream;
 
 use crate::connection::{Accept, Connection};
 use crate::preference::{Preference, PreferenceBuilder};
@@ -74,18 +75,21 @@ impl Builder {
         self
     }
 
-    pub async fn build<A>(&self, addr: A) -> Result<Server<TcpListener, TcpStream>, BuildError>
+    pub async fn build<A>(
+        &self,
+        addr: A,
+    ) -> Result<Server<TcpListenerStream, TcpStream>, BuildError>
     where
         A: ToSocketAddrs,
     {
         let preference = self.preference.build().await?;
         let preference = Arc::new(preference);
 
-        let addr = addr.to_socket_addrs().await?.next();
+        let addr = lookup_host(addr).await?.next();
         if let Some(addr) = addr {
             let io = TcpListener::bind(addr).await?;
             Ok(Server {
-                io,
+                io: TcpListenerStream::new(io),
                 preference,
                 _stream: PhantomData,
             })

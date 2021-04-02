@@ -1,4 +1,3 @@
-use bytes::Buf as _;
 use log::warn;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt};
 
@@ -17,15 +16,12 @@ where
         channel_data: &ChannelData,
     ) -> Result<(), SshError> {
         let chid = channel_data.recipient_channel();
-        let mut data = channel_data.data().as_ref();
+        let data = channel_data.data().as_ref();
         if let Some(channel) = self.channels.get_mut(chid) {
             match channel {
                 Channel::Session(_, stdin, _) | Channel::DirectTcpip(_, stdin) => match stdin {
                     Some(stdin) => {
-                        while !data.is_empty() {
-                            let n = stdin.write(&data).await?;
-                            data.advance(n);
-                        }
+                        stdin.write_all(&data).await?;
                     }
                     None => warn!("closed channel {}", chid),
                 },

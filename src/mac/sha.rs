@@ -71,7 +71,9 @@ where
         let mut cx = Context::with_key(&self.key);
         cx.update(&seq.to_be_bytes());
         cx.update(&plain);
-        Ok(cx.sign().as_ref().to_bytes())
+        let sign = cx.sign();
+        let mut sign = sign.as_ref();
+        Ok(sign.copy_to_bytes(sign.remaining()))
     }
 
     fn verify(&self, seq: u32, plain: &[u8], tag: &[u8]) -> Result<(), SshError> {

@@ -1,11 +1,12 @@
 use std::hash::Hash;
+use std::mem::MaybeUninit;
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use bytes::{Buf as _, Bytes, BytesMut};
+use bytes::{BufMut as _, Bytes, BytesMut};
 use futures::channel::oneshot;
 use futures::stream::Stream;
-use tokio::io::{self, AsyncRead};
+use tokio::io::{self, AsyncRead, ReadBuf};
 
 #[derive(Debug)]
 pub(crate) struct ReaderMap<K, V> {
@@ -48,16 +49,23 @@ where
             let (k, reader, _) = &mut entries[n];
             buf.clear();
 
-            match Pin::new(reader).poll_read_buf(cx, buf) {
-                Poll::Ready(Ok(0)) => {
-                    let (k, _, close_notify) = entries.swap_remove(n);
-                    close_notify.send(()).ok();
-                    return Poll::Ready(Some(Ok((k, None))));
+            let dst = buf.chunk_mut();
+            let dst = unsafe { &mut *(dst as *mut _ as *mut [MaybeUninit<u8>]) };
+            let mut buf = ReadBuf::uninit(dst);
+            match Pin::new(reader).poll_read(cx, &mut buf)? {
+                Poll::Ready(()) => {
+                    if buf.filled().len() == 0 {
+                        let (k, _, close_notify) = entries.swap_remove(n);
+                        close_notify.send(()).ok();
+                        return Poll::Ready(Some(Ok((k, None))));
+                    } else {
+                        let buf = buf.filled();
+                        return Poll::Ready(Some(Ok((
+                            k.clone(),
+                            Some(Bytes::copy_from_slice(buf)),
+                        ))));
+                    }
                 }
-                Poll::Ready(Ok(n)) => {
-                    return Poll::Ready(Some(Ok((k.clone(), Some((&buf[..n]).to_bytes())))))
-                }
-                Poll::Ready(Err(e)) => return Poll::Ready(Some(Err(e))),
                 Poll::Pending => {}
             }
         }

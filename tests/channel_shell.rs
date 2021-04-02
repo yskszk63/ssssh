@@ -3,16 +3,16 @@ use std::os::unix::io::FromRawFd;
 use std::process::Stdio;
 
 use futures::future::ok;
-use futures::prelude::*;
+use futures::{FutureExt, TryStreamExt};
 use nix::sys::memfd::{memfd_create, MemFdCreateFlag};
-use tokio::prelude::*;
+use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
 use ssssh::{Handlers, ServerBuilder, SshOutput};
 
 #[tokio::test]
 async fn shell() {
-    simple_logger::init().ok();
+    simple_logger::SimpleLogger::new().init().ok();
 
     let input_name = CString::new("input").unwrap();
     let input_fd = memfd_create(&input_name, MemFdCreateFlag::empty()).unwrap();

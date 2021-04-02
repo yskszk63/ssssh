@@ -6,7 +6,7 @@ use ssssh::{Handlers, ServerBuilder};
 
 #[tokio::test]
 async fn ed25519() {
-    simple_logger::init().ok();
+    simple_logger::SimpleLogger::new().init().ok();
 
     let mut server = ServerBuilder::default()
         .hostkeys_from_path("tests/ed25519")

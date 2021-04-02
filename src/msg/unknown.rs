@@ -19,7 +19,7 @@ impl Pack for Unknown {
 
 impl Unpack for Unknown {
     fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
-        let data = buf.to_bytes();
+        let data = buf.copy_to_bytes(buf.remaining());
         Ok(Self { data })
     }
 }
