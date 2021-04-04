@@ -32,15 +32,6 @@ jobs:
       with:
         token: ${{ secrets.GITHUB_TOKEN }}
 
-    - name: Install grcov
-      run: |
-        mkdir $HOME/grcov
-        curl -SsL "$GRCOV_URL" | tar -jxf - -C $HOME/grcov
-        chmod +x $HOME/grcov/grcov
-        echo "::add-path::$HOME/grcov"
-      env:
-        GRCOV_URL: 'https://github.com/mozilla/grcov/releases/download/v0.5.15/grcov-linux-x86_64.tar.bz2'
-
    cov:
     runs-on: "ubuntu-latest"
     continue-on-error: true
