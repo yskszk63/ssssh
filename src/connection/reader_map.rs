@@ -54,7 +54,7 @@ where
             let mut buf = ReadBuf::uninit(dst);
             match Pin::new(reader).poll_read(cx, &mut buf)? {
                 Poll::Ready(()) => {
-                    if buf.filled().len() == 0 {
+                    if buf.filled().is_empty() {
                         let (k, _, close_notify) = entries.swap_remove(n);
                         close_notify.send(()).ok();
                         return Poll::Ready(Some(Ok((k, None))));

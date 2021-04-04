@@ -87,7 +87,9 @@ where
     }
 
     fn update(&mut self, target: &mut [u8]) -> Result<(), SshError> {
-        let mut buf = [0; Self::BLOCK_SIZE * 64];
+        // cannot use constants which depend on generic parameters in types
+        const BLOCK_SIZE: usize = 16;
+        let mut buf = [0; BLOCK_SIZE * 64];
 
         for chunk in target.chunks_mut(buf.len()) {
             let b = &mut buf[..chunk.len()];
