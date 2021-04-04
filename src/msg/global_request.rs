@@ -98,7 +98,7 @@ impl Unpack for GlobalRequest {
         let typ = match &*typ {
             "tcpip-forward" => Type::TcpipForward(Unpack::unpack(buf)?),
             "cancel-tcpip-forward" => Type::CancelTcpipForward(Unpack::unpack(buf)?),
-            x => Type::Unknown(x.to_string(), buf.to_bytes()),
+            x => Type::Unknown(x.to_string(), buf.copy_to_bytes(buf.remaining())),
         };
 
         Ok(Self { want_reply, typ })

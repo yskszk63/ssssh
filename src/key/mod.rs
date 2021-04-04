@@ -139,7 +139,7 @@ impl Unpack for PublicKey {
     fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
         let mut buf = Bytes::unpack(buf)?;
         let name = Unpack::unpack(&mut buf)?;
-        let data = buf.to_bytes();
+        let data = buf.copy_to_bytes(buf.remaining());
         Ok(Self(name, data))
     }
 }

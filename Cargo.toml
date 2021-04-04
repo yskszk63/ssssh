@@ -3,12 +3,13 @@ name = "ssssh"
 version = "0.1.0"
 authors = ["yskszk63 <yskszk63@gmail.com>"]
 edition = "2018"
+repository = "https://github.com/yskszk63/ssssh"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
-tokio = { version="0.2", features=["tcp", "time", "stream", "macros", "io-util", "sync", "fs"] }
 futures = "0.3"
-bytes = "0.5"
-openssl = { version = "0.10", features = ["vendored"] }
+bytes = "1.0"
 thiserror = "1.0"
 ring = { version="0.16", features = ["std"] }
 log = "0.4"
@@ -16,15 +17,47 @@ getset = "0.1"
 derive-new = "0.5"
 derive_builder = "0.9"
 linked-hash-map = "0.5"
-base64 = "0.12"
-tokio-pipe = "0.1"
+base64 = "0.13"
+tokio-pipe = "0.2"
+
+[dependencies.tokio]
+version = "1.4"
+features = [
+    "net",
+    "time",
+    "macros",
+    "io-util",
+    "sync",
+    "fs",
+]
+
+[dependencies.tokio-stream]
+version = "0.1"
+features = [
+    "io-util",
+    "net",
+]
+
+[dependencies.openssl]
+version = "0.10"
+features = [
+    "vendored",
+]
 
 [dev-dependencies]
-tokio = { version="0.2", features=["rt-threaded", "process", "dns", "blocking"] }
 env_logger = "0.6"
 anyhow = "1.0"
 ssh2 = "0.8"
 libssh2-sys = "0.2"
 nix = "0.17"
 simple_logger = "1.6"
-tokio-test = "0.2"
+tokio-test = "0.4"
+
+[dev-dependencies.tokio]
+version = "1.4"
+features = [
+    "rt-multi-thread",
+    "process",
+    #"dns",
+    #"blocking",
+]

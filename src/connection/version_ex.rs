@@ -1,139 +1,54 @@
-use std::future::Future;
-use std::pin::Pin;
-use std::task::{Context, Poll};
-
-use bytes::{Buf as _, Bytes, BytesMut};
-use futures::ready;
-use tokio::io::{AsyncRead, AsyncWrite};
+use tokio::io::{split, AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
 use crate::SshError;
 
-#[derive(Debug)]
-struct RecvState {
-    buf: BytesMut,
-    result: Option<String>,
-}
+const MAX_BUFFER: usize = 255;
 
-#[derive(Debug)]
-struct SendState {
-    name: String,
-    buf: Bytes,
-    flushed: bool,
-}
-
-#[derive(Debug)]
-pub(crate) struct VersionExchange<IO> {
-    io: Option<IO>,
-    recv: RecvState,
-    send: SendState,
-}
-
-impl<IO> VersionExchange<IO> {
-    pub(crate) fn new(io: IO, name: String) -> Self {
-        let name = format!("SSH-2.0-{}", name);
-        Self {
-            io: Some(io),
-            recv: RecvState {
-                buf: BytesMut::new(),
-                result: None,
-            },
-            send: SendState {
-                buf: Bytes::from(format!("{}\r\n", name)),
-                name,
-                flushed: false,
-            },
-        }
-    }
-}
-
-fn poll_recv<IO>(
-    mut io: &mut IO,
-
-    state: &mut RecvState,
-    cx: &mut Context<'_>,
-) -> Poll<Result<String, SshError>>
+async fn vex_recv<IO>(mut io: IO) -> Result<String, SshError>
 where
     IO: AsyncRead + Unpin,
 {
-    if let Some(result) = &state.result {
-        return Poll::Ready(Ok(result.clone()));
-    }
-
-    let mut b = [0];
+    let mut buf = Vec::with_capacity(MAX_BUFFER);
     loop {
-        match ready!(Pin::new(&mut io).poll_read(cx, &mut b))? {
-            0 => return Poll::Ready(Err(SshError::VersionUnexpectedEof(state.buf.clone()))),
-            1 => {
-                state.buf.extend_from_slice(&b);
-                if state.buf.len() > 255 {
-                    return Poll::Ready(Err(SshError::VersionTooLong));
-                }
-                if b[0] == b'\n' {
-                    break;
-                }
-            }
-            _ => unreachable!(),
+        let b = io.read_u8().await?;
+        buf.push(b);
+        if b == b'\n' {
+            break;
         }
     }
 
-    let result = match &state.buf[..] {
+    let result = match &buf[..] {
         [result @ .., b'\r', b'\n'] => result,
         [result @ .., b'\n'] => result, // for old libssh
         x => {
-            return Poll::Ready(Err(SshError::InvalidVersion(
+            return Err(SshError::InvalidVersion(
                 String::from_utf8_lossy(x).to_string(),
-            )))
+            ))
         }
     };
     let result = String::from_utf8_lossy(&result);
     if !result.starts_with("SSH-2.0-") {
-        return Poll::Ready(Err(SshError::InvalidVersion(result.to_string())));
+        return Err(SshError::InvalidVersion(result.to_string()));
     }
-    let result = result.to_string();
-    state.result = Some(result.clone());
-    Poll::Ready(Ok(result))
+    Ok(result.to_string())
 }
 
-fn poll_send<IO>(
-    mut io: &mut IO,
-    state: &mut SendState,
-    cx: &mut Context<'_>,
-) -> Poll<Result<String, SshError>>
+async fn vex_send<IO>(mut io: IO, name: &str) -> Result<String, SshError>
 where
     IO: AsyncWrite + Unpin,
 {
-    if !state.buf.has_remaining() && state.flushed {
-        return Poll::Ready(Ok(state.name.clone()));
-    }
-
-    if state.buf.has_remaining() {
-        ready!(Pin::new(&mut io).poll_write_buf(cx, &mut state.buf))?;
-    }
-    if !state.flushed {
-        ready!(Pin::new(&mut io).poll_flush(cx))?;
-    }
-    Poll::Ready(Ok(state.name.clone()))
+    let name = format!("SSH-2.0-{}", name);
+    io.write_all(format!("{}\r\n", name).as_bytes()).await?;
+    Ok(name)
 }
 
-impl<IO> Future for VersionExchange<IO>
+pub(crate) async fn vex<IO>(io: IO, name: &str) -> Result<(String, String), SshError>
 where
     IO: AsyncRead + AsyncWrite + Unpin,
 {
-    type Output = Result<(String, String, IO), SshError>;
-
-    fn poll(self: Pin<&mut Self>, cx: &mut Context<'_>) -> Poll<Self::Output> {
-        let this = self.get_mut();
-        assert!(this.io.is_some());
-
-        let recv = poll_recv(&mut this.io.as_mut().unwrap(), &mut this.recv, cx)?;
-        let send = poll_send(&mut this.io.as_mut().unwrap(), &mut this.send, cx)?;
-        match (recv, send) {
-            (Poll::Ready(recv), Poll::Ready(send)) => {
-                Poll::Ready(Ok((recv, send, this.io.take().unwrap())))
-            }
-            _ => Poll::Pending,
-        }
-    }
+    let (rx, tx) = split(io);
+    let (recv, send) = tokio::try_join!(vex_recv(rx), vex_send(tx, name))?;
+    Ok((recv, send))
 }
 
 #[cfg(test)]
@@ -145,24 +60,35 @@ mod tests {
 
     #[tokio::test]
     async fn test_vex() {
-        fn assert<P: Send + Unpin + 'static>() {}
-        assert::<VersionExchange<tokio::net::TcpStream>>();
-
         let mock = Builder::new()
             .read(b"SSH-2.0-ssh\r\n")
             .write(b"SSH-2.0-ssssh\r\n")
             .build();
-        let vex = VersionExchange::new(mock, "ssssh".into());
-        let (r, x, _) = vex.await.unwrap();
+        let (r, x) = super::vex(mock, "ssssh").await.unwrap();
         assert_eq!(&r, "SSH-2.0-ssh");
         assert_eq!(&x, "SSH-2.0-ssssh");
     }
 
     #[tokio::test]
+    async fn test_vex_rest() {
+        let mut mock = Builder::new()
+            .read(b"SSH-2.0-ssh\r\na")
+            .write(b"SSH-2.0-ssssh\r\n")
+            .build();
+        let (r, x) = super::vex(&mut mock, "ssssh").await.unwrap();
+        assert_eq!(&r, "SSH-2.0-ssh");
+        assert_eq!(&x, "SSH-2.0-ssssh");
+
+        let mut rest = String::new();
+        mock.read_to_string(&mut rest).await.unwrap();
+        assert_eq!("a", rest);
+    }
+
+    #[tokio::test]
     async fn test_vex_empty() {
         let mock = Builder::new().read(b"").write(b"SSH-2.0-ssssh\r\n").build();
-        let vex = VersionExchange::new(mock, "ssssh".into());
-        assert_err!(vex.await);
+        let result = super::vex(mock, "ssssh").await;
+        assert_err!(result);
     }
 
     #[tokio::test]
@@ -171,18 +97,17 @@ mod tests {
             .read(&[0; 256])
             .write(b"SSH-2.0-ssssh\r\n")
             .build();
-        let vex = VersionExchange::new(mock, "ssssh".into());
-        assert_err!(vex.await);
+        let result = super::vex(mock, "ssssh").await;
+        assert_err!(result);
     }
 
     #[tokio::test]
     async fn test_vex_ioerr() {
         let mock = Builder::new()
             .read_error(io::Error::new(io::ErrorKind::Other, ""))
-            .write(b"SSH-2.0-ssssh\r\n")
             .build();
-        let vex = VersionExchange::new(mock, "ssssh".into());
-        assert_err!(vex.await);
+        let result = super::vex(mock, "ssssh").await;
+        assert_err!(result);
     }
 
     #[tokio::test]
@@ -191,20 +116,16 @@ mod tests {
             .read(b"SSH-2.0-ssh\n")
             .write(b"SSH-2.0-ssssh\r\n")
             .build();
-        let vex = VersionExchange::new(mock, "ssssh".into());
-        let (r, x, _) = vex.await.unwrap();
+        let (r, x) = super::vex(mock, "ssssh").await.unwrap();
         assert_eq!(&r, "SSH-2.0-ssh");
         assert_eq!(&x, "SSH-2.0-ssssh");
     }
 
     #[tokio::test]
     async fn test_vex_invalid_version() {
-        let mock = Builder::new()
-            .read(b"S\r\n")
-            .write(b"SSH-2.0-ssssh\r\n")
-            .build();
-        let vex = VersionExchange::new(mock, "ssssh".into());
-        assert_err!(vex.await);
+        let mock = Builder::new().read(b"S\r\n").build();
+        let result = super::vex(mock, "ssssh").await;
+        assert_err!(result);
     }
 
     #[tokio::test]
@@ -212,7 +133,7 @@ mod tests {
         let mock = Builder::new()
             .write_error(io::Error::new(io::ErrorKind::Other, ""))
             .build();
-        let vex = VersionExchange::new(mock, "ssssh".into());
-        assert_err!(vex.await);
+        let result = super::vex(mock, "ssssh").await;
+        assert_err!(result);
     }
 }

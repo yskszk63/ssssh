@@ -173,7 +173,7 @@ impl Unpack for ChannelOpen {
             "x11" => Type::X11(Unpack::unpack(buf)?),
             "forwarded-tcpip" => Type::ForwardedTcpip(Unpack::unpack(buf)?),
             "direct-tcpip" => Type::DirectTcpip(Unpack::unpack(buf)?),
-            v => Type::Unknown(v.to_string(), buf.to_bytes()),
+            v => Type::Unknown(v.to_string(), buf.copy_to_bytes(buf.remaining())),
         };
 
         Ok(Self {

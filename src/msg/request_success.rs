@@ -19,7 +19,7 @@ impl Pack for RequestSuccess {
 
 impl Unpack for RequestSuccess {
     fn unpack<B: Buf>(buf: &mut B) -> Result<Self, UnpackError> {
-        let additional_data = buf.to_bytes();
+        let additional_data = buf.copy_to_bytes(buf.remaining());
 
         Ok(Self { additional_data })
     }

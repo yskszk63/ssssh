@@ -168,7 +168,7 @@ impl Unpack for Method {
             "publickey" => Self::Publickey(Unpack::unpack(buf)?),
             "password" => Self::Password(Unpack::unpack(buf)?),
             "hostbased" => Self::Hostbased(Unpack::unpack(buf)?),
-            x => Self::Unknown(x.into(), buf.to_bytes()),
+            x => Self::Unknown(x.into(), buf.copy_to_bytes(buf.remaining())),
         })
     }
 }

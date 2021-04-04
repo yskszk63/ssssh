@@ -109,7 +109,7 @@ impl State {
         kex: &Kex,
         algorithm: &Algorithm,
     ) -> Result<(), SshError> {
-        let session_id = self.session_id.as_ref().unwrap_or_else(|| &hash);
+        let session_id = self.session_id.as_ref().unwrap_or(&hash);
 
         let iv_ctos_len = Cipher::block_size_by_name(algorithm.cipher_algorithm_c2s());
         let iv_ctos = compute_hash(hash, secret, b'A', session_id, kex, iv_ctos_len);

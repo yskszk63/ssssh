@@ -6,7 +6,7 @@ use ssssh::{Handlers, ServerBuilder};
 
 #[tokio::test]
 async fn test() {
-    simple_logger::init().ok();
+    simple_logger::SimpleLogger::new().init().ok();
 
     let mut server = ServerBuilder::default().build("[::1]:2222").await.unwrap();
 

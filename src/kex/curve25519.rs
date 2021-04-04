@@ -3,7 +3,7 @@ use futures::sink::SinkExt as _;
 use ring::agreement::{agree_ephemeral, EphemeralPrivateKey, PublicKey, UnparsedPublicKey, X25519};
 use ring::error::Unspecified;
 use ring::rand::SystemRandom;
-use tokio::stream::StreamExt as _;
+use tokio_stream::StreamExt as _;
 
 use crate::msg::kex_ecdh_reply::KexEcdhReply;
 use crate::pack::{Mpint, Pack};
@@ -58,7 +58,7 @@ impl KexTrait for Curve25519Sha256 {
                 server_ephemeral_private_key,
                 &client_ephemeral_public_key,
                 Unspecified,
-                |mut e| Ok(e.to_bytes()),
+                |mut e| Ok(e.copy_to_bytes(e.remaining())),
             )
             .map_err(SshError::kex_error)?;
             Mpint::new(key.clone()).pack(&mut hasher);
@@ -67,9 +67,10 @@ impl KexTrait for Curve25519Sha256 {
 
             let signature = env.hostkey.sign(&hash);
 
+            let mut server_ephemeral_public_key = server_ephemeral_public_key.as_ref();
             let kex_ecdh_reply = KexEcdhReply::new(
                 env.hostkey.publickey(),
-                server_ephemeral_public_key.as_ref().to_bytes(),
+                server_ephemeral_public_key.copy_to_bytes(server_ephemeral_public_key.remaining()),
                 signature,
             );
 

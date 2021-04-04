@@ -4,7 +4,7 @@ use futures::future::FutureExt as _;
 use futures::sink::SinkExt as _;
 use openssl::bn::{BigNum, BigNumContext, BigNumContextRef, BigNumRef, MsbOption};
 use openssl::error::ErrorStack;
-use tokio::stream::StreamExt as _;
+use tokio_stream::StreamExt as _;
 
 use crate::msg::kex_dh_gex_group::KexDhGexGroup;
 use crate::msg::kex_dh_gex_reply::KexDhGexReply;
@@ -162,8 +162,9 @@ fn mod_exp(
 ) -> Result<Bytes, SshError> {
     let mut r = BigNum::new().map_err(SshError::kex_error)?;
     r.mod_exp(a, p, m, cx).map_err(SshError::kex_error)?;
-    let r = Mpint::new(r.to_vec()).as_ref().to_bytes();
-    Ok(r)
+    let r = Mpint::new(r.to_vec());
+    let mut r = r.as_ref();
+    Ok(r.copy_to_bytes(r.remaining()))
 }
 
 fn get_g() -> Result<BigNum, SshError> {

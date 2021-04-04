@@ -272,7 +272,7 @@ impl Unpack for ChannelRequest {
             "signal" => Type::Signal(Unpack::unpack(buf)?),
             "exit-status" => Type::ExitStatus(Unpack::unpack(buf)?),
             "exit-signal" => Type::ExitSignal(Unpack::unpack(buf)?),
-            x => Type::Unknown(x.into(), buf.to_bytes()),
+            x => Type::Unknown(x.into(), buf.copy_to_bytes(buf.remaining())),
         };
 
         Ok(Self {

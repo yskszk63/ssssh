@@ -30,13 +30,18 @@ impl KeyTrait for Ed25519 {
 
     fn publickey(&self) -> Bytes {
         let mut b = BytesMut::new();
-        self.pair.public_key().as_ref().to_bytes().pack(&mut b);
+        let public_key = self.pair.public_key();
+        let mut public_key = public_key.as_ref();
+        public_key
+            .copy_to_bytes(public_key.remaining())
+            .pack(&mut b);
         b.freeze()
     }
 
     fn sign(&self, target: &Bytes) -> Bytes {
         let sign = self.pair.sign(target.as_ref());
-        sign.as_ref().to_bytes()
+        let mut sign = sign.as_ref();
+        sign.copy_to_bytes(sign.remaining())
     }
 }
 

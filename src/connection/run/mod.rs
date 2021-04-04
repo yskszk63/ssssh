@@ -38,6 +38,17 @@ mod on_kexinit;
 mod on_service_request;
 mod on_userauth_request;
 
+type TaskStream = Arc<
+    Mutex<
+        CompletionStream<
+            (u32, bool, Vec<oneshot::Receiver<()>>),
+            Result<Option<u32>, HandlerError>,
+        >,
+    >,
+>;
+
+type OutputReaderMap = Arc<Mutex<ReaderMap<(u32, Option<DataTypeCode>), PipeRead>>>;
+
 struct LockNext<'a, S> {
     inner: &'a mut S,
 }
@@ -79,7 +90,7 @@ enum Channel {
 
 fn maybe_timeout(preference: &Preference) -> impl Future<Output = ()> {
     if let Some(timeout) = preference.timeout() {
-        Either::Left(time::delay_for(*timeout))
+        Either::Left(time::sleep(*timeout))
     } else {
         Either::Right(futures::future::pending())
     }
@@ -97,15 +108,8 @@ where
     preference: Arc<Preference>,
     handlers: Handlers<E>,
     channels: HashMap<u32, Channel>,
-    output_readers: Arc<Mutex<ReaderMap<(u32, Option<DataTypeCode>), PipeRead>>>,
-    completions: Arc<
-        Mutex<
-            CompletionStream<
-                (u32, bool, Vec<oneshot::Receiver<()>>),
-                Result<Option<u32>, HandlerError>,
-            >,
-        >,
-    >,
+    output_readers: OutputReaderMap,
+    completions: TaskStream,
     msg_queue_tx: mpsc::UnboundedSender<Msg>,
     msg_queue_rx: mpsc::UnboundedReceiver<Msg>,
     first_kexinit: Option<msg::kexinit::Kexinit>,
@@ -215,7 +219,7 @@ where
         let result = self.r#loop().await;
         if let Err(e) = &result {
             error!("error ocurred {}", e);
-            let t = e.reason_code().unwrap_or_else(|| ReasonCode::ProtocolError);
+            let t = e.reason_code().unwrap_or(ReasonCode::ProtocolError);
             let msg = Disconnect::new(t, "error occurred".into(), "".into());
             if let Err(e) = self.send(msg).await {
                 error!("failed to send disconnect: {}", e)
@@ -244,7 +248,8 @@ where
 
     async fn msg_loop(&mut self) -> Result<(), SshError> {
         loop {
-            let mut timeout = maybe_timeout(&self.preference);
+            let timeout = maybe_timeout(&self.preference);
+            tokio::pin!(timeout);
 
             tokio::select! {
                 msg = self.io.next() => {match msg {
@@ -258,7 +263,7 @@ where
     }
 
     async fn data_output_loop(
-        mut read: Arc<Mutex<ReaderMap<(u32, Option<DataTypeCode>), PipeRead>>>,
+        mut read: OutputReaderMap,
         mut queue: mpsc::UnboundedSender<Msg>,
     ) -> Result<(), SshError> {
         use msg::channel_data::ChannelData;
@@ -285,14 +290,7 @@ where
     }
 
     async fn task_loop(
-        mut tasks: Arc<
-            Mutex<
-                CompletionStream<
-                    (u32, bool, Vec<oneshot::Receiver<()>>),
-                    Result<Option<u32>, HandlerError>,
-                >,
-            >,
-        >,
+        mut tasks: TaskStream,
         mut queue: mpsc::UnboundedSender<Msg>,
     ) -> Result<(), SshError> {
         use msg::channel_close::ChannelClose;

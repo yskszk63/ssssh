@@ -1,10 +1,11 @@
+/// simple echo server (`examples/simple.rs`)
 use std::time::Duration;
 
 use futures::future::{ok, FutureExt as _, TryFutureExt as _};
 use futures::stream::TryStreamExt as _;
 use ssssh::{Handlers, ServerBuilder};
 
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
 

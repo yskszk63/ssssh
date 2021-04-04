@@ -1,10 +1,8 @@
-use std::mem::MaybeUninit;
 use std::os::unix::io::{AsRawFd, IntoRawFd, RawFd};
 use std::pin::Pin;
 use std::task::{Context, Poll};
 
-use bytes::buf::{Buf, BufMut};
-use tokio::io::{self, AsyncRead, AsyncWrite};
+use tokio::io::{self, AsyncRead, AsyncWrite, ReadBuf};
 use tokio_pipe::{PipeRead, PipeWrite};
 
 /// SSH data input.
@@ -21,24 +19,9 @@ impl AsyncRead for SshInput {
     fn poll_read(
         mut self: Pin<&mut Self>,
         cx: &mut Context<'_>,
-        buf: &mut [u8],
-    ) -> Poll<io::Result<usize>> {
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
         Pin::new(&mut self.0).poll_read(cx, buf)
-    }
-
-    fn poll_read_buf<B: BufMut>(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut B,
-    ) -> Poll<io::Result<usize>>
-    where
-        Self: Sized,
-    {
-        Pin::new(&mut self.0).poll_read_buf(cx, buf)
-    }
-
-    unsafe fn prepare_uninitialized_buffer(&self, buf: &mut [MaybeUninit<u8>]) -> bool {
-        self.0.prepare_uninitialized_buffer(buf)
     }
 }
 
@@ -83,17 +66,6 @@ impl AsyncWrite for SshOutput {
     ) -> Poll<Result<(), io::Error>> {
         Pin::new(&mut self.0).poll_shutdown(cx)
     }
-
-    fn poll_write_buf<B: Buf>(
-        mut self: Pin<&mut Self>,
-        cx: &mut Context<'_>,
-        buf: &mut B,
-    ) -> Poll<Result<usize, io::Error>>
-    where
-        Self: Sized,
-    {
-        Pin::new(&mut self.0).poll_write_buf(cx, buf)
-    }
 }
 
 impl AsRawFd for SshOutput {
@@ -105,5 +77,27 @@ impl AsRawFd for SshOutput {
 impl IntoRawFd for SshOutput {
     fn into_raw_fd(self) -> RawFd {
         self.0.into_raw_fd()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn test_ssh_input() {
+        use tokio::io::AsyncWriteExt;
+        use tokio_pipe::pipe;
+
+        let (rx, mut tx) = pipe().unwrap();
+        let mut rx = SshInput::new(rx);
+
+        tokio::spawn(async move {
+            tx.write_all(b"Hello, World!").await.unwrap();
+        });
+
+        let mut b = vec![];
+        let n = tokio::io::copy(&mut rx, &mut b).await.unwrap();
+        assert_eq!(b"Hello, World!".len(), n as usize);
     }
 }

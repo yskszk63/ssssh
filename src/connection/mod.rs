@@ -89,9 +89,8 @@ where
 
     ///! Performe SSH version exchange.
     pub async fn accept(self) -> Result<Connection<Established<IO>>, SshError> {
-        let Accept { io, preference } = self.state;
-        let (c_version, s_version, io) =
-            version_ex::VersionExchange::new(io, preference.name().to_string()).await?;
+        let Accept { mut io, preference } = self.state;
+        let (c_version, s_version) = version_ex::vex(&mut io, preference.name()).await?;
         Ok(Connection {
             state: Established::new(io, c_version, s_version, preference),
         })

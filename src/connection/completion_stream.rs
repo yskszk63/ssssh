@@ -4,10 +4,11 @@ use std::mem;
 use std::pin::Pin;
 use std::task::{Context, Poll, Waker};
 
+use futures::future::BoxFuture;
 use futures::stream::Stream;
 
 pub(crate) struct CompletionStream<A, O> {
-    tasks: Vec<(A, Pin<Box<dyn Future<Output = O> + Send + 'static>>)>,
+    tasks: Vec<(A, BoxFuture<'static, O>)>,
     waker: Option<Waker>,
 }
 

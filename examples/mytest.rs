@@ -7,7 +7,7 @@ use futures::stream::TryStreamExt as _;
 use ssssh::ServerBuilder;
 use ssssh::{Handlers, PasswordResult};
 
-#[tokio::main(basic_scheduler)]
+#[tokio::main(flavor = "current_thread")]
 async fn main() -> anyhow::Result<()> {
     env_logger::init();
 
@@ -17,7 +17,7 @@ async fn main() -> anyhow::Result<()> {
         .await?;
 
     use tokio::process::Command;
-    let proc = Command::new("ssh")
+    let mut proc = Command::new("ssh")
         .arg("-oStrictHostKeyChecking=no")
         .arg("-oUserKnownHostsFile=/dev/null")
         .arg("-p2222")
@@ -48,7 +48,7 @@ async fn main() -> anyhow::Result<()> {
 
         connection.run(handlers).await?;
     }
-    proc.await.unwrap();
+    proc.wait().await.unwrap();
 
     Ok(())
 }

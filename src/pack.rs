@@ -1,7 +1,7 @@
 use std::iter::FromIterator;
 use std::string::FromUtf8Error;
 
-use bytes::buf::{Buf, BufExt as _};
+use bytes::buf::Buf;
 use bytes::{Bytes, BytesMut};
 use thiserror::Error;
 
@@ -115,7 +115,7 @@ impl Unpack for String {
             return Err(UnpackError::UnexpectedEof);
         }
 
-        let s = buf.take(len).to_bytes();
+        let s = buf.copy_to_bytes(len);
         let s = String::from_utf8(s.to_vec())?;
         Ok(s)
     }
@@ -134,7 +134,8 @@ impl Mpint {
             b.advance(1);
         }
         if b.has_remaining() && b[0] & 0x80 != 0 {
-            b = (&[0x00][..]).chain(b).to_bytes();
+            let len = b.len();
+            b = (&[0x00][..]).chain(b).copy_to_bytes(len + 1);
         }
         Self(b)
     }
@@ -207,7 +208,7 @@ impl Unpack for Bytes {
             return Err(UnpackError::UnexpectedEof);
         }
 
-        let b = buf.take(len).to_bytes();
+        let b = buf.copy_to_bytes(len);
         Ok(b)
     }
 }

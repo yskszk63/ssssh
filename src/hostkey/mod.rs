@@ -2,13 +2,13 @@
 use std::path::{Path, PathBuf};
 use std::str::FromStr;
 
-use bytes::buf::BufExt as _;
 use bytes::{Buf, Bytes};
 use futures::future::{ok, ready};
 use futures::stream::{StreamExt as _, TryStreamExt as _};
 use linked_hash_map::LinkedHashMap;
 use tokio::fs::File;
 use tokio::io::{AsyncBufReadExt as _, BufReader};
+use tokio_stream::wrappers::LinesStream;
 
 use crate::key::{Algorithm, Key, PublicKey};
 use crate::negotiate::AlgorithmName;
@@ -83,7 +83,10 @@ impl HostKeys {
         Ok(())
     }
 
-    pub(crate) async fn load(&mut self, path: &PathBuf) -> Result<(), SshError> {
+    pub(crate) async fn load<P>(&mut self, path: P) -> Result<(), SshError>
+    where
+        P: AsRef<Path>,
+    {
         // https://cvsweb.openbsd.org/src/usr.bin/ssh/PROTOCOL.key?annotate=HEAD
 
         const AUTH_MAGIC: &[u8] = b"openssh-key-v1\0";
@@ -93,8 +96,7 @@ impl HostKeys {
         let f = File::open(path).await?;
         let f = BufReader::new(f);
 
-        let data = f
-            .lines()
+        let data = LinesStream::new(f.lines())
             .try_skip_while(|l| ok(l != MARK_BEGIN))
             .skip(1)
             .take_while(|l| ready(l.is_ok() && l.as_ref().unwrap() != MARK_END))
@@ -104,7 +106,10 @@ impl HostKeys {
         let data = base64::decode(&data).map_err(|_| SshError::UnsupportedKeyFileFormat)?;
         let mut data = Bytes::from(data);
 
-        let auth_magic = (&mut data).take(AUTH_MAGIC.len()).to_bytes();
+        if data.len() < AUTH_MAGIC.len() {
+            return Err(SshError::UnsupportedKeyFileFormat);
+        }
+        let auth_magic = (&mut data).copy_to_bytes(AUTH_MAGIC.len());
         if auth_magic != AUTH_MAGIC {
             return Err(SshError::UnsupportedKeyFileFormat);
         }
@@ -135,5 +140,16 @@ impl HostKeys {
         }
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn incorrect_host_key() {
+        let mut hostkeys = HostKeys::new();
+        hostkeys.load("Cargo.toml").await.unwrap_err();
     }
 }

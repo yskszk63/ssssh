@@ -1,6 +1,6 @@
 use tokio::io::{AsyncRead, AsyncWrite};
 
-use crate::msg::global_request::GlobalRequest;
+use crate::msg::global_request::{GlobalRequest, Type};
 use crate::msg::request_failure::RequestFailure;
 
 use crate::HandlerError;
@@ -17,7 +17,18 @@ where
         global_request: &GlobalRequest,
     ) -> Result<(), SshError> {
         match global_request.typ() {
-            _ => {
+            Type::TcpipForward(..) => {
+                log::debug!("not implemented for tcpip forward.");
+                let r = RequestFailure::new();
+                self.send(r).await?;
+            }
+            Type::CancelTcpipForward(..) => {
+                log::debug!("not implemented for cancel tcpip forward.");
+                let r = RequestFailure::new();
+                self.send(r).await?;
+            }
+            Type::Unknown(..) => {
+                log::debug!("unknown request.");
                 let r = RequestFailure::new();
                 self.send(r).await?;
             }

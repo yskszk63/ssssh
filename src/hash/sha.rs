@@ -17,7 +17,9 @@ impl HasherTrait for Sha1 {
     }
 
     fn finish(self) -> Bytes {
-        self.0.finish().as_ref().to_bytes()
+        let hash = self.0.finish();
+        let mut hash = hash.as_ref();
+        hash.copy_to_bytes(hash.remaining())
     }
 }
 
@@ -41,7 +43,9 @@ impl HasherTrait for Sha256 {
     }
 
     fn finish(self) -> Bytes {
-        self.0.finish().as_ref().to_bytes()
+        let hash = self.0.finish();
+        let mut hash = hash.as_ref();
+        hash.copy_to_bytes(hash.remaining())
     }
 }
 
@@ -65,7 +69,9 @@ impl HasherTrait for Sha512 {
     }
 
     fn finish(self) -> Bytes {
-        self.0.finish().as_ref().to_bytes()
+        let hash = self.0.finish();
+        let mut hash = hash.as_ref();
+        hash.copy_to_bytes(hash.remaining())
     }
 }
 
