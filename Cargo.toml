@@ -3,6 +3,9 @@ name = "ssssh"
 version = "0.1.0"
 authors = ["yskszk63 <yskszk63@gmail.com>"]
 edition = "2018"
+repository = "https://github.com/yskszk63/ssssh"
+readme = "README.md"
+license = "MIT OR Apache-2.0"
 
 [dependencies]
 futures = "0.3"

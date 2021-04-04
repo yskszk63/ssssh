@@ -1,3 +1,4 @@
+/// simple echo server (`examples/simple.rs`)
 use std::time::Duration;
 
 use futures::future::{ok, FutureExt as _, TryFutureExt as _};
