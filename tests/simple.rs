@@ -12,7 +12,7 @@ async fn test() {
 
     let mut handlers = Handlers::<anyhow::Error>::new();
     handlers.on_auth_none(|_| ok(true).boxed());
-    handlers.on_channel_shell(|_, _, _| ok(0).boxed());
+    handlers.on_channel_shell(|_| ok(0).boxed());
 
     let proc = Command::new("ssh")
         .env_clear()

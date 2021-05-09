@@ -17,7 +17,7 @@ async fn password() {
         assert_eq!(&password, "bar");
         ok(PasswordResult::Ok).boxed()
     });
-    handlers.on_channel_shell(|_, _, _| ok(0).boxed());
+    handlers.on_channel_shell(|_| ok(0).boxed());
 
     let task = tokio::task::spawn_blocking(|| {
         let connection = TcpStream::connect("[::1]:2222").unwrap();

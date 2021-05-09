@@ -35,7 +35,8 @@ async fn main() -> anyhow::Result<()> {
                 handlers.on_auth_change_password(|_, _, _| ok(PasswordResult::Failure).boxed());
                 handlers.on_auth_hostbased(|_, _, _, _| ok(true).boxed());
 
-                handlers.on_channel_shell(|mut stdin, mut stdout: SshOutput, _| {
+                handlers.on_channel_shell(|mut ctx: ssssh::SessionContext| {
+                    let (mut stdin, mut stdout, _) = ctx.take_stdio().unwrap();
                     async move {
                         tokio::io::copy(&mut stdin, &mut stdout).await?;
                         stdout.shutdown().await?;
@@ -44,7 +45,8 @@ async fn main() -> anyhow::Result<()> {
                     .boxed()
                 });
 
-                handlers.on_channel_exec(|_, mut stdout: SshOutput, _, _| {
+                handlers.on_channel_exec(|mut ctx: ssssh::SessionContext, _| {
+                    let (_, mut stdout, _) = ctx.take_stdio().unwrap();
                     async move {
                         stdout.write(b"Hello, World!").await?;
                         stdout.shutdown().await?;

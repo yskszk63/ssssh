@@ -8,7 +8,6 @@ use tokio::process::Command;
 
 use ssssh::Handlers;
 use ssssh::ServerBuilder;
-use ssssh::{SshInput, SshOutput};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
@@ -23,7 +22,8 @@ async fn main() -> anyhow::Result<()> {
 
                 handlers.on_auth_none(|_| ok(true).boxed());
                 handlers.on_channel_shell(
-                    |stdin: SshInput, stdout: SshOutput, stderr: SshOutput| {
+                    |mut ctx: ssssh::SessionContext| {
+                        let (stdin, stdout, stderr) = ctx.take_stdio().unwrap();
                         async move {
                             let stdin = unsafe { Stdio::from_raw_fd(stdin.into_raw_fd()) };
                             let stdout = unsafe { Stdio::from_raw_fd(stdout.into_raw_fd()) };

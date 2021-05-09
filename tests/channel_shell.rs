@@ -8,7 +8,7 @@ use nix::sys::memfd::{memfd_create, MemFdCreateFlag};
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
-use ssssh::{Handlers, ServerBuilder, SshOutput};
+use ssssh::{Handlers, ServerBuilder};
 
 #[tokio::test]
 async fn shell() {
@@ -24,7 +24,8 @@ async fn shell() {
 
     let mut handlers = Handlers::<anyhow::Error>::new();
     handlers.on_auth_none(|_| ok(true).boxed());
-    handlers.on_channel_shell(|mut stdin, mut stdout, mut stderr: SshOutput| {
+    handlers.on_channel_shell(|mut ctx: ssssh::SessionContext| {
+        let (mut stdin, mut stdout, mut stderr) = ctx.take_stdio().unwrap();
         async move {
             tokio::io::copy(&mut stdin, &mut stdout).await.unwrap();
             stderr.write(b"hello, stderr!").await.unwrap();

@@ -10,6 +10,25 @@ use crate::{SshInput, SshOutput};
 
 pub(crate) type HandlerError = Box<dyn StdError + Send + Sync + 'static>;
 
+/// Context for SSH Session.
+pub struct SessionContext {
+    // TODO env
+    // TODO pty
+    stdio: Option<(SshInput, SshOutput, SshOutput)>,
+}
+
+impl SessionContext {
+    pub(crate) fn new(stdin: SshInput, stdout: SshOutput, stderr: SshOutput) -> Self {
+        Self {
+            stdio: Some((stdin, stdout, stderr)),
+        }
+    }
+
+    pub fn take_stdio(&mut self) -> Option<(SshInput, SshOutput, SshOutput)> {
+        self.stdio.take()
+    }
+}
+
 /// Password authentication result.
 #[derive(Debug)]
 pub enum PasswordResult {
@@ -158,26 +177,22 @@ pub trait ChannelShellHandler: Send {
 
     fn handle(
         &mut self,
-        stdin: SshInput,
-        stdout: SshOutput,
-        stderr: SshOutput,
+        ctx: SessionContext,
     ) -> BoxFuture<'static, Result<u32, Self::Error>>;
 }
 
 impl<F, E> ChannelShellHandler for F
 where
-    F: Fn(SshInput, SshOutput, SshOutput) -> BoxFuture<'static, Result<u32, E>> + Send,
+    F: Fn(SessionContext) -> BoxFuture<'static, Result<u32, E>> + Send,
     E: Into<HandlerError> + Send + 'static,
 {
     type Error = E;
 
     fn handle(
         &mut self,
-        stdin: SshInput,
-        stdout: SshOutput,
-        stderr: SshOutput,
+        ctx: SessionContext,
     ) -> BoxFuture<'static, Result<u32, Self::Error>> {
-        self(stdin, stdout, stderr)
+        self(ctx)
     }
 }
 
@@ -186,28 +201,24 @@ pub trait ChannelExecHandler: Send {
 
     fn handle(
         &mut self,
-        stdin: SshInput,
-        stdout: SshOutput,
-        stderr: SshOutput,
+        ctx: SessionContext,
         prog: OsString,
     ) -> BoxFuture<'static, Result<u32, Self::Error>>;
 }
 
 impl<F, E> ChannelExecHandler for F
 where
-    F: Fn(SshInput, SshOutput, SshOutput, OsString) -> BoxFuture<'static, Result<u32, E>> + Send,
+    F: Fn(SessionContext, OsString) -> BoxFuture<'static, Result<u32, E>> + Send,
     E: Into<HandlerError> + Send + 'static,
 {
     type Error = E;
 
     fn handle(
         &mut self,
-        stdin: SshInput,
-        stdout: SshOutput,
-        stderr: SshOutput,
+        ctx: SessionContext,
         prog: OsString,
     ) -> BoxFuture<'static, Result<u32, Self::Error>> {
-        self(stdin, stdout, stderr, prog)
+        self(ctx, prog)
     }
 }
 
@@ -422,7 +433,8 @@ where
         stderr: SshOutput,
     ) -> Option<BoxFuture<'static, Result<u32, E>>> {
         if let Some(handler) = &mut self.channel_shell {
-            Some(handler.handle(stdin, stdout, stderr))
+            let ctx = SessionContext::new(stdin, stdout, stderr);
+            Some(handler.handle(ctx))
         } else {
             None
         }
@@ -436,7 +448,8 @@ where
         prog: OsString,
     ) -> Option<BoxFuture<'static, Result<u32, E>>> {
         if let Some(handler) = &mut self.channel_exec {
-            Some(handler.handle(stdin, stdout, stderr, prog))
+            let ctx = SessionContext::new(stdin, stdout, stderr);
+            Some(handler.handle(ctx, prog))
         } else {
             None
         }

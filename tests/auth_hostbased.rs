@@ -14,7 +14,7 @@ async fn hostbased() {
 
     let mut handlers = Handlers::<anyhow::Error>::new();
     handlers.on_auth_hostbased(|_, _, _, _| ok(true).boxed());
-    handlers.on_channel_shell(|_, _, _| ok(0).boxed());
+    handlers.on_channel_shell(|_| ok(0).boxed());
 
     let task = tokio::task::spawn_blocking(|| {
         let connection = TcpStream::connect("[::1]:2222").unwrap();
