@@ -1,4 +1,5 @@
 use std::collections::hash_map::Entry;
+use std::collections::HashMap;
 
 use log::debug;
 use tokio::io::{AsyncRead, AsyncWrite};
@@ -45,7 +46,8 @@ where
         let (r, w) = tokio_pipe::pipe()?;
         let stdin_rx = SshInput::new(r);
 
-        let channel = Channel::Session(chid, Some(w), Some(stdin_rx));
+        let env = HashMap::new();
+        let channel = Channel::Session(chid, Some(w), Some(stdin_rx), env);
         if let Entry::Vacant(entry) = self.channels.entry(chid) {
             entry.insert(channel);
 

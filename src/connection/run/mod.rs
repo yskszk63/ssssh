@@ -84,7 +84,12 @@ impl<S> MutexStream for Arc<Mutex<S>> {
 
 #[derive(Debug)]
 enum Channel {
-    Session(u32, Option<PipeWrite>, Option<SshInput>),
+    Session(
+        u32,
+        Option<PipeWrite>,
+        Option<SshInput>,
+        HashMap<String, String>,
+    ),
     DirectTcpip(u32, Option<PipeWrite>),
 }
 

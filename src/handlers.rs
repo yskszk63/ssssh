@@ -1,5 +1,6 @@
 //! SSH handler
 
+use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::ffi::OsString;
 use std::fmt;
@@ -12,20 +13,30 @@ pub(crate) type HandlerError = Box<dyn StdError + Send + Sync + 'static>;
 
 /// Context for SSH Session.
 pub struct SessionContext {
-    // TODO env
     // TODO pty
     stdio: Option<(SshInput, SshOutput, SshOutput)>,
+    env: HashMap<String, String>,
 }
 
 impl SessionContext {
-    pub(crate) fn new(stdin: SshInput, stdout: SshOutput, stderr: SshOutput) -> Self {
+    pub(crate) fn new(
+        stdin: SshInput,
+        stdout: SshOutput,
+        stderr: SshOutput,
+        env: HashMap<String, String>,
+    ) -> Self {
         Self {
             stdio: Some((stdin, stdout, stderr)),
+            env,
         }
     }
 
     pub fn take_stdio(&mut self) -> Option<(SshInput, SshOutput, SshOutput)> {
         self.stdio.take()
+    }
+
+    pub fn env(&self) -> &HashMap<String, String> {
+        &self.env
     }
 }
 
@@ -175,10 +186,7 @@ where
 pub trait ChannelShellHandler: Send {
     type Error: Into<HandlerError> + Send + 'static;
 
-    fn handle(
-        &mut self,
-        ctx: SessionContext,
-    ) -> BoxFuture<'static, Result<u32, Self::Error>>;
+    fn handle(&mut self, ctx: SessionContext) -> BoxFuture<'static, Result<u32, Self::Error>>;
 }
 
 impl<F, E> ChannelShellHandler for F
@@ -188,10 +196,7 @@ where
 {
     type Error = E;
 
-    fn handle(
-        &mut self,
-        ctx: SessionContext,
-    ) -> BoxFuture<'static, Result<u32, Self::Error>> {
+    fn handle(&mut self, ctx: SessionContext) -> BoxFuture<'static, Result<u32, Self::Error>> {
         self(ctx)
     }
 }
@@ -431,9 +436,10 @@ where
         stdin: SshInput,
         stdout: SshOutput,
         stderr: SshOutput,
+        env: HashMap<String, String>,
     ) -> Option<BoxFuture<'static, Result<u32, E>>> {
         if let Some(handler) = &mut self.channel_shell {
-            let ctx = SessionContext::new(stdin, stdout, stderr);
+            let ctx = SessionContext::new(stdin, stdout, stderr, env);
             Some(handler.handle(ctx))
         } else {
             None
@@ -446,9 +452,10 @@ where
         stdout: SshOutput,
         stderr: SshOutput,
         prog: OsString,
+        env: HashMap<String, String>,
     ) -> Option<BoxFuture<'static, Result<u32, E>>> {
         if let Some(handler) = &mut self.channel_exec {
-            let ctx = SessionContext::new(stdin, stdout, stderr);
+            let ctx = SessionContext::new(stdin, stdout, stderr, env);
             Some(handler.handle(ctx, prog))
         } else {
             None

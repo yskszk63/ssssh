@@ -19,7 +19,7 @@ where
         let data = channel_data.data().as_ref();
         if let Some(channel) = self.channels.get_mut(chid) {
             match channel {
-                Channel::Session(_, stdin, _) | Channel::DirectTcpip(_, stdin) => match stdin {
+                Channel::Session(_, stdin, _, _) | Channel::DirectTcpip(_, stdin) => match stdin {
                     Some(stdin) => {
                         stdin.write_all(&data).await?;
                     }

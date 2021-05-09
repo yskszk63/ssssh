@@ -32,7 +32,8 @@ async fn main() -> anyhow::Result<()> {
                 let mut handlers = Handlers::<anyhow::Error>::new();
 
                 handlers.on_auth_none(|_| ok(true).boxed());
-                handlers.on_channel_shell(|mut stdin, mut stdout, _| {
+                handlers.on_channel_shell(|mut ctx: ssssh::SessionContext| {
+                    let (mut stdin, mut stdout, _) = ctx.take_stdio().unwrap();
                     async move {
                         tokio::io::copy(&mut stdin, &mut stdout).await?;
                         Ok(0)

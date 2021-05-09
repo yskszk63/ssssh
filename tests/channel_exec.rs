@@ -24,18 +24,19 @@ async fn exec() {
 
     let mut handlers = Handlers::<anyhow::Error>::new();
     handlers.on_auth_none(|_| ok(true).boxed());
-    handlers.on_channel_exec(
-        |mut ctx: ssssh::SessionContext, prog: OsString| {
-            let (mut stdin, mut stdout, mut stderr) = ctx.take_stdio().unwrap();
-            async move {
-                assert_eq!("cat /proc/cpuinfo", prog.to_str().unwrap());
-                tokio::io::copy(&mut stdin, &mut stdout).await.unwrap();
-                stderr.write(b"hello, stderr!").await.unwrap();
-                Ok(0)
-            }
-            .boxed()
-        },
-    );
+    handlers.on_channel_exec(|mut ctx: ssssh::SessionContext, prog: OsString| {
+        let (mut stdin, mut stdout, mut stderr) = ctx.take_stdio().unwrap();
+        if ctx.env().get("LANG") != Some(&"C".into()) {
+            panic!()
+        }
+        async move {
+            assert_eq!("cat /proc/cpuinfo", prog.to_str().unwrap());
+            tokio::io::copy(&mut stdin, &mut stdout).await.unwrap();
+            stderr.write(b"hello, stderr!").await.unwrap();
+            Ok(0)
+        }
+        .boxed()
+    });
 
     let proc = Command::new("ssh")
         .env_clear()

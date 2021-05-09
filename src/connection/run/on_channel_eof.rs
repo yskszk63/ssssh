@@ -17,7 +17,7 @@ where
         let chid = channel_eof.recipient_channel();
         if let Some(channel) = self.channels.get_mut(chid) {
             match channel {
-                Channel::Session(_, stdin, _) | Channel::DirectTcpip(_, stdin) => {
+                Channel::Session(_, stdin, _, _) | Channel::DirectTcpip(_, stdin) => {
                     if let Some(mut stdin) = stdin.take() {
                         stdin.shutdown().await?;
                     }

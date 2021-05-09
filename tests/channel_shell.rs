@@ -26,6 +26,9 @@ async fn shell() {
     handlers.on_auth_none(|_| ok(true).boxed());
     handlers.on_channel_shell(|mut ctx: ssssh::SessionContext| {
         let (mut stdin, mut stdout, mut stderr) = ctx.take_stdio().unwrap();
+        if ctx.env().get("LANG") != Some(&"C".into()) {
+            panic!()
+        }
         async move {
             tokio::io::copy(&mut stdin, &mut stdout).await.unwrap();
             stderr.write(b"hello, stderr!").await.unwrap();

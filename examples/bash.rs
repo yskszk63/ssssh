@@ -21,24 +21,22 @@ async fn main() -> anyhow::Result<()> {
                 let mut handlers = Handlers::<anyhow::Error>::new();
 
                 handlers.on_auth_none(|_| ok(true).boxed());
-                handlers.on_channel_shell(
-                    |mut ctx: ssssh::SessionContext| {
-                        let (stdin, stdout, stderr) = ctx.take_stdio().unwrap();
-                        async move {
-                            let stdin = unsafe { Stdio::from_raw_fd(stdin.into_raw_fd()) };
-                            let stdout = unsafe { Stdio::from_raw_fd(stdout.into_raw_fd()) };
-                            let stderr = unsafe { Stdio::from_raw_fd(stderr.into_raw_fd()) };
-                            let status = Command::new("bash")
-                                .stdin(stdin)
-                                .stdout(stdout)
-                                .stderr(stderr)
-                                .status()
-                                .await?;
-                            Ok(status.code().unwrap_or(255) as u32)
-                        }
-                        .boxed()
-                    },
-                );
+                handlers.on_channel_shell(|mut ctx: ssssh::SessionContext| {
+                    let (stdin, stdout, stderr) = ctx.take_stdio().unwrap();
+                    async move {
+                        let stdin = unsafe { Stdio::from_raw_fd(stdin.into_raw_fd()) };
+                        let stdout = unsafe { Stdio::from_raw_fd(stdout.into_raw_fd()) };
+                        let stderr = unsafe { Stdio::from_raw_fd(stderr.into_raw_fd()) };
+                        let status = Command::new("bash")
+                            .stdin(stdin)
+                            .stdout(stdout)
+                            .stderr(stderr)
+                            .status()
+                            .await?;
+                        Ok(status.code().unwrap_or(255) as u32)
+                    }
+                    .boxed()
+                });
                 conn.run(handlers).await?;
                 Ok::<_, anyhow::Error>(())
             }
