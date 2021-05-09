@@ -36,8 +36,10 @@ async fn shell() {
 
     let proc = Command::new("ssh")
         .env_clear()
+        .env("LANG", "C")
         .arg("-oStrictHostKeyChecking=no")
         .arg("-oUserKnownHostsFile=/dev/null")
+        .arg("-oSendEnv=LANG")
         .arg("-p2222")
         .arg("-q")
         .arg("::1")
