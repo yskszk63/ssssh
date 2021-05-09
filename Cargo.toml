@@ -15,7 +15,7 @@ ring = { version="0.16", features = ["std"] }
 log = "0.4"
 getset = "0.1"
 derive-new = "0.5"
-derive_builder = "0.9"
+derive_builder = "0.10"
 linked-hash-map = "0.5"
 base64 = "0.13"
 tokio-pipe = "0.2"
@@ -45,11 +45,11 @@ features = [
 ]
 
 [dev-dependencies]
-env_logger = "0.6"
+env_logger = "0.8"
 anyhow = "1.0"
-ssh2 = "0.8"
+ssh2 = "0.9"
 libssh2-sys = "0.2"
-nix = "0.17"
+nix = "0.20"
 simple_logger = "1.6"
 tokio-test = "0.4"
 
