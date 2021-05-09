@@ -5,7 +5,7 @@ use crate::HandlerError;
 
 use super::{Runner, SshError};
 
-impl<IO, E> Runner<IO, E>
+impl<IO, E, Pty> Runner<IO, E, Pty>
 where
     IO: AsyncRead + AsyncWrite + Unpin + Send,
     E: Into<HandlerError> + Send + 'static,

@@ -106,7 +106,7 @@ where
     }
 
     ///! Run with [`ssssh::Handlers`]
-    pub async fn run<E>(self, handler: Handlers<E>) -> Result<(), SshError>
+    pub async fn run<E, Pty>(self, handler: Handlers<E, Pty>) -> Result<(), SshError>
     where
         E: Into<HandlerError> + Send + 'static,
     {

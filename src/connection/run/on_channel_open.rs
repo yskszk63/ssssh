@@ -11,7 +11,7 @@ use crate::HandlerError;
 
 use super::{Channel, Runner, SshError, SshInput};
 
-impl<IO, E> Runner<IO, E>
+impl<IO, E, Pty> Runner<IO, E, Pty>
 where
     IO: AsyncRead + AsyncWrite + Unpin + Send,
     E: Into<HandlerError> + Send + 'static,
@@ -47,7 +47,7 @@ where
         let stdin_rx = SshInput::new(r);
 
         let env = HashMap::new();
-        let channel = Channel::Session(chid, Some(w), Some(stdin_rx), env);
+        let channel = Channel::Session(chid, Some(w), Some(stdin_rx), env, None);
         if let Entry::Vacant(entry) = self.channels.entry(chid) {
             entry.insert(channel);
 
