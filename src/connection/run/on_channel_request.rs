@@ -4,7 +4,7 @@ use tokio::io::{AsyncRead, AsyncWrite};
 
 use crate::msg::channel_extended_data::DataTypeCode;
 use crate::msg::channel_failure::ChannelFailure;
-use crate::msg::channel_request::{ChannelRequest, Type};
+use crate::msg::channel_request::{ChannelRequest, PtyReq, Type};
 use crate::msg::channel_success::ChannelSuccess;
 
 use crate::HandlerError;
@@ -27,18 +27,7 @@ where
                 self.on_channel_request_env(channel_request, env.name(), env.value())
                     .await
             }
-            Type::PtyReq(pty) => {
-                self.on_channel_request_pty(
-                    channel_request,
-                    pty.term().to_owned(),
-                    *pty.width(),
-                    *pty.height(),
-                    *pty.width_px(),
-                    *pty.height_px(),
-                    Vec::from(pty.modes().as_ref()),
-                )
-                .await
-            }
+            Type::PtyReq(pty) => self.on_channel_request_pty(channel_request, pty).await,
             _ => {
                 let r = ChannelFailure::new(*channel_request.recipient_channel());
                 self.send(r).await?;
@@ -140,23 +129,24 @@ where
     pub(crate) async fn on_channel_request_pty(
         &mut self,
         channel_request: &ChannelRequest,
-        term: String,
-        width: u32,
-        height: u32,
-        width_px: u32,
-        height_px: u32,
-        modes: Vec<u8>,
+        ptyreq: &PtyReq,
     ) -> Result<(), SshError> {
         let channel = *channel_request.recipient_channel();
+        let term = ptyreq.term();
+        let width = ptyreq.width();
+        let height = ptyreq.height();
+        let width_px = ptyreq.width_px();
+        let height_px = ptyreq.height_px();
+        let modes = ptyreq.modes();
 
         if let Some(Channel::Session(_, _, _, _, ref mut pty)) = self.channels.get_mut(&channel) {
             if let Some(fut) = self.handlers.dispatch_channel_pty_req(
                 term.to_owned(),
-                width,
-                height,
-                width_px,
-                height_px,
-                Vec::from(modes),
+                *width,
+                *height,
+                *width_px,
+                *height_px,
+                modes.into_iter().cloned().collect(),
             ) {
                 match fut.await {
                     Ok(p) => {

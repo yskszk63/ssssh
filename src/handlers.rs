@@ -424,11 +424,9 @@ where
         &mut self,
         username: String,
     ) -> Option<BoxFuture<'static, Result<bool, E>>> {
-        if let Some(handler) = &mut self.auth_none {
-            Some(handler.handle(username))
-        } else {
-            None
-        }
+        self.auth_none
+            .as_mut()
+            .map(|handler| handler.handle(username))
     }
 
     pub(crate) fn dispatch_auth_publickey(
@@ -437,11 +435,9 @@ where
         algorithm: String,
         publickey: String,
     ) -> Option<BoxFuture<'static, Result<bool, E>>> {
-        if let Some(handler) = &mut self.auth_publickey {
-            Some(handler.handle(username, algorithm, publickey))
-        } else {
-            None
-        }
+        self.auth_publickey
+            .as_mut()
+            .map(|handler| handler.handle(username, algorithm, publickey))
     }
 
     pub(crate) fn dispatch_auth_password(
@@ -449,11 +445,9 @@ where
         username: String,
         password: String,
     ) -> Option<BoxFuture<'static, Result<PasswordResult, E>>> {
-        if let Some(handler) = &mut self.auth_password {
-            Some(handler.handle(username, password))
-        } else {
-            None
-        }
+        self.auth_password
+            .as_mut()
+            .map(|handler| handler.handle(username, password))
     }
 
     pub(crate) fn dispatch_auth_change_password(
@@ -462,11 +456,9 @@ where
         oldpassword: String,
         newpassword: String,
     ) -> Option<BoxFuture<'static, Result<PasswordResult, E>>> {
-        if let Some(handler) = &mut self.auth_change_password {
-            Some(handler.handle(username, oldpassword, newpassword))
-        } else {
-            None
-        }
+        self.auth_change_password
+            .as_mut()
+            .map(|handler| handler.handle(username, oldpassword, newpassword))
     }
 
     pub(crate) fn dispatch_auth_hostbased(
@@ -476,11 +468,9 @@ where
         algorithm: String,
         publickey: String,
     ) -> Option<BoxFuture<'static, Result<bool, E>>> {
-        if let Some(handler) = &mut self.auth_hostbased {
-            Some(handler.handle(username, hostname, algorithm, publickey))
-        } else {
-            None
-        }
+        self.auth_hostbased
+            .as_mut()
+            .map(|handler| handler.handle(username, hostname, algorithm, publickey))
     }
 
     pub(crate) fn dispatch_channel_pty_req(
@@ -492,11 +482,9 @@ where
         height_px: u32,
         modes: Vec<u8>,
     ) -> Option<BoxFuture<'static, Result<Pty, E>>> {
-        if let Some(handler) = &mut self.channel_pty_request {
-            Some(handler.handle(term, width, height, width_px, height_px, modes))
-        } else {
-            None
-        }
+        self.channel_pty_request
+            .as_mut()
+            .map(|handler| handler.handle(term, width, height, width_px, height_px, modes))
     }
 
     pub(crate) fn dispatch_channel_shell(
@@ -537,11 +525,9 @@ where
         ingress: SshInput,
         egress: SshOutput,
     ) -> Option<BoxFuture<'static, Result<(), E>>> {
-        if let Some(handler) = &mut self.channel_direct_tcpip {
-            Some(handler.handle(ingress, egress))
-        } else {
-            None
-        }
+        self.channel_direct_tcpip
+            .as_mut()
+            .map(|handler| handler.handle(ingress, egress))
     }
 }
 

@@ -99,11 +99,11 @@ async fn main() -> anyhow::Result<()> {
                             let mut ptyin = unsafe { PipeWrite::from_raw_fd(master_fd) };
                             tokio::spawn(async move {
                                 let r = io::copy(&mut stdin, &mut ptyin).await;
-                                println!("### END1 {:?}", r);
+                                log::info!("### END1 {:?}", r);
                             });
                             tokio::spawn(async move {
                                 let r = io::copy(&mut ptyout, &mut stdout).await;
-                                println!("### END2 {:?}", r); // May be IO Error at EOF.
+                                log::info!("### END2 {:?}", r); // May be IO Error at EOF.
                             });
                             let status = child.wait().await?;
 
