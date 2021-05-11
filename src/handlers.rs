@@ -1,5 +1,6 @@
 //! SSH handler
 
+use std::collections::HashMap;
 use std::error::Error as StdError;
 use std::ffi::OsString;
 use std::fmt;
@@ -9,6 +10,41 @@ use futures::future::BoxFuture;
 use crate::{SshInput, SshOutput};
 
 pub(crate) type HandlerError = Box<dyn StdError + Send + Sync + 'static>;
+
+/// Context for SSH Session.
+pub struct SessionContext<Pty = ()> {
+    stdio: Option<(SshInput, SshOutput, SshOutput)>,
+    env: HashMap<String, String>,
+    pty: Option<Pty>,
+}
+
+impl<Pty> SessionContext<Pty> {
+    pub(crate) fn new(
+        stdin: SshInput,
+        stdout: SshOutput,
+        stderr: SshOutput,
+        env: HashMap<String, String>,
+        pty: Option<Pty>,
+    ) -> Self {
+        Self {
+            stdio: Some((stdin, stdout, stderr)),
+            env,
+            pty,
+        }
+    }
+
+    pub fn take_stdio(&mut self) -> Option<(SshInput, SshOutput, SshOutput)> {
+        self.stdio.take()
+    }
+
+    pub fn env(&self) -> &HashMap<String, String> {
+        &self.env
+    }
+
+    pub fn take_pty(&mut self) -> Option<Pty> {
+        self.pty.take()
+    }
+}
 
 /// Password authentication result.
 #[derive(Debug)]
@@ -153,61 +189,81 @@ where
     }
 }
 
-pub trait ChannelShellHandler: Send {
+pub trait ChannelRequestPtyHandler<Pty>: Send {
     type Error: Into<HandlerError> + Send + 'static;
 
     fn handle(
         &mut self,
-        stdin: SshInput,
-        stdout: SshOutput,
-        stderr: SshOutput,
-    ) -> BoxFuture<'static, Result<u32, Self::Error>>;
+        term: String,
+        width: u32,
+        height: u32,
+        width_px: u32,
+        height_px: u32,
+        modes: Vec<u8>,
+    ) -> BoxFuture<'static, Result<Pty, Self::Error>>;
 }
 
-impl<F, E> ChannelShellHandler for F
+impl<F, E, Pty> ChannelRequestPtyHandler<Pty> for F
 where
-    F: Fn(SshInput, SshOutput, SshOutput) -> BoxFuture<'static, Result<u32, E>> + Send,
+    F: Fn(String, u32, u32, u32, u32, Vec<u8>) -> BoxFuture<'static, Result<Pty, E>> + Send,
     E: Into<HandlerError> + Send + 'static,
 {
     type Error = E;
 
     fn handle(
         &mut self,
-        stdin: SshInput,
-        stdout: SshOutput,
-        stderr: SshOutput,
-    ) -> BoxFuture<'static, Result<u32, Self::Error>> {
-        self(stdin, stdout, stderr)
+        term: String,
+        width: u32,
+        height: u32,
+        width_px: u32,
+        height_px: u32,
+        modes: Vec<u8>,
+    ) -> BoxFuture<'static, Result<Pty, Self::Error>> {
+        self(term, width, height, width_px, height_px, modes)
     }
 }
 
-pub trait ChannelExecHandler: Send {
+pub trait ChannelShellHandler<Pty>: Send {
+    type Error: Into<HandlerError> + Send + 'static;
+
+    fn handle(&mut self, ctx: SessionContext<Pty>) -> BoxFuture<'static, Result<u32, Self::Error>>;
+}
+
+impl<F, E, Pty> ChannelShellHandler<Pty> for F
+where
+    F: Fn(SessionContext<Pty>) -> BoxFuture<'static, Result<u32, E>> + Send,
+    E: Into<HandlerError> + Send + 'static,
+{
+    type Error = E;
+
+    fn handle(&mut self, ctx: SessionContext<Pty>) -> BoxFuture<'static, Result<u32, Self::Error>> {
+        self(ctx)
+    }
+}
+
+pub trait ChannelExecHandler<Pty>: Send {
     type Error: Into<HandlerError> + Send + 'static;
 
     fn handle(
         &mut self,
-        stdin: SshInput,
-        stdout: SshOutput,
-        stderr: SshOutput,
+        ctx: SessionContext<Pty>,
         prog: OsString,
     ) -> BoxFuture<'static, Result<u32, Self::Error>>;
 }
 
-impl<F, E> ChannelExecHandler for F
+impl<F, E, Pty> ChannelExecHandler<Pty> for F
 where
-    F: Fn(SshInput, SshOutput, SshOutput, OsString) -> BoxFuture<'static, Result<u32, E>> + Send,
+    F: Fn(SessionContext<Pty>, OsString) -> BoxFuture<'static, Result<u32, E>> + Send,
     E: Into<HandlerError> + Send + 'static,
 {
     type Error = E;
 
     fn handle(
         &mut self,
-        stdin: SshInput,
-        stdout: SshOutput,
-        stderr: SshOutput,
+        ctx: SessionContext<Pty>,
         prog: OsString,
     ) -> BoxFuture<'static, Result<u32, Self::Error>> {
-        self(stdin, stdout, stderr, prog)
+        self(ctx, prog)
     }
 }
 
@@ -239,7 +295,7 @@ where
 
 /// SSH callback handlers collections.
 #[derive(Default)]
-pub struct Handlers<E>
+pub struct Handlers<E, Pty = ()>
 where
     E: Into<HandlerError> + Send + 'static,
 {
@@ -249,12 +305,13 @@ where
     auth_change_password: Option<Box<dyn AuthChangePasswordHandler<Error = E>>>,
     auth_hostbased: Option<Box<dyn AuthHostbasedHandler<Error = E>>>,
 
-    channel_shell: Option<Box<dyn ChannelShellHandler<Error = E>>>,
-    channel_exec: Option<Box<dyn ChannelExecHandler<Error = E>>>,
+    channel_pty_request: Option<Box<dyn ChannelRequestPtyHandler<Pty, Error = E>>>,
+    channel_shell: Option<Box<dyn ChannelShellHandler<Pty, Error = E>>>,
+    channel_exec: Option<Box<dyn ChannelExecHandler<Pty, Error = E>>>,
     channel_direct_tcpip: Option<Box<dyn ChannelDirectTcpIpHandler<Error = E>>>,
 }
 
-impl<E> Handlers<E>
+impl<E, Pty> Handlers<E, Pty>
 where
     E: Into<HandlerError> + Send + 'static,
 {
@@ -266,6 +323,7 @@ where
             auth_password: None,
             auth_change_password: None,
             auth_hostbased: None,
+            channel_pty_request: None,
             channel_shell: None,
             channel_exec: None,
             channel_direct_tcpip: None,
@@ -322,12 +380,22 @@ where
         self.auth_hostbased = Some(Box::new(handler))
     }
 
+    /// Register Request pty handler.
+    ///
+    /// If not registered, channel returns failure.
+    pub fn on_channel_pty_request<H>(&mut self, handler: H)
+    where
+        H: ChannelRequestPtyHandler<Pty, Error = E> + 'static,
+    {
+        self.channel_pty_request = Some(Box::new(handler))
+    }
+
     /// Register Shell channel handler.
     ///
     /// If not registered, channel returns failure.
     pub fn on_channel_shell<H>(&mut self, handler: H)
     where
-        H: ChannelShellHandler<Error = E> + 'static,
+        H: ChannelShellHandler<Pty, Error = E> + 'static,
     {
         self.channel_shell = Some(Box::new(handler))
     }
@@ -337,7 +405,7 @@ where
     /// If not registered, channel returns failure.
     pub fn on_channel_exec<H>(&mut self, handler: H)
     where
-        H: ChannelExecHandler<Error = E> + 'static,
+        H: ChannelExecHandler<Pty, Error = E> + 'static,
     {
         self.channel_exec = Some(Box::new(handler))
     }
@@ -356,11 +424,9 @@ where
         &mut self,
         username: String,
     ) -> Option<BoxFuture<'static, Result<bool, E>>> {
-        if let Some(handler) = &mut self.auth_none {
-            Some(handler.handle(username))
-        } else {
-            None
-        }
+        self.auth_none
+            .as_mut()
+            .map(|handler| handler.handle(username))
     }
 
     pub(crate) fn dispatch_auth_publickey(
@@ -369,11 +435,9 @@ where
         algorithm: String,
         publickey: String,
     ) -> Option<BoxFuture<'static, Result<bool, E>>> {
-        if let Some(handler) = &mut self.auth_publickey {
-            Some(handler.handle(username, algorithm, publickey))
-        } else {
-            None
-        }
+        self.auth_publickey
+            .as_mut()
+            .map(|handler| handler.handle(username, algorithm, publickey))
     }
 
     pub(crate) fn dispatch_auth_password(
@@ -381,11 +445,9 @@ where
         username: String,
         password: String,
     ) -> Option<BoxFuture<'static, Result<PasswordResult, E>>> {
-        if let Some(handler) = &mut self.auth_password {
-            Some(handler.handle(username, password))
-        } else {
-            None
-        }
+        self.auth_password
+            .as_mut()
+            .map(|handler| handler.handle(username, password))
     }
 
     pub(crate) fn dispatch_auth_change_password(
@@ -394,11 +456,9 @@ where
         oldpassword: String,
         newpassword: String,
     ) -> Option<BoxFuture<'static, Result<PasswordResult, E>>> {
-        if let Some(handler) = &mut self.auth_change_password {
-            Some(handler.handle(username, oldpassword, newpassword))
-        } else {
-            None
-        }
+        self.auth_change_password
+            .as_mut()
+            .map(|handler| handler.handle(username, oldpassword, newpassword))
     }
 
     pub(crate) fn dispatch_auth_hostbased(
@@ -408,11 +468,23 @@ where
         algorithm: String,
         publickey: String,
     ) -> Option<BoxFuture<'static, Result<bool, E>>> {
-        if let Some(handler) = &mut self.auth_hostbased {
-            Some(handler.handle(username, hostname, algorithm, publickey))
-        } else {
-            None
-        }
+        self.auth_hostbased
+            .as_mut()
+            .map(|handler| handler.handle(username, hostname, algorithm, publickey))
+    }
+
+    pub(crate) fn dispatch_channel_pty_req(
+        &mut self,
+        term: String,
+        width: u32,
+        height: u32,
+        width_px: u32,
+        height_px: u32,
+        modes: Vec<u8>,
+    ) -> Option<BoxFuture<'static, Result<Pty, E>>> {
+        self.channel_pty_request
+            .as_mut()
+            .map(|handler| handler.handle(term, width, height, width_px, height_px, modes))
     }
 
     pub(crate) fn dispatch_channel_shell(
@@ -420,9 +492,12 @@ where
         stdin: SshInput,
         stdout: SshOutput,
         stderr: SshOutput,
+        env: HashMap<String, String>,
+        pty: Option<Pty>,
     ) -> Option<BoxFuture<'static, Result<u32, E>>> {
         if let Some(handler) = &mut self.channel_shell {
-            Some(handler.handle(stdin, stdout, stderr))
+            let ctx = SessionContext::new(stdin, stdout, stderr, env, pty);
+            Some(handler.handle(ctx))
         } else {
             None
         }
@@ -434,9 +509,12 @@ where
         stdout: SshOutput,
         stderr: SshOutput,
         prog: OsString,
+        env: HashMap<String, String>,
+        pty: Option<Pty>,
     ) -> Option<BoxFuture<'static, Result<u32, E>>> {
         if let Some(handler) = &mut self.channel_exec {
-            Some(handler.handle(stdin, stdout, stderr, prog))
+            let ctx = SessionContext::new(stdin, stdout, stderr, env, pty);
+            Some(handler.handle(ctx, prog))
         } else {
             None
         }
@@ -447,15 +525,13 @@ where
         ingress: SshInput,
         egress: SshOutput,
     ) -> Option<BoxFuture<'static, Result<(), E>>> {
-        if let Some(handler) = &mut self.channel_direct_tcpip {
-            Some(handler.handle(ingress, egress))
-        } else {
-            None
-        }
+        self.channel_direct_tcpip
+            .as_mut()
+            .map(|handler| handler.handle(ingress, egress))
     }
 }
 
-impl<E> fmt::Debug for Handlers<E>
+impl<E, Pty> fmt::Debug for Handlers<E, Pty>
 where
     E: Into<HandlerError> + Send + 'static,
 {

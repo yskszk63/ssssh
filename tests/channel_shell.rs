@@ -8,7 +8,7 @@ use nix::sys::memfd::{memfd_create, MemFdCreateFlag};
 use tokio::io::AsyncWriteExt;
 use tokio::process::Command;
 
-use ssssh::{Handlers, ServerBuilder, SshOutput};
+use ssssh::{Handlers, ServerBuilder};
 
 #[tokio::test]
 async fn shell() {
@@ -22,9 +22,17 @@ async fn shell() {
 
     let mut server = ServerBuilder::default().build("[::1]:2222").await.unwrap();
 
-    let mut handlers = Handlers::<anyhow::Error>::new();
+    let mut handlers = Handlers::<anyhow::Error, ()>::new();
     handlers.on_auth_none(|_| ok(true).boxed());
-    handlers.on_channel_shell(|mut stdin, mut stdout, mut stderr: SshOutput| {
+    handlers.on_channel_pty_request(|_, _, _, _, _, _| {
+        async { Result::<_, anyhow::Error>::Ok(()) }.boxed()
+    });
+    handlers.on_channel_shell(|mut ctx: ssssh::SessionContext| {
+        let (mut stdin, mut stdout, mut stderr) = ctx.take_stdio().unwrap();
+        ctx.take_pty().unwrap();
+        if ctx.env().get("LANG") != Some(&"C".into()) {
+            panic!()
+        }
         async move {
             tokio::io::copy(&mut stdin, &mut stdout).await.unwrap();
             stderr.write(b"hello, stderr!").await.unwrap();
@@ -35,10 +43,13 @@ async fn shell() {
 
     let proc = Command::new("ssh")
         .env_clear()
+        .env("LANG", "C")
         .arg("-oStrictHostKeyChecking=no")
         .arg("-oUserKnownHostsFile=/dev/null")
+        .arg("-oSendEnv=LANG")
         .arg("-p2222")
         .arg("-q")
+        .arg("-tt")
         .arg("::1")
         .stdin(input)
         .stdout(Stdio::piped())
@@ -54,4 +65,93 @@ async fn shell() {
     assert!(output.status.success());
     assert_eq!(&output.stdout, b"hello, world!");
     assert_eq!(&output.stderr, b"hello, stderr!");
+}
+
+#[tokio::test]
+async fn pty_alloc_failed() {
+    simple_logger::SimpleLogger::new().init().ok();
+
+    let mut server = ServerBuilder::default().build("[::1]:2223").await.unwrap();
+
+    let mut handlers = Handlers::<anyhow::Error>::new();
+    handlers.on_auth_none(|_| ok(true).boxed());
+    handlers.on_channel_shell(|mut ctx: ssssh::SessionContext| {
+        let (mut stdin, mut stdout, mut stderr) = ctx.take_stdio().unwrap();
+        if ctx.env().get("LANG") != Some(&"C".into()) {
+            panic!()
+        }
+        async move {
+            tokio::io::copy(&mut stdin, &mut stdout).await.unwrap();
+            stderr.write(b"hello, stderr!").await.unwrap();
+            Ok(0)
+        }
+        .boxed()
+    });
+
+    let mut proc = Command::new("ssh")
+        .env_clear()
+        .env("LANG", "C")
+        .arg("-oStrictHostKeyChecking=no")
+        .arg("-oUserKnownHostsFile=/dev/null")
+        .arg("-oSendEnv=LANG")
+        .arg("-p2223")
+        .arg("-q")
+        .arg("-tt")
+        .arg("::1")
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .unwrap();
+
+    let connection = server.try_next().await.unwrap().unwrap();
+    let connection = connection.accept().await.unwrap();
+    connection.run(handlers).await.unwrap_err();
+    let status = proc.wait().await.unwrap();
+    assert!(!status.success())
+}
+
+#[tokio::test]
+async fn pty_alloc_failed2() {
+    simple_logger::SimpleLogger::new().init().ok();
+
+    let mut server = ServerBuilder::default().build("[::1]:2224").await.unwrap();
+
+    let mut handlers = Handlers::<anyhow::Error, ()>::new();
+    handlers.on_auth_none(|_| ok(true).boxed());
+    handlers.on_channel_pty_request(|_, _, _, _, _, _| async { anyhow::bail!("err") }.boxed());
+    handlers.on_channel_shell(|mut ctx: ssssh::SessionContext| {
+        let (mut stdin, mut stdout, mut stderr) = ctx.take_stdio().unwrap();
+        if ctx.env().get("LANG") != Some(&"C".into()) {
+            panic!()
+        }
+        async move {
+            tokio::io::copy(&mut stdin, &mut stdout).await.unwrap();
+            stderr.write(b"hello, stderr!").await.unwrap();
+            Ok(0)
+        }
+        .boxed()
+    });
+
+    let mut proc = Command::new("ssh")
+        .env_clear()
+        .env("LANG", "C")
+        .arg("-oStrictHostKeyChecking=no")
+        .arg("-oUserKnownHostsFile=/dev/null")
+        .arg("-oSendEnv=LANG")
+        .arg("-p2224")
+        .arg("-q")
+        .arg("-tt")
+        .arg("::1")
+        .stdin(Stdio::null())
+        .stdout(Stdio::inherit())
+        .stderr(Stdio::inherit())
+        .spawn()
+        .unwrap();
+
+    let connection = server.try_next().await.unwrap().unwrap();
+    let connection = connection.accept().await.unwrap();
+    connection.run(handlers).await.unwrap_err();
+    let status = proc.wait().await.unwrap();
+    assert!(!status.success())
 }

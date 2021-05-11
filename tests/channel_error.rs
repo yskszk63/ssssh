@@ -15,7 +15,7 @@ async fn shell() {
 
     let mut handlers = Handlers::<anyhow::Error>::new();
     handlers.on_auth_none(|_| ok(true).boxed());
-    handlers.on_channel_shell(|_, _, _| {
+    handlers.on_channel_shell(|_| {
         async move { Err(io::Error::new(io::ErrorKind::Other, "").into()) }.boxed()
     });
 

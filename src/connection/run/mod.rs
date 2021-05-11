@@ -83,8 +83,14 @@ impl<S> MutexStream for Arc<Mutex<S>> {
 }
 
 #[derive(Debug)]
-enum Channel {
-    Session(u32, Option<PipeWrite>, Option<SshInput>),
+enum Channel<Pty> {
+    Session(
+        u32,
+        Option<PipeWrite>,
+        Option<SshInput>,
+        HashMap<String, String>,
+        Option<Pty>,
+    ),
     DirectTcpip(u32, Option<PipeWrite>),
 }
 
@@ -97,7 +103,7 @@ fn maybe_timeout(preference: &Preference) -> impl Future<Output = ()> {
 }
 
 #[derive(Debug)]
-pub(super) struct Runner<IO, E>
+pub(super) struct Runner<IO, E, Pty>
 where
     IO: AsyncRead + AsyncWrite + Unpin + Send,
     E: Into<HandlerError> + Send + 'static,
@@ -106,8 +112,8 @@ where
     c_version: String,
     s_version: String,
     preference: Arc<Preference>,
-    handlers: Handlers<E>,
-    channels: HashMap<u32, Channel>,
+    handlers: Handlers<E, Pty>,
+    channels: HashMap<u32, Channel<Pty>>,
     output_readers: OutputReaderMap,
     completions: TaskStream,
     msg_queue_tx: mpsc::UnboundedSender<Msg>,
@@ -116,7 +122,7 @@ where
     auth_state: on_userauth_request::AuthState,
 }
 
-impl<IO, E> Runner<IO, E>
+impl<IO, E, Pty> Runner<IO, E, Pty>
 where
     IO: AsyncRead + AsyncWrite + Unpin + Send,
     E: Into<HandlerError> + Send + 'static,
@@ -126,7 +132,7 @@ where
         c_version: String,
         s_version: String,
         preference: Arc<Preference>,
-        handlers: Handlers<E>,
+        handlers: Handlers<E, Pty>,
     ) -> Self {
         let (msg_queue_tx, msg_queue_rx) = mpsc::unbounded();
 

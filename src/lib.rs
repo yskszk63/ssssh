@@ -16,7 +16,7 @@
 //!
 //!     let mut handlers = Handlers::<anyhow::Error>::new();
 //!     handlers.on_auth_none(|_| ok(true).boxed()); // Allow anonymous auth method.
-//!     handlers.on_channel_shell(|_, _, _| ok(0).boxed()); // Shell channel return 0 immediately.
+//!     handlers.on_channel_shell(|_| ok(0).boxed()); // Shell channel return 0 immediately.
 //!
 //!     // ...Connecting to 2222 port from ssh program.
 //!     # let proc = Command::new("ssh")

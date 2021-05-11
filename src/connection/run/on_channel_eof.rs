@@ -5,7 +5,7 @@ use crate::HandlerError;
 
 use super::{Channel, Runner, SshError};
 
-impl<IO, E> Runner<IO, E>
+impl<IO, E, Pty> Runner<IO, E, Pty>
 where
     IO: AsyncRead + AsyncWrite + Unpin + Send,
     E: Into<HandlerError> + Send + 'static,
@@ -17,7 +17,7 @@ where
         let chid = channel_eof.recipient_channel();
         if let Some(channel) = self.channels.get_mut(chid) {
             match channel {
-                Channel::Session(_, stdin, _) | Channel::DirectTcpip(_, stdin) => {
+                Channel::Session(_, stdin, _, _, _) | Channel::DirectTcpip(_, stdin) => {
                     if let Some(mut stdin) = stdin.take() {
                         stdin.shutdown().await?;
                     }
