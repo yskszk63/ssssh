@@ -332,7 +332,20 @@ where
 
     /// Register None user authentication method handler.
     ///
-    /// If not registered, return authentication failure.
+    /// If not registered, return none authentication failure.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ssssh::Handlers;
+    /// use futures::FutureExt as _;
+    /// let mut handlers = Handlers::<anyhow::Error>::new();
+    /// handlers.on_auth_none(|username| {
+    ///     async move {
+    ///         Ok(username == "bob")
+    ///     }.boxed()
+    /// });
+    /// ```
     pub fn on_auth_none<H>(&mut self, handler: H)
     where
         H: AuthNoneHandler<Error = E> + 'static,
@@ -342,7 +355,20 @@ where
 
     /// Register Publickey user authentication method handler.
     ///
-    /// If not registered, return authentication failure.
+    /// If not registered, return publickey authentication failure.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ssssh::Handlers;
+    /// use futures::FutureExt as _;
+    /// let mut handlers = Handlers::<anyhow::Error>::new();
+    /// handlers.on_auth_publickey(|username, algorithm, publickey| {
+    ///     async move {
+    ///         Ok(username == "bob" && algorithm == "ssh-rsa" && publickey == "") // FIXME
+    ///     }.boxed()
+    /// });
+    /// ```
     pub fn on_auth_publickey<H>(&mut self, handler: H)
     where
         H: AuthPublickeyHandler<Error = E> + 'static,
@@ -352,7 +378,25 @@ where
 
     /// Register Password user authentication method handler.
     ///
-    /// If not registered, return authentication failure.
+    /// If not registered, return password authentication failure.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ssssh::Handlers;
+    /// use ssssh::PasswordResult;
+    /// use futures::FutureExt as _;
+    /// let mut handlers = Handlers::<anyhow::Error>::new();
+    /// handlers.on_auth_password(|username, password| {
+    ///     async move {
+    ///         Ok(if username == "bob" && password == "frosty-tricolor1-fabulous-unsent" {
+    ///             PasswordResult::Ok
+    ///         } else {
+    ///             PasswordResult::Failure
+    ///         })
+    ///     }.boxed()
+    /// });
+    /// ```
     pub fn on_auth_password<H>(&mut self, handler: H)
     where
         H: AuthPasswordHandler<Error = E> + 'static,
@@ -362,7 +406,30 @@ where
 
     /// Register Change Password user authentication method handler.
     ///
-    /// If not registered, return authentication failure.
+    /// If not registered, return change password failure.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ssssh::Handlers;
+    /// use ssssh::PasswordResult;
+    /// use futures::FutureExt as _;
+    /// let mut handlers = Handlers::<anyhow::Error>::new();
+    /// handlers.on_auth_change_password(|username: String, oldpassword: String, newpassword:
+    /// String| {
+    ///     async move {
+    ///         let result = do_change_password(&username, &oldpassword, &newpassword);
+    ///         Ok(if result {
+    ///             PasswordResult::Ok
+    ///         } else {
+    ///             PasswordResult::Failure
+    ///         })
+    ///     }.boxed()
+    /// });
+    /// # fn do_change_password(_: &str, _: &str, _: &str) -> bool {
+    /// #  true
+    /// # }
+    /// ```
     pub fn on_auth_change_password<H>(&mut self, handler: H)
     where
         H: AuthChangePasswordHandler<Error = E> + 'static,
@@ -372,7 +439,20 @@ where
 
     /// Register Hostbased user authentication method handler.
     ///
-    /// If not registered, return authentication failure.
+    /// If not registered, return hostbased authentication failure.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ssssh::Handlers;
+    /// use futures::FutureExt as _;
+    /// let mut handlers = Handlers::<anyhow::Error>::new();
+    /// handlers.on_auth_hostbased(|username, hostname, algorithm, publickey| {
+    ///     async move {
+    ///         Ok(username == "bob" && hostname == "localhost." && algorithm == "ssh-rsa" && publickey == "") // FIXME
+    ///     }.boxed()
+    /// });
+    /// ```
     pub fn on_auth_hostbased<H>(&mut self, handler: H)
     where
         H: AuthHostbasedHandler<Error = E> + 'static,
@@ -383,6 +463,27 @@ where
     /// Register Request pty handler.
     ///
     /// If not registered, channel returns failure.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ssssh::Handlers;
+    /// use futures::FutureExt as _;
+    /// let mut handlers = Handlers::<anyhow::Error, Pty>::new();
+    /// handlers.on_channel_pty_request(|term: String, width, height, width_px, height_px, modes:
+    /// Vec<u8> | {
+    ///     async move {
+    ///         let pty: Pty = openpty(&term, width, height, width_px, height_px, &modes);
+    ///         Ok(pty)
+    ///     }.boxed()
+    /// });
+    /// struct Pty {
+    ///     // ...
+    /// }
+    /// # fn openpty(_: &str, _: u32, _: u32, _: u32, _:u32, _:&[u8]) -> Pty {
+    /// #     Pty {}
+    /// # }
+    /// ```
     pub fn on_channel_pty_request<H>(&mut self, handler: H)
     where
         H: ChannelRequestPtyHandler<Pty, Error = E> + 'static,
@@ -393,6 +494,26 @@ where
     /// Register Shell channel handler.
     ///
     /// If not registered, channel returns failure.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ssssh::Handlers;
+    /// use futures::FutureExt as _;
+    /// let mut handlers = Handlers::<anyhow::Error>::new();
+    /// handlers.on_channel_shell(|mut ctx: ssssh::SessionContext<_>| {
+    ///     async move {
+    ///         let (stdin, stdout, stderr) = ctx.take_stdio().unwrap();
+    ///         let process = do_exec_shell(stdin, stdout, stderr);
+    ///         let exit_code = process.await;
+    ///         Ok(exit_code)
+    ///     }.boxed()
+    /// });
+    /// # use ssssh::{SshInput, SshOutput};
+    /// # async fn do_exec_shell(_: SshInput, _: SshOutput, _:SshOutput) -> u32 {
+    /// #     0
+    /// # }
+    /// ```
     pub fn on_channel_shell<H>(&mut self, handler: H)
     where
         H: ChannelShellHandler<Pty, Error = E> + 'static,
@@ -403,6 +524,26 @@ where
     /// Register Exec channel handler.
     ///
     /// If not registered, channel returns failure.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ssssh::Handlers;
+    /// use futures::FutureExt as _;
+    /// let mut handlers = Handlers::<anyhow::Error>::new();
+    /// handlers.on_channel_exec(|mut ctx: ssssh::SessionContext<_>, prog| {
+    ///     async move {
+    ///         let (stdin, stdout, stderr) = ctx.take_stdio().unwrap();
+    ///         let process = do_exec(prog, stdin, stdout, stderr);
+    ///         let exit_code = process.await;
+    ///         Ok(exit_code)
+    ///     }.boxed()
+    /// });
+    /// # use ssssh::{SshInput, SshOutput};
+    /// # async fn do_exec(_: std::ffi::OsString, _: SshInput, _: SshOutput, _:SshOutput) -> u32 {
+    /// #     0
+    /// # }
+    /// ```
     pub fn on_channel_exec<H>(&mut self, handler: H)
     where
         H: ChannelExecHandler<Pty, Error = E> + 'static,
@@ -413,6 +554,23 @@ where
     /// Register Direct TCP/IP channel handler.
     ///
     /// If not registered, channel returns failure.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ssssh::Handlers;
+    /// use futures::FutureExt as _;
+    /// let mut handlers = Handlers::<anyhow::Error>::new();
+    /// handlers.on_channel_direct_tcpip(|input, output| {
+    ///     async move {
+    ///         do_proxy(input, output).await;
+    ///         Ok(())
+    ///     }.boxed()
+    /// });
+    /// # use ssssh::{SshInput, SshOutput};
+    /// # async fn do_proxy(_: SshInput, _: SshOutput) {
+    /// # }
+    /// ```
     pub fn on_channel_direct_tcpip<H>(&mut self, handler: H)
     where
         H: ChannelDirectTcpIpHandler<Error = E> + 'static,
