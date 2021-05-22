@@ -19,12 +19,14 @@ const SUPPORTED_METHODS: &[&str] = &["publickey", "password", "hostbased"];
 #[derive(Debug)]
 pub(super) struct AuthState {
     remaining: Vec<&'static str>,
+    accepted_publickey: Option<(String, crate::PublicKey)>,
 }
 
 impl AuthState {
     pub(super) fn new() -> Self {
         Self {
             remaining: Vec::from(SUPPORTED_METHODS),
+            accepted_publickey: None,
         }
     }
 
@@ -118,13 +120,18 @@ where
         user_name: &str,
         item: &Publickey,
     ) -> Result<(), SshError> {
-        let username = user_name.into();
-        let algorithm = item.algorithm().into();
-        let publickey = item.blob().to_string();
+        let algorithm = item.algorithm();
+        let publickey = item.blob();
+        if algorithm != publickey.algorithm() {
+            return Err(SshError::AlgorithmMismatch(
+                algorithm.into(),
+                item.blob().algorithm().into(),
+            ));
+        }
 
         let r = if let Some(fut) = self
             .handlers
-            .dispatch_auth_publickey(username, algorithm, publickey)
+            .dispatch_auth_publickey(user_name.into(), publickey.clone())
         {
             fut.await.map_err(|e| SshError::HandlerError(e.into()))?
         } else {
@@ -132,6 +139,7 @@ where
         };
 
         if r {
+            self.auth_state.accepted_publickey = Some((user_name.into(), publickey.clone()));
             let m = UserauthPkOk::new(item.algorithm().into(), item.blob().clone()).into();
             self.io.context::<UserauthPkMsg>().send(m).await?;
         } else {
@@ -168,13 +176,41 @@ where
         item.blob().pack(&mut verifier);
 
         if verifier.verify(&signature) {
-            let username = user_name.into();
-            let algorithm = item.algorithm().into();
-            let publickey = item.blob().to_string();
+            let algorithm = item.algorithm();
+            let publickey = item.blob();
+            if algorithm != publickey.algorithm() {
+                return Err(SshError::AlgorithmMismatch(
+                    algorithm.into(),
+                    item.blob().algorithm().into(),
+                ));
+            }
 
-            let r = if let Some(fut) = self
+            let r = if let Some((accepted_username, accepted_publickey)) =
+                self.auth_state.accepted_publickey.take()
+            {
+                if accepted_username == user_name && &accepted_publickey == publickey {
+                    if let Some(fut) = self
+                        .handlers
+                        .dispatch_auth_publickey_signature_verified_after_accepted(
+                            user_name.into(),
+                            publickey.clone(),
+                        )
+                    {
+                        fut.await.map_err(|e| SshError::HandlerError(e.into()))?
+                    } else {
+                        true
+                    }
+                } else if let Some(fut) = self
+                    .handlers
+                    .dispatch_auth_publickey(user_name.into(), publickey.clone())
+                {
+                    fut.await.map_err(|e| SshError::HandlerError(e.into()))?
+                } else {
+                    false
+                }
+            } else if let Some(fut) = self
                 .handlers
-                .dispatch_auth_publickey(username, algorithm, publickey)
+                .dispatch_auth_publickey(user_name.into(), publickey.clone())
             {
                 fut.await.map_err(|e| SshError::HandlerError(e.into()))?
             } else {
@@ -274,12 +310,18 @@ where
         if verifier.verify(&signature) {
             let username = user_name.into();
             let hostname = item.client_hostname().into();
-            let algorithm = item.algorithm().into();
-            let publickey = item.client_hostkey().to_string();
+            let algorithm = item.algorithm();
+            let publickey = item.client_hostkey();
+            if algorithm != item.client_hostkey().algorithm() {
+                return Err(SshError::AlgorithmMismatch(
+                    algorithm.into(),
+                    item.client_hostkey().algorithm().into(),
+                ));
+            }
 
-            let r = if let Some(fut) = self
-                .handlers
-                .dispatch_auth_hostbased(username, hostname, algorithm, publickey)
+            let r = if let Some(fut) =
+                self.handlers
+                    .dispatch_auth_hostbased(username, hostname, publickey.clone())
             {
                 fut.await.map_err(|e| SshError::HandlerError(e.into()))?
             } else {

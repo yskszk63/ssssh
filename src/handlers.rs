@@ -7,7 +7,7 @@ use std::fmt;
 
 use futures::future::BoxFuture;
 
-use crate::{SshInput, SshOutput};
+use crate::{PublicKey, SshInput, SshOutput};
 
 pub(crate) type HandlerError = Box<dyn StdError + Send + Sync + 'static>;
 
@@ -83,14 +83,13 @@ pub trait AuthPublickeyHandler: Send {
     fn handle(
         &mut self,
         username: String,
-        algorithm: String,
-        publickey: String,
+        publickey: PublicKey,
     ) -> BoxFuture<'static, Result<bool, Self::Error>>;
 }
 
 impl<F, E> AuthPublickeyHandler for F
 where
-    F: Fn(String, String, String) -> BoxFuture<'static, Result<bool, E>> + Send,
+    F: Fn(String, PublicKey) -> BoxFuture<'static, Result<bool, E>> + Send,
     E: Into<HandlerError> + Send + 'static,
 {
     type Error = E;
@@ -98,10 +97,9 @@ where
     fn handle(
         &mut self,
         username: String,
-        algorithm: String,
-        publickey: String,
+        publickey: PublicKey,
     ) -> BoxFuture<'static, Result<bool, Self::Error>> {
-        self(username, algorithm, publickey)
+        self(username, publickey)
     }
 }
 
@@ -166,14 +164,13 @@ pub trait AuthHostbasedHandler: Send {
         &mut self,
         username: String,
         hostname: String,
-        algorithm: String,
-        publickey: String,
+        publickey: PublicKey,
     ) -> BoxFuture<'static, Result<bool, Self::Error>>;
 }
 
 impl<F, E> AuthHostbasedHandler for F
 where
-    F: Fn(String, String, String, String) -> BoxFuture<'static, Result<bool, E>> + Send,
+    F: Fn(String, String, PublicKey) -> BoxFuture<'static, Result<bool, E>> + Send,
     E: Into<HandlerError> + Send + 'static,
 {
     type Error = E;
@@ -182,10 +179,9 @@ where
         &mut self,
         username: String,
         hostname: String,
-        algorithm: String,
-        publickey: String,
+        publickey: PublicKey,
     ) -> BoxFuture<'static, Result<bool, Self::Error>> {
-        self(username, hostname, algorithm, publickey)
+        self(username, hostname, publickey)
     }
 }
 
@@ -301,6 +297,8 @@ where
 {
     auth_none: Option<Box<dyn AuthNoneHandler<Error = E>>>,
     auth_publickey: Option<Box<dyn AuthPublickeyHandler<Error = E>>>,
+    auth_publickey_signature_verified_after_accepted:
+        Option<Box<dyn AuthPublickeyHandler<Error = E>>>,
     auth_password: Option<Box<dyn AuthPasswordHandler<Error = E>>>,
     auth_change_password: Option<Box<dyn AuthChangePasswordHandler<Error = E>>>,
     auth_hostbased: Option<Box<dyn AuthHostbasedHandler<Error = E>>>,
@@ -320,6 +318,7 @@ where
         Self {
             auth_none: None,
             auth_publickey: None,
+            auth_publickey_signature_verified_after_accepted: None,
             auth_password: None,
             auth_change_password: None,
             auth_hostbased: None,
@@ -363,9 +362,11 @@ where
     /// use ssssh::Handlers;
     /// use futures::FutureExt as _;
     /// let mut handlers = Handlers::<anyhow::Error>::new();
-    /// handlers.on_auth_publickey(|username, algorithm, publickey| {
+    /// handlers.on_auth_publickey(|username, publickey: ssssh::PublicKey| {
     ///     async move {
-    ///         Ok(username == "bob" && algorithm == "ssh-rsa" && publickey == "") // FIXME
+    ///         let authorized_rsa_key =
+    ///         "AAAAB3NzaC1yc2EAAAADAQABAAABgQCsuW6XTH7zcwyQN9gKj3yVp9wg/4Hx5KL4YMXFBcjovr0KCA8NPvuYYn3WCyCO4zYoq4YrtjkS3XwRILjWo8Vx5zZcJL+zdGVLmQ5BNSWmvYAgcbpQrdftvk8y2SvMJHgK51g9cpumC8/D9yzOjNg1rlWQ0QZzDaUr0ugzQdL5KVXtTX3Mm3rjKhSy9coG7nJADv40R4tUiwJy0oorOn+E8y4lCdcNQnIxgME0WzgZ6NEJHU4s3cJY1OddWHRImunGLAJsSoAuHqpp8qtyuC8R+o+VcuqGLxXGCPoNNsy186dy7nGMCmGz+nJoNGR6jh+gHyHimGjqUticafo5NiY6J9uNjzh5HLg0B17iTR1iIDWDFyB3IRyNphnwEKl7OutNWvlk584b3USvTsVjBenNXKe181fE8s3hFs5B88NzXHoJuC+/L8/Y/tu24xckkt8ySCgRUHRJy9FOzmmpmaIeUZ9xB+IaQgn6Cue5tAzjeoa3wqyjlbV8lekK7DXlPOk=";
+    ///         Ok(username == "bob" && publickey.algorithm() == "ssh-rsa" && publickey.to_string() == authorized_rsa_key)
     ///     }.boxed()
     /// });
     /// ```
@@ -374,6 +375,40 @@ where
         H: AuthPublickeyHandler<Error = E> + 'static,
     {
         self.auth_publickey = Some(Box::new(handler))
+    }
+
+    /// Register Publickey user authentication method handler.
+    /// It handles When the verification of the message signature of the previously accepted public key is successful.
+    ///
+    /// If not registered, return publickey authentication success.
+    ///
+    /// # Example
+    ///
+    /// ```
+    /// use ssssh::Handlers;
+    /// use futures::FutureExt as _;
+    /// let mut handlers = Handlers::<anyhow::Error>::new();
+    /// handlers.on_auth_publickey(|username, publickey: ssssh::PublicKey| {
+    ///     async move {
+    ///         let authorized_rsa_key =
+    ///         "AAAAB3NzaC1yc2EAAAADAQABAAABgQCsuW6XTH7zcwyQN9gKj3yVp9wg/4Hx5KL4YMXFBcjovr0KCA8NPvuYYn3WCyCO4zYoq4YrtjkS3XwRILjWo8Vx5zZcJL+zdGVLmQ5BNSWmvYAgcbpQrdftvk8y2SvMJHgK51g9cpumC8/D9yzOjNg1rlWQ0QZzDaUr0ugzQdL5KVXtTX3Mm3rjKhSy9coG7nJADv40R4tUiwJy0oorOn+E8y4lCdcNQnIxgME0WzgZ6NEJHU4s3cJY1OddWHRImunGLAJsSoAuHqpp8qtyuC8R+o+VcuqGLxXGCPoNNsy186dy7nGMCmGz+nJoNGR6jh+gHyHimGjqUticafo5NiY6J9uNjzh5HLg0B17iTR1iIDWDFyB3IRyNphnwEKl7OutNWvlk584b3USvTsVjBenNXKe181fE8s3hFs5B88NzXHoJuC+/L8/Y/tu24xckkt8ySCgRUHRJy9FOzmmpmaIeUZ9xB+IaQgn6Cue5tAzjeoa3wqyjlbV8lekK7DXlPOk=";
+    ///         Ok(username == "bob" && publickey.algorithm() == "ssh-rsa" && publickey.to_string() == authorized_rsa_key)
+    ///     }.boxed()
+    /// });
+    /// handlers.on_auth_publickey_signature_verified_after_accepted(|username, publickey:
+    /// ssssh::PublicKey| {
+    ///     async move {
+    ///         let authorized_rsa_key =
+    ///         "AAAAB3NzaC1yc2EAAAADAQABAAABgQCsuW6XTH7zcwyQN9gKj3yVp9wg/4Hx5KL4YMXFBcjovr0KCA8NPvuYYn3WCyCO4zYoq4YrtjkS3XwRILjWo8Vx5zZcJL+zdGVLmQ5BNSWmvYAgcbpQrdftvk8y2SvMJHgK51g9cpumC8/D9yzOjNg1rlWQ0QZzDaUr0ugzQdL5KVXtTX3Mm3rjKhSy9coG7nJADv40R4tUiwJy0oorOn+E8y4lCdcNQnIxgME0WzgZ6NEJHU4s3cJY1OddWHRImunGLAJsSoAuHqpp8qtyuC8R+o+VcuqGLxXGCPoNNsy186dy7nGMCmGz+nJoNGR6jh+gHyHimGjqUticafo5NiY6J9uNjzh5HLg0B17iTR1iIDWDFyB3IRyNphnwEKl7OutNWvlk584b3USvTsVjBenNXKe181fE8s3hFs5B88NzXHoJuC+/L8/Y/tu24xckkt8ySCgRUHRJy9FOzmmpmaIeUZ9xB+IaQgn6Cue5tAzjeoa3wqyjlbV8lekK7DXlPOk=";
+    ///         Ok(username == "bob" && publickey.algorithm() == "ssh-rsa" && publickey.to_string() == authorized_rsa_key)
+    ///     }.boxed()
+    /// });
+    /// ```
+    pub fn on_auth_publickey_signature_verified_after_accepted<H>(&mut self, handler: H)
+    where
+        H: AuthPublickeyHandler<Error = E> + 'static,
+    {
+        self.auth_publickey_signature_verified_after_accepted = Some(Box::new(handler))
     }
 
     /// Register Password user authentication method handler.
@@ -447,9 +482,11 @@ where
     /// use ssssh::Handlers;
     /// use futures::FutureExt as _;
     /// let mut handlers = Handlers::<anyhow::Error>::new();
-    /// handlers.on_auth_hostbased(|username, hostname, algorithm, publickey| {
+    /// handlers.on_auth_hostbased(|username, hostname, publickey: ssssh::PublicKey| {
     ///     async move {
-    ///         Ok(username == "bob" && hostname == "localhost." && algorithm == "ssh-rsa" && publickey == "") // FIXME
+    ///         let authorized_rsa_key =
+    ///         "AAAAB3NzaC1yc2EAAAADAQABAAABgQCsuW6XTH7zcwyQN9gKj3yVp9wg/4Hx5KL4YMXFBcjovr0KCA8NPvuYYn3WCyCO4zYoq4YrtjkS3XwRILjWo8Vx5zZcJL+zdGVLmQ5BNSWmvYAgcbpQrdftvk8y2SvMJHgK51g9cpumC8/D9yzOjNg1rlWQ0QZzDaUr0ugzQdL5KVXtTX3Mm3rjKhSy9coG7nJADv40R4tUiwJy0oorOn+E8y4lCdcNQnIxgME0WzgZ6NEJHU4s3cJY1OddWHRImunGLAJsSoAuHqpp8qtyuC8R+o+VcuqGLxXGCPoNNsy186dy7nGMCmGz+nJoNGR6jh+gHyHimGjqUticafo5NiY6J9uNjzh5HLg0B17iTR1iIDWDFyB3IRyNphnwEKl7OutNWvlk584b3USvTsVjBenNXKe181fE8s3hFs5B88NzXHoJuC+/L8/Y/tu24xckkt8ySCgRUHRJy9FOzmmpmaIeUZ9xB+IaQgn6Cue5tAzjeoa3wqyjlbV8lekK7DXlPOk=";
+    ///         Ok(username == "bob" && hostname == "localhost." && publickey.algorithm() == "ssh-rsa" && publickey.to_string() == authorized_rsa_key)
     ///     }.boxed()
     /// });
     /// ```
@@ -590,12 +627,21 @@ where
     pub(crate) fn dispatch_auth_publickey(
         &mut self,
         username: String,
-        algorithm: String,
-        publickey: String,
+        publickey: PublicKey,
     ) -> Option<BoxFuture<'static, Result<bool, E>>> {
         self.auth_publickey
             .as_mut()
-            .map(|handler| handler.handle(username, algorithm, publickey))
+            .map(|handler| handler.handle(username, publickey))
+    }
+
+    pub(crate) fn dispatch_auth_publickey_signature_verified_after_accepted(
+        &mut self,
+        username: String,
+        publickey: PublicKey,
+    ) -> Option<BoxFuture<'static, Result<bool, E>>> {
+        self.auth_publickey_signature_verified_after_accepted
+            .as_mut()
+            .map(|handler| handler.handle(username, publickey))
     }
 
     pub(crate) fn dispatch_auth_password(
@@ -623,12 +669,11 @@ where
         &mut self,
         username: String,
         hostname: String,
-        algorithm: String,
-        publickey: String,
+        publickey: PublicKey,
     ) -> Option<BoxFuture<'static, Result<bool, E>>> {
         self.auth_hostbased
             .as_mut()
-            .map(|handler| handler.handle(username, hostname, algorithm, publickey))
+            .map(|handler| handler.handle(username, hostname, publickey))
     }
 
     pub(crate) fn dispatch_channel_pty_req(

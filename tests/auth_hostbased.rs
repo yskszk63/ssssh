@@ -13,7 +13,7 @@ async fn hostbased() {
     let mut server = ServerBuilder::default().build("[::1]:2222").await.unwrap();
 
     let mut handlers = Handlers::<anyhow::Error>::new();
-    handlers.on_auth_hostbased(|_, _, _, _| ok(true).boxed());
+    handlers.on_auth_hostbased(|_, _, _| ok(true).boxed()); // FIXME
     handlers.on_channel_shell(|_| ok(0).boxed());
 
     let task = tokio::task::spawn_blocking(|| {

@@ -46,7 +46,7 @@ pub use connection::{Connection, SshInput, SshOutput};
 pub use error::SshError;
 pub use handlers::*;
 pub use kex::Algorithm as Kex;
-pub use key::Algorithm as Key;
+pub use key::{Algorithm as Key, PublicKey};
 pub use mac::Algorithm as Mac;
 pub use server::{Builder as ServerBuilder, Server};
 

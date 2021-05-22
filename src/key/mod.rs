@@ -116,12 +116,17 @@ impl Put for Verifier {
 }
 
 /// Public key
-#[derive(Debug, Clone)]
-pub(crate) struct PublicKey(String, Bytes);
+// TODO Is a simple byte comparison all right?
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PublicKey(String, Bytes);
 
 impl PublicKey {
     pub(crate) fn verifier(self) -> Result<Verifier, SshError> {
         Verifier::new(&self.0, &self.1)
+    }
+
+    pub fn algorithm(&self) -> &str {
+        &self.0
     }
 }
 
@@ -149,12 +154,7 @@ impl fmt::Display for PublicKey {
         let mut buf = BytesMut::new();
         self.0.pack(&mut buf);
         buf.extend_from_slice(&self.1);
-        write!(
-            f,
-            "{} {}",
-            self.0,
-            Base64Display::with_config(&buf, Config::new(CharacterSet::Standard, false))
-        )
+        Base64Display::with_config(&buf, Config::new(CharacterSet::Standard, false)).fmt(f)
     }
 }
 
