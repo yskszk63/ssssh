@@ -1,0 +1,275 @@
+<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1.0"><meta name="generator" content="rustdoc"><meta name="description" content="Source of the Rust file `src/authorized_keys.rs`."><meta name="keywords" content="rust, rustlang, rust-lang"><title>authorized_keys.rs - source</title><link rel="stylesheet" type="text/css" href="../../normalize.css"><link rel="stylesheet" type="text/css" href="../../rustdoc.css" id="mainThemeStyle"><link rel="stylesheet" type="text/css" href="../../light.css"  id="themeStyle"><link rel="stylesheet" type="text/css" href="../../dark.css" disabled ><link rel="stylesheet" type="text/css" href="../../ayu.css" disabled ><script id="default-settings"></script><script src="../../storage.js"></script><script src="../../crates.js"></script><noscript><link rel="stylesheet" href="../../noscript.css"></noscript><link rel="icon" type="image/svg+xml" href="../../favicon.svg">
+<link rel="alternate icon" type="image/png" href="../../favicon-16x16.png">
+<link rel="alternate icon" type="image/png" href="../../favicon-32x32.png"><style type="text/css">#crate-search{background-image:url("../../down-arrow.svg");}</style></head><body class="rustdoc source"><!--[if lte IE 8]><div class="warning">This old browser is unsupported and will most likely display funky things.</div><![endif]--><nav class="sidebar"><div class="sidebar-menu" role="button">&#9776;</div><a href='../../ssssh/index.html'><div class='logo-container rust-logo'><img src='../../rust-logo.png' alt='logo'></div></a></nav><div class="theme-picker"><button id="theme-picker" aria-label="Pick another theme!" aria-haspopup="menu"><img src="../../brush.svg" width="18" height="18" alt="Pick another theme!"></button><div id="theme-choices" role="menu"></div></div><script src="../../theme.js"></script><nav class="sub"><form class="search-form"><div class="search-container"><div><select id="crate-search"><option value="All crates">All crates</option></select><input class="search-input" name="search" disabled autocomplete="off" spellcheck="false" placeholder="Click or press ‘S’ to search, ‘?’ for more options…" type="search"></div><button type="button" class="help-button">?</button>
+                <a id="settings-menu" href="../../settings.html"><img src="../../wheel.svg" width="18" height="18" alt="Change settings"></a></div></form></nav><section id="main" class="content"><pre class="line-numbers"><span id="1">  1</span>
+<span id="2">  2</span>
+<span id="3">  3</span>
+<span id="4">  4</span>
+<span id="5">  5</span>
+<span id="6">  6</span>
+<span id="7">  7</span>
+<span id="8">  8</span>
+<span id="9">  9</span>
+<span id="10"> 10</span>
+<span id="11"> 11</span>
+<span id="12"> 12</span>
+<span id="13"> 13</span>
+<span id="14"> 14</span>
+<span id="15"> 15</span>
+<span id="16"> 16</span>
+<span id="17"> 17</span>
+<span id="18"> 18</span>
+<span id="19"> 19</span>
+<span id="20"> 20</span>
+<span id="21"> 21</span>
+<span id="22"> 22</span>
+<span id="23"> 23</span>
+<span id="24"> 24</span>
+<span id="25"> 25</span>
+<span id="26"> 26</span>
+<span id="27"> 27</span>
+<span id="28"> 28</span>
+<span id="29"> 29</span>
+<span id="30"> 30</span>
+<span id="31"> 31</span>
+<span id="32"> 32</span>
+<span id="33"> 33</span>
+<span id="34"> 34</span>
+<span id="35"> 35</span>
+<span id="36"> 36</span>
+<span id="37"> 37</span>
+<span id="38"> 38</span>
+<span id="39"> 39</span>
+<span id="40"> 40</span>
+<span id="41"> 41</span>
+<span id="42"> 42</span>
+<span id="43"> 43</span>
+<span id="44"> 44</span>
+<span id="45"> 45</span>
+<span id="46"> 46</span>
+<span id="47"> 47</span>
+<span id="48"> 48</span>
+<span id="49"> 49</span>
+<span id="50"> 50</span>
+<span id="51"> 51</span>
+<span id="52"> 52</span>
+<span id="53"> 53</span>
+<span id="54"> 54</span>
+<span id="55"> 55</span>
+<span id="56"> 56</span>
+<span id="57"> 57</span>
+<span id="58"> 58</span>
+<span id="59"> 59</span>
+<span id="60"> 60</span>
+<span id="61"> 61</span>
+<span id="62"> 62</span>
+<span id="63"> 63</span>
+<span id="64"> 64</span>
+<span id="65"> 65</span>
+<span id="66"> 66</span>
+<span id="67"> 67</span>
+<span id="68"> 68</span>
+<span id="69"> 69</span>
+<span id="70"> 70</span>
+<span id="71"> 71</span>
+<span id="72"> 72</span>
+<span id="73"> 73</span>
+<span id="74"> 74</span>
+<span id="75"> 75</span>
+<span id="76"> 76</span>
+<span id="77"> 77</span>
+<span id="78"> 78</span>
+<span id="79"> 79</span>
+<span id="80"> 80</span>
+<span id="81"> 81</span>
+<span id="82"> 82</span>
+<span id="83"> 83</span>
+<span id="84"> 84</span>
+<span id="85"> 85</span>
+<span id="86"> 86</span>
+<span id="87"> 87</span>
+<span id="88"> 88</span>
+<span id="89"> 89</span>
+<span id="90"> 90</span>
+<span id="91"> 91</span>
+<span id="92"> 92</span>
+<span id="93"> 93</span>
+<span id="94"> 94</span>
+<span id="95"> 95</span>
+<span id="96"> 96</span>
+<span id="97"> 97</span>
+<span id="98"> 98</span>
+<span id="99"> 99</span>
+<span id="100">100</span>
+<span id="101">101</span>
+<span id="102">102</span>
+<span id="103">103</span>
+<span id="104">104</span>
+<span id="105">105</span>
+<span id="106">106</span>
+<span id="107">107</span>
+<span id="108">108</span>
+<span id="109">109</span>
+<span id="110">110</span>
+<span id="111">111</span>
+<span id="112">112</span>
+<span id="113">113</span>
+<span id="114">114</span>
+<span id="115">115</span>
+<span id="116">116</span>
+<span id="117">117</span>
+<span id="118">118</span>
+<span id="119">119</span>
+<span id="120">120</span>
+<span id="121">121</span>
+<span id="122">122</span>
+<span id="123">123</span>
+<span id="124">124</span>
+<span id="125">125</span>
+<span id="126">126</span>
+<span id="127">127</span>
+<span id="128">128</span>
+<span id="129">129</span>
+<span id="130">130</span>
+<span id="131">131</span>
+<span id="132">132</span>
+<span id="133">133</span>
+<span id="134">134</span>
+</pre><div class="example-wrap"><pre class="rust ">
+<span class="doccomment">//! OpenSSH `authorized_keys` parser.</span>
+<span class="kw">use</span> <span class="ident">std</span>::<span class="ident">iter</span>::<span class="ident">IntoIterator</span>;
+<span class="kw">use</span> <span class="ident">std</span>::<span class="ident">str</span>::<span class="ident">FromStr</span>;
+
+<span class="kw">use</span> <span class="ident">authorized_keys</span>::<span class="ident">openssh</span>::<span class="ident">v2</span>::{<span class="ident">KeysFile</span>, <span class="ident">KeysFileLine</span>};
+<span class="kw">use</span> <span class="ident">tokio</span>::<span class="ident">io</span>::{<span class="self">self</span>, <span class="ident">AsyncRead</span>, <span class="ident">AsyncReadExt</span>};
+
+<span class="kw">use</span> <span class="kw">crate</span>::<span class="ident">PublicKey</span>;
+
+<span class="doccomment">/// OpenSSH `authorized_keys` parse error.</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>, <span class="ident">thiserror</span>::<span class="ident">Error</span>)]</span>
+<span class="kw">pub</span> <span class="kw">enum</span> <span class="ident">ParseError</span> {
+    <span class="attribute">#[<span class="ident">error</span>(<span class="ident">transparent</span>)]</span>
+    <span class="ident">Io</span>(<span class="attribute">#[<span class="ident">from</span>]</span> <span class="ident">io</span>::<span class="ident">Error</span>),
+
+    <span class="attribute">#[<span class="ident">error</span>(<span class="string">&quot;{0}&quot;</span>)]</span>
+    <span class="ident">Any</span>(<span class="ident">String</span>),
+}
+
+<span class="doccomment">/// represent `authorized_keys` line.</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>)]</span>
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">AuthorizedKey</span> {
+    <span class="ident">options</span>: <span class="ident">Vec</span><span class="op">&lt;</span>(<span class="ident">String</span>, <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span>)<span class="op">&gt;</span>,
+    <span class="ident">key_type</span>: <span class="ident">String</span>,
+    <span class="ident">publickey</span>: <span class="ident">PublicKey</span>,
+    <span class="ident">comment</span>: <span class="ident">String</span>,
+}
+
+<span class="kw">impl</span> <span class="ident">AuthorizedKey</span> {
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">options</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="kw-2">&amp;</span>[(<span class="ident">String</span>, <span class="prelude-ty">Option</span><span class="op">&lt;</span><span class="ident">String</span><span class="op">&gt;</span>)] {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">options</span>
+    }
+
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">key_type</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="kw-2">&amp;</span><span class="ident">str</span> {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">key_type</span>
+    }
+
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">publickey</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="kw-2">&amp;</span><span class="ident">PublicKey</span> {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">publickey</span>
+    }
+
+    <span class="kw">pub</span> <span class="kw">fn</span> <span class="ident">comment</span>(<span class="kw-2">&amp;</span><span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="kw-2">&amp;</span><span class="ident">str</span> {
+        <span class="kw-2">&amp;</span><span class="self">self</span>.<span class="ident">comment</span>
+    }
+}
+
+<span class="doccomment">/// OpenSSH represent `authorized_keys`.</span>
+<span class="attribute">#[<span class="ident">derive</span>(<span class="ident">Debug</span>)]</span>
+<span class="kw">pub</span> <span class="kw">struct</span> <span class="ident">AuthorizedKeys</span>(<span class="ident">Vec</span><span class="op">&lt;</span><span class="ident">AuthorizedKey</span><span class="op">&gt;</span>);
+
+<span class="kw">impl</span> <span class="ident">AuthorizedKeys</span> {
+    <span class="doccomment">/// parse OpenSSH `authorized_keys`.</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// # Example</span>
+    <span class="doccomment">///</span>
+    <span class="doccomment">/// ```</span>
+    <span class="doccomment">/// # tokio::runtime::Builder::new_current_thread().build().unwrap().block_on(async {</span>
+    <span class="doccomment">/// use ssssh::authorized_keys::AuthorizedKeys;</span>
+    <span class="doccomment">/// let authorized_keys_file = b&quot;ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIBGr/hiKoT+ED6BGl0rYM8Ai96O/2lbnGM++zAbz578V&quot;;</span>
+    <span class="doccomment">/// AuthorizedKeys::parse(&amp;authorized_keys_file[..]).await.unwrap();</span>
+    <span class="doccomment">/// # });</span>
+    <span class="doccomment">/// ```</span>
+    <span class="kw">pub</span> <span class="kw">async</span> <span class="kw">fn</span> <span class="ident">parse</span><span class="op">&lt;</span><span class="ident">R</span><span class="op">&gt;</span>(<span class="kw-2">mut</span> <span class="ident">reader</span>: <span class="ident">R</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="prelude-ty">Result</span><span class="op">&lt;</span><span class="self">Self</span>, <span class="ident">ParseError</span><span class="op">&gt;</span>
+    <span class="kw">where</span>
+        <span class="ident">R</span>: <span class="ident">AsyncRead</span> <span class="op">+</span> <span class="ident">Unpin</span>,
+    {
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">content</span> <span class="op">=</span> <span class="ident">String</span>::<span class="ident">new</span>();
+        <span class="ident">reader</span>.<span class="ident">read_to_string</span>(<span class="kw-2">&amp;</span><span class="kw-2">mut</span> <span class="ident">content</span>).<span class="kw">await</span><span class="question-mark">?</span>;
+        <span class="kw">let</span> <span class="ident">keysfile</span> <span class="op">=</span> <span class="ident">KeysFile</span>::<span class="ident">from_str</span>(<span class="kw-2">&amp;</span><span class="ident">content</span>).<span class="ident">map_err</span>(<span class="op">|</span><span class="ident">e</span><span class="op">|</span> <span class="ident">ParseError</span>::<span class="ident">Any</span>(<span class="ident">e</span>))<span class="question-mark">?</span>;
+
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">keys</span> <span class="op">=</span> <span class="macro">vec</span><span class="macro">!</span>[];
+        <span class="kw">for</span> <span class="ident">line</span> <span class="kw">in</span> <span class="ident">keysfile</span> {
+            <span class="kw">if</span> <span class="kw">let</span> <span class="ident">KeysFileLine</span>::<span class="ident">Key</span>(<span class="ident">line</span>) <span class="op">=</span> <span class="ident">line</span> {
+                <span class="kw">match</span> <span class="ident">line</span>.<span class="ident">key</span>.<span class="ident">encoded_key</span>.<span class="ident">parse</span>() {
+                    <span class="prelude-val">Ok</span>(<span class="ident">publickey</span>) <span class="op">=</span><span class="op">&gt;</span> <span class="ident">keys</span>.<span class="ident">push</span>(<span class="ident">AuthorizedKey</span> {
+                        <span class="ident">options</span>: <span class="ident">line</span>.<span class="ident">options</span>,
+                        <span class="ident">key_type</span>: <span class="ident">line</span>.<span class="ident">key</span>.<span class="ident">key_type</span>.<span class="ident">to_string</span>(),
+                        <span class="ident">publickey</span>,
+                        <span class="ident">comment</span>: <span class="ident">line</span>.<span class="ident">comments</span>,
+                    }),
+                    <span class="prelude-val">Err</span>(<span class="ident">err</span>) <span class="op">=</span><span class="op">&gt;</span> {
+                        <span class="comment">// skip unparsable key.</span>
+                        <span class="ident">log</span>::<span class="macro">warn</span><span class="macro">!</span>(<span class="string">&quot;failed to parse key {:?}: {}&quot;</span>, <span class="ident">line</span>, <span class="ident">err</span>)
+                    }
+                }
+            }
+        }
+        <span class="prelude-val">Ok</span>(<span class="self">Self</span>(<span class="ident">keys</span>))
+    }
+}
+
+<span class="kw">impl</span> <span class="ident">IntoIterator</span> <span class="kw">for</span> <span class="ident">AuthorizedKeys</span> {
+    <span class="kw">type</span> <span class="ident">Item</span> <span class="op">=</span> <span class="ident">AuthorizedKey</span>;
+    <span class="kw">type</span> <span class="ident">IntoIter</span> <span class="op">=</span> <span class="ident">std</span>::<span class="ident">vec</span>::<span class="ident">IntoIter</span><span class="op">&lt;</span><span class="self">Self</span>::<span class="ident">Item</span><span class="op">&gt;</span>;
+
+    <span class="kw">fn</span> <span class="ident">into_iter</span>(<span class="self">self</span>) <span class="op">-</span><span class="op">&gt;</span> <span class="self">Self</span>::<span class="ident">IntoIter</span> {
+        <span class="self">self</span>.<span class="number">0</span>.<span class="ident">into_iter</span>()
+    }
+}
+
+<span class="attribute">#[<span class="ident">cfg</span>(<span class="ident">test</span>)]</span>
+<span class="kw">mod</span> <span class="ident">tests</span> {
+    <span class="kw">use</span> <span class="kw">super</span>::<span class="kw-2">*</span>;
+
+    <span class="attribute">#[<span class="ident">tokio</span>::<span class="ident">test</span>]</span>
+    <span class="kw">async</span> <span class="kw">fn</span> <span class="ident">test</span>() {
+        <span class="kw">let</span> <span class="ident">authorized_keys</span> <span class="op">=</span> <span class="string">br#&quot;# Comments allowed at start of line
+ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDMxtwvOyA4hdYDT6WrW/Q0xe9KHpJf1O+qclqpVV9iyyHPdUSOVSq9Yz3ZbOt4ZdYRXhudc/z7xq4Gyy1ERuXwdzD5asoKR3wD/I97slCUu56X3JE8NCyk0vKezTwVhWHv3S+RGazj4cX3PUHbm2p7bopa6belb9//F9Ttz51+Pkmk6WXEsjtjeiJKVMjlr9GwqrsOKtNalIlCVoJRq2lVN2SSJyMtRpHZFJ+8ox2BMvkqvAHTGOnFmRiJXK8fCH/hEFv8UV5hkGe10gTBL8/5/wnazk6cos1cuBhGDJxKh+Sb7k40Q3KhkiCtLWxmXZC9Z33xJyEf/oFrDm/K+MxA7QfkSY8iL5017XUU0rBSZSLXah6PVfhdrqhyGbJImAqI1Xjv++9lGzqtP9D2SAwEj7IQLOtgc4WifASuTY2MGmFkapS8YJPCTE2O2lwWoTNIi0Lpo2JfwZzKPvE/7hF2V3c/BCACoGjsQzBdNjJ/DiyNjrNvsv7URpWQikkFuTs= user@example.net
+from=&quot;*.sales.example.net,!pc.sales.example.net&quot; ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCiRkXnPlFS9mddGf9OOZ8h9M1iLmvzoaDARKQmp+zPXC3qCsi6teFna5+AAibTbUhlzdgSy+t7gK19XDS5aelMnbAbFXu+hrwDxncGFt9s/WtmTibbSEU2bvlvSjgfp/Ifmn9xqTT/ky9+z77qsTVpaJUTNxPDL9OxPN40Fiao9L6D6IxHwx1wmVfA2rAuWTpJNLlOIb/1ZrpZfEeuUPKq1h0ozM0ptN28nesONdYa87qoeQMFsyoLDrayrhM3X0ypO1OAVcMavwXEcp/meNQIyU/DUkCKjkinrxQM186bMjgmHtYyzpqFIrxEMRjPFMWSiP4w+kIPiJObYQfNL1DJJBhnmm9xDwS7aT7WJ1XZn5Qs1gXT4Ck4tNWxQAKzbTEgIXs64F9tgaflBhibdCU3LtsQ0jqTITTtXTZtndJ7lNrMxC88LysuEJzsQebv0mVhOjHRmmPB4/7NIfuOjckqvgEUx0tTZo3vL5yXGBGFNGR9vNbHX9Hos6hTNsCxQv0= john@example.net
+command=&quot;dump /home&quot;,no-pty,no-port-forwarding ssh-dss AAAAB3NzaC1kc3MAAACBAOKN80C2R7MgFr2PgayAWLR8x8M49eo2aZODh6esDaf/alKT0Hn5Ioo/1YtU+hLGbcQM8xo1PFErlFwV4pPQv2fn6PQjYHMrz8n9yx9hT/X3bNTT+8qFJaP8Q/8s70JokL91uBkJalstg2qKRvIVjoLG8lMqZBqfPwEezT5Ie55lAAAAFQDHGJfmKm+L3Tz4TU+Y4Xgd+2/cYQAAAIAxxR6QAn3A8Om+ye03+Qt16QgdwfpzMt18X4BVIA94fjiRQvDGyyH8PK6evPf6lwxTC/s974/tI4xoYsp6ccxMuFKhtJ/lbgS+a1cAK0dRv4FijbCtGR954VXWYBfp0AqLNl/do5byywT0cZyUdM+WUa4Mo0OwpKAJ6UmmVCAVbwAAAIB/dQx679qQEcgx185mZgvsYpa2c6Nm9HhxX1WHE+23RBYS2HM5DlJErjNRhSoIUMg0/9MrYM2YMDjjCxepzIbhE/r+UlT7WWID5id3CELte33zJ/TrDFu2D2hSSASCCCouJkKUhvoUR1ngvPVLkJR21Otc3B2QcTx+jj8zlTtL8Q== example.net
+permitopen=&quot;192.0.2.1:80&quot;,permitopen=&quot;192.0.2.2:25&quot; ssh-dss AAAAB3NzaC1kc3MAAACBAOx6RIBrcQY4dMShoPkcbjdf9CBHDxeYtauW3f5nbbd+7IolKOps/j665BPybrqnf9MkjnDXF2z02/ZTVLNBmfoFTOv5Y5C/P0lB2jK1PRRTUBDVZxU+DdwL1zA2FNCk5fqEE7Aq8AttVNDWxWrseAW7fWxQc8M0EyyxQRtOVrjdAAAAFQCfPbZPd2R0OFmX5HDq93wa26kXZwAAAIEA4UOR66abDGm3MFUPISbfFqSMB/DmAczQiDhnyyo6/fin2lb9phKo5pkPkPFkBz3/SJfFjdIe1dDO5/yTLymx+YSNy58nbVqCmloa3zjdzdTdM6w+ikP1V3BRnEHpOwRs39794rhHA+6MVmUFX4y/9Pjrmp2XUk56kotW4EpvYSYAAACAVa3FHcd8b2EGLlzMOAQ1sYBkYZ59W0BdazTTMKTeK3kc5awVISKXMF08YGiR7GTuZvi62eimb6rRF15H79oLM4gVUd0hSh0KQ60ysIzqgDJVNfAgN+OQLPXFc40y7P+WuTG7SH8fhGkJz9/DUCAqoYQZ36NKsLi2467aqm4LOd8=
+tunnel=&quot;0&quot;,command=&quot;sh /etc/netstart tun0&quot; ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQDtIK4bgK4vBxBBrMVsliyxedisxUQYjfKIUMivOXy+skqwt1bVmkWxA1+3WgHJjTACalabc8+JBEdfi4TD1ZvlV05krrK3ZV0v3FFyW46oHLImtOrtD5wiMo6Ze0DQKVwgRuDjKBVersH5PNbwH6oWutGQY8jgajLEAtehpKWo+I/eVBmbWmqWUwBjW5i2OfLgrkihwpQ1RgaT2o9lkRwmNSmyZdPrU29rGIlkOoukEssLVDap/lX2G1GOK/lgT4F9HZo3zbFUFq1VG9JrzhrwdlIj+MU5tWimqOUUkrDZ7Vx43OYD0OEfZVaL0fRnWPqzXU6cspGseMdeC5NWljmkPmSB2K3gZjvS5EnsZepSQ0d8N+rEDA5goQTJaTNssV2Dh7WxUvUjJEfLajTMLNRC1guSKA5rWx3lK06pda9GVV6sW+YATIkSpvNRCFKi8ys9D1hCxjnc4B5TeVGYoyD4AwcrclEoaCj5E8QoyZrJtZBmXbCXMqzCIKs/t1LAag8= jane@example.net
+restrict,command=&quot;uptime&quot; ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQC7gglwOIUjiUA/iI00Qs84HZoA3QlPvFAAMorBUPM8sesxKA0HQ1JChMvO14+mx4gQ8MIk9bFCp5ukemnoWizwYvbM3Os3+Ns/0T2Vpxt9Bvb/fPOuwNrvRQQJ6LOUqPgt3SH1GvXSocyUYTU6Tip2K9af8FQPId4QNB3MLTycMlSEYV1Yx0OoT3DFOdOMUur7Z515JgUlvUWIY//ZQrdMjYkn0qXG7X4nBycIIWRQ53kV9MmDO+Z4NbUQEN5ex140x1wwYnSjxcMi1408hz8X1OC4Iz44MGceghUDxYVv88Y8iJZAkSGbgAwkQljD1uczrD8BD25IO9a/M9FpNiBT5ETkSXchrlGNcqP94kJRM/Wrtrw+2igVwcvbi1s4Jc4K0Rea6AEhlvOPOVg4Edldt1lIn4mp7XFEEW6ldQAEpqUADrgllxTN+bV9U2yUZhMzGRBfR7Cc/lHhWSgVF/8zd4tkPky56jtDzT833j3QPpUqPQ6kNTGwzTOu8ap4COE= user@example.net
+restrict,pty,command=&quot;nethack&quot; ssh-rsa AAAAB3NzaC1yc2EAAAADAQABAAABgQCwgKJ9qbRMmhYhjGhRRKHHVF8h7IOzOuB1B/XiiexfIPVK9kRBKKMpKmz7lGD1R2TQ2yIDgTjk0Z0xKKtrlHvkLH/78YIV5n3jT3IGHz9WsQBWMg8woFLQQj3eTcWjsRuOrIBOBRBky1h8/mXVxkY1dJZorajJB6svpNNO5Hfm9Ab8INyWPZY3b/qccA1RVChekzj6DnE6VAwcv1xJ3bT8NoCa5q+E1EAGiS/CZH0HzCceqYveP+Z4YmgOTJYufAr9WVKkXydsxKNpKsK3//+yT6MM907RZQonmN0/3+qAjvqi0dUoHCttbuNeNeXRGlcGfWM8u9Kxr5WSCVu2620ETdf6V4IVKZRwUBMclr8oZEiPWOEoiJ4nGjczuIbnKA/U4eyotoTCQrSXNlPp13jvak8Xfb8YzpFPpSDKZ1aD491XNZ2aeUTKVpTfqDiIJ8xSZWCN7D2nEZILcOfTUHnQ0q3FXO3YKkPPotbnk288Tlo8znZwl6OtV7lXg+Ucjkc= user@example.net&quot;#</span>;
+
+        <span class="kw">let</span> <span class="ident">authorized_keys</span> <span class="op">=</span> <span class="ident">AuthorizedKeys</span>::<span class="ident">parse</span>(<span class="kw-2">&amp;</span><span class="ident">authorized_keys</span>[..]).<span class="kw">await</span>.<span class="ident">unwrap</span>();
+
+        <span class="kw">let</span> <span class="ident">expects</span> <span class="op">=</span> <span class="macro">vec</span><span class="macro">!</span>[
+            <span class="ident">PublicKey</span>::<span class="ident">from_str</span>(<span class="string">&quot;AAAAB3NzaC1yc2EAAAADAQABAAABgQDMxtwvOyA4hdYDT6WrW/Q0xe9KHpJf1O+qclqpVV9iyyHPdUSOVSq9Yz3ZbOt4ZdYRXhudc/z7xq4Gyy1ERuXwdzD5asoKR3wD/I97slCUu56X3JE8NCyk0vKezTwVhWHv3S+RGazj4cX3PUHbm2p7bopa6belb9//F9Ttz51+Pkmk6WXEsjtjeiJKVMjlr9GwqrsOKtNalIlCVoJRq2lVN2SSJyMtRpHZFJ+8ox2BMvkqvAHTGOnFmRiJXK8fCH/hEFv8UV5hkGe10gTBL8/5/wnazk6cos1cuBhGDJxKh+Sb7k40Q3KhkiCtLWxmXZC9Z33xJyEf/oFrDm/K+MxA7QfkSY8iL5017XUU0rBSZSLXah6PVfhdrqhyGbJImAqI1Xjv++9lGzqtP9D2SAwEj7IQLOtgc4WifASuTY2MGmFkapS8YJPCTE2O2lwWoTNIi0Lpo2JfwZzKPvE/7hF2V3c/BCACoGjsQzBdNjJ/DiyNjrNvsv7URpWQikkFuTs=&quot;</span>).<span class="ident">unwrap</span>(),
+            <span class="ident">PublicKey</span>::<span class="ident">from_str</span>(<span class="string">&quot;AAAAB3NzaC1yc2EAAAADAQABAAABgQCiRkXnPlFS9mddGf9OOZ8h9M1iLmvzoaDARKQmp+zPXC3qCsi6teFna5+AAibTbUhlzdgSy+t7gK19XDS5aelMnbAbFXu+hrwDxncGFt9s/WtmTibbSEU2bvlvSjgfp/Ifmn9xqTT/ky9+z77qsTVpaJUTNxPDL9OxPN40Fiao9L6D6IxHwx1wmVfA2rAuWTpJNLlOIb/1ZrpZfEeuUPKq1h0ozM0ptN28nesONdYa87qoeQMFsyoLDrayrhM3X0ypO1OAVcMavwXEcp/meNQIyU/DUkCKjkinrxQM186bMjgmHtYyzpqFIrxEMRjPFMWSiP4w+kIPiJObYQfNL1DJJBhnmm9xDwS7aT7WJ1XZn5Qs1gXT4Ck4tNWxQAKzbTEgIXs64F9tgaflBhibdCU3LtsQ0jqTITTtXTZtndJ7lNrMxC88LysuEJzsQebv0mVhOjHRmmPB4/7NIfuOjckqvgEUx0tTZo3vL5yXGBGFNGR9vNbHX9Hos6hTNsCxQv0=&quot;</span>).<span class="ident">unwrap</span>(),
+            <span class="ident">PublicKey</span>::<span class="ident">from_str</span>(<span class="string">&quot;AAAAB3NzaC1kc3MAAACBAOKN80C2R7MgFr2PgayAWLR8x8M49eo2aZODh6esDaf/alKT0Hn5Ioo/1YtU+hLGbcQM8xo1PFErlFwV4pPQv2fn6PQjYHMrz8n9yx9hT/X3bNTT+8qFJaP8Q/8s70JokL91uBkJalstg2qKRvIVjoLG8lMqZBqfPwEezT5Ie55lAAAAFQDHGJfmKm+L3Tz4TU+Y4Xgd+2/cYQAAAIAxxR6QAn3A8Om+ye03+Qt16QgdwfpzMt18X4BVIA94fjiRQvDGyyH8PK6evPf6lwxTC/s974/tI4xoYsp6ccxMuFKhtJ/lbgS+a1cAK0dRv4FijbCtGR954VXWYBfp0AqLNl/do5byywT0cZyUdM+WUa4Mo0OwpKAJ6UmmVCAVbwAAAIB/dQx679qQEcgx185mZgvsYpa2c6Nm9HhxX1WHE+23RBYS2HM5DlJErjNRhSoIUMg0/9MrYM2YMDjjCxepzIbhE/r+UlT7WWID5id3CELte33zJ/TrDFu2D2hSSASCCCouJkKUhvoUR1ngvPVLkJR21Otc3B2QcTx+jj8zlTtL8Q==&quot;</span>).<span class="ident">unwrap</span>(),
+            <span class="ident">PublicKey</span>::<span class="ident">from_str</span>(<span class="string">&quot;AAAAB3NzaC1kc3MAAACBAOx6RIBrcQY4dMShoPkcbjdf9CBHDxeYtauW3f5nbbd+7IolKOps/j665BPybrqnf9MkjnDXF2z02/ZTVLNBmfoFTOv5Y5C/P0lB2jK1PRRTUBDVZxU+DdwL1zA2FNCk5fqEE7Aq8AttVNDWxWrseAW7fWxQc8M0EyyxQRtOVrjdAAAAFQCfPbZPd2R0OFmX5HDq93wa26kXZwAAAIEA4UOR66abDGm3MFUPISbfFqSMB/DmAczQiDhnyyo6/fin2lb9phKo5pkPkPFkBz3/SJfFjdIe1dDO5/yTLymx+YSNy58nbVqCmloa3zjdzdTdM6w+ikP1V3BRnEHpOwRs39794rhHA+6MVmUFX4y/9Pjrmp2XUk56kotW4EpvYSYAAACAVa3FHcd8b2EGLlzMOAQ1sYBkYZ59W0BdazTTMKTeK3kc5awVISKXMF08YGiR7GTuZvi62eimb6rRF15H79oLM4gVUd0hSh0KQ60ysIzqgDJVNfAgN+OQLPXFc40y7P+WuTG7SH8fhGkJz9/DUCAqoYQZ36NKsLi2467aqm4LOd8=&quot;</span>).<span class="ident">unwrap</span>(),
+            <span class="ident">PublicKey</span>::<span class="ident">from_str</span>(<span class="string">&quot;AAAAB3NzaC1yc2EAAAADAQABAAABgQDtIK4bgK4vBxBBrMVsliyxedisxUQYjfKIUMivOXy+skqwt1bVmkWxA1+3WgHJjTACalabc8+JBEdfi4TD1ZvlV05krrK3ZV0v3FFyW46oHLImtOrtD5wiMo6Ze0DQKVwgRuDjKBVersH5PNbwH6oWutGQY8jgajLEAtehpKWo+I/eVBmbWmqWUwBjW5i2OfLgrkihwpQ1RgaT2o9lkRwmNSmyZdPrU29rGIlkOoukEssLVDap/lX2G1GOK/lgT4F9HZo3zbFUFq1VG9JrzhrwdlIj+MU5tWimqOUUkrDZ7Vx43OYD0OEfZVaL0fRnWPqzXU6cspGseMdeC5NWljmkPmSB2K3gZjvS5EnsZepSQ0d8N+rEDA5goQTJaTNssV2Dh7WxUvUjJEfLajTMLNRC1guSKA5rWx3lK06pda9GVV6sW+YATIkSpvNRCFKi8ys9D1hCxjnc4B5TeVGYoyD4AwcrclEoaCj5E8QoyZrJtZBmXbCXMqzCIKs/t1LAag8=&quot;</span>).<span class="ident">unwrap</span>(),
+            <span class="ident">PublicKey</span>::<span class="ident">from_str</span>(<span class="string">&quot;AAAAB3NzaC1yc2EAAAADAQABAAABgQC7gglwOIUjiUA/iI00Qs84HZoA3QlPvFAAMorBUPM8sesxKA0HQ1JChMvO14+mx4gQ8MIk9bFCp5ukemnoWizwYvbM3Os3+Ns/0T2Vpxt9Bvb/fPOuwNrvRQQJ6LOUqPgt3SH1GvXSocyUYTU6Tip2K9af8FQPId4QNB3MLTycMlSEYV1Yx0OoT3DFOdOMUur7Z515JgUlvUWIY//ZQrdMjYkn0qXG7X4nBycIIWRQ53kV9MmDO+Z4NbUQEN5ex140x1wwYnSjxcMi1408hz8X1OC4Iz44MGceghUDxYVv88Y8iJZAkSGbgAwkQljD1uczrD8BD25IO9a/M9FpNiBT5ETkSXchrlGNcqP94kJRM/Wrtrw+2igVwcvbi1s4Jc4K0Rea6AEhlvOPOVg4Edldt1lIn4mp7XFEEW6ldQAEpqUADrgllxTN+bV9U2yUZhMzGRBfR7Cc/lHhWSgVF/8zd4tkPky56jtDzT833j3QPpUqPQ6kNTGwzTOu8ap4COE=&quot;</span>).<span class="ident">unwrap</span>(),
+            <span class="ident">PublicKey</span>::<span class="ident">from_str</span>(<span class="string">&quot;AAAAB3NzaC1yc2EAAAADAQABAAABgQCwgKJ9qbRMmhYhjGhRRKHHVF8h7IOzOuB1B/XiiexfIPVK9kRBKKMpKmz7lGD1R2TQ2yIDgTjk0Z0xKKtrlHvkLH/78YIV5n3jT3IGHz9WsQBWMg8woFLQQj3eTcWjsRuOrIBOBRBky1h8/mXVxkY1dJZorajJB6svpNNO5Hfm9Ab8INyWPZY3b/qccA1RVChekzj6DnE6VAwcv1xJ3bT8NoCa5q+E1EAGiS/CZH0HzCceqYveP+Z4YmgOTJYufAr9WVKkXydsxKNpKsK3//+yT6MM907RZQonmN0/3+qAjvqi0dUoHCttbuNeNeXRGlcGfWM8u9Kxr5WSCVu2620ETdf6V4IVKZRwUBMclr8oZEiPWOEoiJ4nGjczuIbnKA/U4eyotoTCQrSXNlPp13jvak8Xfb8YzpFPpSDKZ1aD491XNZ2aeUTKVpTfqDiIJ8xSZWCN7D2nEZILcOfTUHnQ0q3FXO3YKkPPotbnk288Tlo8znZwl6OtV7lXg+Ucjkc=&quot;</span>).<span class="ident">unwrap</span>(),
+        ];
+
+        <span class="kw">let</span> <span class="kw-2">mut</span> <span class="ident">authorized_keys</span> <span class="op">=</span> <span class="ident">authorized_keys</span>.<span class="ident">into_iter</span>();
+        <span class="kw">for</span> <span class="ident">expect</span> <span class="kw">in</span> <span class="ident">expects</span> {
+            <span class="kw">let</span> <span class="ident">key</span> <span class="op">=</span> <span class="ident">authorized_keys</span>.<span class="ident">next</span>().<span class="ident">unwrap</span>();
+            <span class="macro">assert_eq</span><span class="macro">!</span>(<span class="ident">key</span>.<span class="ident">publickey</span>(), <span class="kw-2">&amp;</span><span class="ident">expect</span>);
+        }
+    }
+}
+</pre></div>
+</section><section id="search" class="content hidden"></section><section class="footer"></section><div id="rustdoc-vars" data-root-path="../../" data-current-crate="ssssh" data-search-js="../../search-index.js"></div>
+    <script src="../../main.js"></script><script src="../../source-script.js"></script><script src="../../source-files.js"></script></body></html>

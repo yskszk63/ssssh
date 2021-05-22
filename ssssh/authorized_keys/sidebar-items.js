@@ -1,0 +1,1 @@
+initSidebarItems({"enum":[["ParseError","OpenSSH `authorized_keys` parse error."]],"struct":[["AuthorizedKey","represent `authorized_keys` line."],["AuthorizedKeys","OpenSSH represent `authorized_keys`."]]});

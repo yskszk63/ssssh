@@ -1,0 +1,4 @@
+(function() {var implementors = {};
+implementors["ssssh"] = [{"text":"impl <a class=\"trait\" href=\"tokio/io/async_read/trait.AsyncRead.html\" title=\"trait tokio::io::async_read::AsyncRead\">AsyncRead</a> for <a class=\"struct\" href=\"ssssh/struct.SshInput.html\" title=\"struct ssssh::SshInput\">SshInput</a>","synthetic":false,"types":["ssssh::connection::ssh_stream::SshInput"]}];
+implementors["tokio_pipe"] = [{"text":"impl <a class=\"trait\" href=\"tokio/io/async_read/trait.AsyncRead.html\" title=\"trait tokio::io::async_read::AsyncRead\">AsyncRead</a> for <a class=\"struct\" href=\"tokio_pipe/struct.PipeRead.html\" title=\"struct tokio_pipe::PipeRead\">PipeRead</a>","synthetic":false,"types":["tokio_pipe::PipeRead"]}];
+if (window.register_implementors) {window.register_implementors(implementors);} else {window.pending_implementors = implementors;}})()
