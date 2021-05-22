@@ -19,6 +19,7 @@ derive_builder = "0.10"
 linked-hash-map = "0.5"
 base64 = "0.13"
 tokio-pipe = "0.2"
+authorized_keys = "1.0.0"
 
 [dependencies.tokio]
 version = "1.4"

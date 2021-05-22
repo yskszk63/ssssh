@@ -13,6 +13,10 @@ use crate::SshError;
 mod ed25519;
 mod rsa;
 
+#[derive(Debug, thiserror::Error)]
+#[error("failed to parse public key.")]
+pub struct PublicKeyParseError;
+
 /// SSH key algorithms.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Algorithm {
@@ -146,6 +150,18 @@ impl Unpack for PublicKey {
         let name = Unpack::unpack(&mut buf)?;
         let data = buf.copy_to_bytes(buf.remaining());
         Ok(Self(name, data))
+    }
+}
+
+impl FromStr for PublicKey {
+    type Err = PublicKeyParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let publickey =
+            base64::decode_config(s, base64::STANDARD).map_err(|_| PublicKeyParseError)?;
+        let mut buf = BytesMut::new();
+        Bytes::from(publickey).pack(&mut buf);
+        PublicKey::unpack(&mut buf.freeze()).map_err(|_| PublicKeyParseError)
     }
 }
 
