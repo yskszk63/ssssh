@@ -121,7 +121,7 @@ impl Put for Verifier {
 
 /// Public key
 // TODO Is a simple byte comparison all right?
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct PublicKey(String, Bytes);
 
 impl PublicKey {
