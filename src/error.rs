@@ -73,6 +73,9 @@ pub enum SshError {
     #[error("timeout")]
     Timeout,
 
+    #[error("algorithm mismatch {0} != {1}")]
+    AlgorithmMismatch(String, String),
+
     #[error(transparent)]
     Any(Box<dyn Error + Send + Sync + 'static>),
 }
@@ -101,6 +104,7 @@ impl SshError {
             Self::HandlerError(..) => Some(ReasonCode::ByApplication),
             Self::UnsupportedKeyFileFormat => None,
             Self::Timeout => Some(ReasonCode::ConnectionLost),
+            Self::AlgorithmMismatch(..) => Some(ReasonCode::ProtocolError),
             Self::Any(..) => None,
         }
     }

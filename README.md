@@ -3,6 +3,8 @@
 SSH Server library by Rust.
 This is my hobby project.
 
+[docs](https://yskszk63.github.io/ssssh/ssssh/)
+
 ## example
 
 simple echo server

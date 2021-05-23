@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use futures::future::ok;
 use futures::prelude::*;
 use ssh2::Session;
-use ssssh::{Handlers, ServerBuilder};
+use ssssh::{authorized_keys::AuthorizedKeys, Handlers, ServerBuilder};
+use tokio::fs::File;
 
 #[tokio::test]
 async fn hostbased() {
@@ -13,7 +14,19 @@ async fn hostbased() {
     let mut server = ServerBuilder::default().build("[::1]:2222").await.unwrap();
 
     let mut handlers = Handlers::<anyhow::Error>::new();
-    handlers.on_auth_hostbased(|_, _, _, _| ok(true).boxed());
+    handlers.on_auth_hostbased(|_, _, publickey| {
+        async move {
+            let mut file = File::open("tests/rsa.pub").await?;
+            let authorized_keys = AuthorizedKeys::parse(&mut file).await?;
+            for key in authorized_keys {
+                if key.publickey() == &publickey {
+                    return Ok(true);
+                }
+            }
+            return Ok(false);
+        }
+        .boxed()
+    });
     handlers.on_channel_shell(|_| ok(0).boxed());
 
     let task = tokio::task::spawn_blocking(|| {

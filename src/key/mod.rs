@@ -13,6 +13,10 @@ use crate::SshError;
 mod ed25519;
 mod rsa;
 
+#[derive(Debug, thiserror::Error)]
+#[error("failed to parse public key.")]
+pub struct PublicKeyParseError;
+
 /// SSH key algorithms.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Algorithm {
@@ -116,12 +120,17 @@ impl Put for Verifier {
 }
 
 /// Public key
-#[derive(Debug, Clone)]
-pub(crate) struct PublicKey(String, Bytes);
+// TODO Is a simple byte comparison all right?
+#[derive(Debug, Clone, PartialEq, Eq, Hash)]
+pub struct PublicKey(String, Bytes);
 
 impl PublicKey {
     pub(crate) fn verifier(self) -> Result<Verifier, SshError> {
         Verifier::new(&self.0, &self.1)
+    }
+
+    pub fn algorithm(&self) -> &str {
+        &self.0
     }
 }
 
@@ -144,17 +153,24 @@ impl Unpack for PublicKey {
     }
 }
 
+impl FromStr for PublicKey {
+    type Err = PublicKeyParseError;
+
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        let publickey =
+            base64::decode_config(s, base64::STANDARD).map_err(|_| PublicKeyParseError)?;
+        let mut buf = BytesMut::new();
+        Bytes::from(publickey).pack(&mut buf);
+        PublicKey::unpack(&mut buf.freeze()).map_err(|_| PublicKeyParseError)
+    }
+}
+
 impl fmt::Display for PublicKey {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         let mut buf = BytesMut::new();
         self.0.pack(&mut buf);
         buf.extend_from_slice(&self.1);
-        write!(
-            f,
-            "{} {}",
-            self.0,
-            Base64Display::with_config(&buf, Config::new(CharacterSet::Standard, false))
-        )
+        Base64Display::with_config(&buf, Config::new(CharacterSet::Standard, false)).fmt(f)
     }
 }
 

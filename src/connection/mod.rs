@@ -87,7 +87,7 @@ where
         Self { state }
     }
 
-    ///! Performe SSH version exchange.
+    /// Performe SSH version exchange.
     pub async fn accept(self) -> Result<Connection<Established<IO>>, SshError> {
         let Accept { mut io, preference } = self.state;
         let (c_version, s_version) = version_ex::vex(&mut io, preference.name()).await?;
@@ -105,7 +105,7 @@ where
         &self.state.c_version
     }
 
-    ///! Run with [`ssssh::Handlers`]
+    /// Run with [`Handlers`]
     pub async fn run<E, Pty>(self, handler: Handlers<E, Pty>) -> Result<(), SshError>
     where
         E: Into<HandlerError> + Send + 'static,

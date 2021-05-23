@@ -25,7 +25,7 @@ async fn main() -> anyhow::Result<()> {
                 let mut handlers = Handlers::<anyhow::Error>::new();
 
                 handlers.on_auth_none(|_| ok(false).boxed());
-                handlers.on_auth_publickey(|_, _, _| ok(false).boxed());
+                handlers.on_auth_publickey(|_, _| ok(false).boxed());
                 handlers.on_auth_password(|_, _| {
                     ok(PasswordResult::PasswordChangeRequired(
                         "please change password!".into(),
@@ -33,7 +33,7 @@ async fn main() -> anyhow::Result<()> {
                     .boxed()
                 });
                 handlers.on_auth_change_password(|_, _, _| ok(PasswordResult::Failure).boxed());
-                handlers.on_auth_hostbased(|_, _, _, _| ok(true).boxed());
+                handlers.on_auth_hostbased(|_, _, _| ok(true).boxed());
 
                 handlers.on_channel_shell(|mut ctx: ssssh::SessionContext| {
                     let (mut stdin, mut stdout, _) = ctx.take_stdio().unwrap();

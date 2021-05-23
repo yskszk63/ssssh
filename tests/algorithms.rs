@@ -78,7 +78,7 @@ async fn do_test(cipher: &str, kex: &str, key: &str, mac: &str, ckey: &str) {
         .unwrap();
 
     let mut handlers = Handlers::<anyhow::Error>::new();
-    handlers.on_auth_publickey(|_, _, _| ok(true).boxed());
+    handlers.on_auth_publickey(|_, _| ok(true).boxed());
     handlers.on_channel_shell(|_| ok(0).boxed());
 
     let proc = Command::new("ssh")
