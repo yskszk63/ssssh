@@ -26,7 +26,7 @@ async fn hostbased() {
             return Ok(false);
         }
         .boxed()
-    }); // FIXME
+    });
     handlers.on_channel_shell(|_| ok(0).boxed());
 
     let task = tokio::task::spawn_blocking(|| {
