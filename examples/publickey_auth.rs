@@ -1,8 +1,9 @@
+//! simple public key auth
+
 use std::collections::HashMap;
 use std::env;
 use std::path::Path;
 use std::sync::Arc;
-/// simple public key auth
 use std::time::Duration;
 
 use futures::future::{FutureExt as _, TryFutureExt as _};
